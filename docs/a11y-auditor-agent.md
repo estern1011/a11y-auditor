@@ -1,258 +1,223 @@
-# Accessibility Auditor Agent — Design Document
+# Accessibility Auditor — Design Document
 
-## What This Is
+## Overview
 
-An agent persona that performs WCAG 2.2 AA accessibility audits by combining:
-1. **Accessibility tree analysis** — reading the computed a11y tree and reasoning about it (works everywhere)
-2. **Automated DOM checks** — programmatic queries for known-bad patterns (works everywhere)
-3. **VoiceOver interactive testing** — operating the page as a screen reader user to test dynamic behavior (macOS with display only)
+Two-agent architecture for WCAG 2.2 AA accessibility evaluation:
 
-Existing skills (wshobson's screen-reader-testing, webflow's accessibility-audit, etc.) are reference docs — they tell the agent what to look for. This agent actually **does** the looking, using browse and vo-driver as its hands.
+1. **Page auditor** — tests a single URL, outputs structured findings
+2. **Report builder** — takes findings from multiple page auditors, produces the ACR/VPAT
 
-## Architecture
+This document covers the page auditor. The report builder is a separate concern.
 
-```
-┌─────────────────────────────────────────────────┐
-│              a11y auditor agent                  │
-│                                                  │
-│  Input:  URL(s), scope, report format            │
-│  Output: structured findings + conformance table │
-│                                                  │
-│  Phase 1: Automated checks (browse)              │
-│  Phase 2: Tree reasoning (browse snapshot)       │
-│  Phase 3: Interactive testing (vo-driver)         │
-│  Phase 4: Report generation                      │
-└──────────┬──────────────────┬────────────────────┘
-           │                  │
-     ┌─────▼─────┐    ┌──────▼──────┐
-     │  browse    │    │  vo-driver  │
-     │  (any OS)  │    │  (macOS)    │
-     │            │    │             │
-     │ • snapshot │    │ • next/prev │
-     │ • eval JS  │    │ • perform   │
-     │ • screenshot│   │ • press     │
-     │ • interact │    │ • snapshot  │
-     └────────────┘    └─────────────┘
+## Page Auditor
+
+### Input
+
+```json
+{
+  "url": "https://app.com/dashboard",
+  "scope": "#main",              // optional: CSS selector to scope audit
+  "voiceover": true,             // optional: run Phase 3 (requires macOS + display)
+  "flows": [                     // optional: interaction sequences to test
+    { "name": "search", "steps": ["focus search input", "type query", "submit", "verify results"] }
+  ]
+}
 ```
 
-## Phase 1: Automated Checks (browse)
+In practice, the orchestrating agent spawns the page auditor subagent with a prompt like:
+"Audit https://app.com/dashboard for WCAG 2.2 AA. Focus on the main content area. Test the search flow. VoiceOver is available."
 
-These are programmatic — run JS against the DOM, get structured results. Fast, deterministic, covers the "automated 30-50%" of issues.
+### Output
+
+Structured findings per WCAG criterion:
+
+```json
+{
+  "url": "https://app.com/dashboard",
+  "timestamp": "2026-04-05T12:00:00Z",
+  "criteria": {
+    "1.1.1": {
+      "name": "Non-text Content",
+      "level": "A",
+      "conformance": "partially_supports",
+      "findings": [
+        {
+          "type": "violation",
+          "severity": "serious",
+          "source": "axe",
+          "element": "img.hero-banner",
+          "description": "Image alt text is the filename: 'hero-v2.jpg'",
+          "impact": "Screen reader user cannot understand the image purpose",
+          "suggestion": "Replace with descriptive alt text"
+        },
+        {
+          "type": "pass",
+          "source": "axe",
+          "description": "14 of 15 images have appropriate alt text"
+        }
+      ]
+    },
+    "1.3.1": {
+      "name": "Info and Relationships",
+      "level": "A",
+      "conformance": "does_not_support",
+      "findings": [...]
+    },
+    ...
+  },
+  "evidence": {
+    "screenshots": ["/tmp/audit/dashboard.png"],
+    "voiceover_transcript": [...],
+    "axe_results": { "violations": 8, "passes": 47, "incomplete": 3 }
+  }
+}
+```
+
+### Three Phases
+
+#### Phase 1: Automated checks (axe-core via browse)
+
+Run axe against the page. One call, structured results.
 
 ```bash
 $B goto <url>
-$B eval "(() => { ... })"   # run check scripts
+$B eval "await new AxeBuilder({ page }).withTags(['wcag2a','wcag2aa','wcag22aa']).analyze()"
 ```
 
-### Checks to automate:
+Or if using vo-driver's Playwright instance, inject axe-core and run it.
 
-**1.1.1 Non-text Content**
-- `img` without `alt`
-- `img` with `alt=""` that is NOT decorative (has click handler, is inside link/button)
-- `svg` without `aria-label` or `<title>`
-- `input[type=image]` without `alt`
-- `[role=img]` without `aria-label`
+axe returns:
+- **violations** — definite failures (map directly to findings)
+- **passes** — confirmed passing checks
+- **incomplete** — axe couldn't determine; needs human/agent review → feed into Phase 2
+- **inapplicable** — criteria that don't apply to this page content
 
-**1.3.1 Info and Relationships**
-- Heading hierarchy gaps (h1→h3 skipping h2)
-- No `<h1>` on page
-- `<table>` without `<th>` (data tables)
-- `<input>` without associated `<label>` (via `for`/`id` or wrapping)
-- Radio/checkbox groups without `<fieldset>`/`<legend>`
-- Lists of items not using `<ul>`/`<ol>`
+This covers ~60 WCAG rules automatically.
 
-**1.3.1 Landmarks**
-- No `<main>` landmark
-- No `<nav>` for navigation areas
-- Multiple same-type landmarks without unique labels
-- Content not contained in any landmark
+#### Phase 2: Accessibility tree reasoning (browse)
 
-**1.4.3 Contrast (Minimum)**
-- Compute contrast ratios for text elements (need computed colors)
-
-**2.4.1 Bypass Blocks**
-- No skip link as first focusable element
-
-**2.4.2 Page Titled**
-- Empty or generic `<title>`
-
-**2.4.4 Link Purpose**
-- Links with text "click here", "read more", "here", "learn more"
-- Links with no text content (empty `<a>`)
-- Links containing only an image with no alt
-
-**4.1.2 Name, Role, Value**
-- `<div>` or `<span>` with click handlers but no `role` or `tabindex`
-- Custom elements missing ARIA roles
-- Interactive elements without accessible names
-
-**Output:** JSON array of findings, each with WCAG criterion, severity, element selector, what's wrong, suggested fix.
-
-## Phase 2: Tree Reasoning (browse)
-
-The agent reads the accessibility tree and **thinks** about it. This is where the AI adds value over automated tools.
+The agent reads the a11y tree and reasons about things axe can't judge.
 
 ```bash
-$B snapshot          # full a11y tree
-$B snapshot -s "nav" # scoped to section
+$B snapshot             # full tree
+$B snapshot -s "#main"  # scoped
+$B screenshot /tmp/audit/page.png
 ```
 
-The agent reads the tree and reasons about:
+The agent reviews:
 
-- **Is this alt text meaningful?** "hero-banner-v2.jpg" passes automated check but is useless. "A diverse group of coworkers collaborating around a laptop" is good. "Image" is bad.
-- **Does the reading order make sense?** The tree shows the order elements will be read. Does it flow logically? Does sidebar content interrupt main content?
-- **Are these headings actually describing sections?** "Section 1", "Details", "Info" are technically present but meaningless.
-- **Is this ARIA pattern correct for the widget type?** A custom combobox has `role="combobox"` but is it using `aria-activedescendant` correctly? Is `aria-expanded` toggling?
-- **Is important visual information conveyed non-visually?** Error states shown only by color, required fields shown only by asterisk, status shown only by icon.
+**axe's "incomplete" items first** — these are axe saying "I found something but need a human to judge." The agent IS that human. Example: axe flags an image with alt text but can't judge if the alt text is meaningful. The agent reads the alt text, looks at the page context, and decides.
 
-**Output:** Agent's assessment for each WCAG criterion it can evaluate from the tree, with reasoning.
+**Then broader reasoning:**
+- Alt text quality: descriptive or just filename/placeholder?
+- Heading text: meaningful section labels or generic ("Section 1")?
+- Reading order: does the tree sequence make sense for the page's visual layout?
+- ARIA correctness: are custom widgets using the right patterns for their type?
+- Link text: clear purpose or vague ("click here", "learn more")?
+- Information conveyed only visually: errors shown only by color, required shown only by asterisk?
 
-## Phase 3: Interactive Testing (vo-driver)
+**Evidence:** The agent takes a screenshot and saves the tree snapshot for the report.
 
-The agent operates VoiceOver to test things that can't be determined from static analysis. This is the "last mile" — the 20% that only a real screen reader catches.
+#### Phase 3: VoiceOver interactive testing (vo-driver)
+
+Only runs when VoiceOver is available (macOS with display). Tests things that can't be determined from static analysis.
 
 ```bash
 bun vo-driver.mjs start <url>
-# ... agent explores ...
+# agent enters web content and explores
 bun vo-driver.mjs stop
 ```
 
-### What to test interactively:
+**What to test:**
 
-**Custom widget operation**
-- Tab to widget → does VoiceOver announce its role and state?
-- Operate it (arrow keys, Enter, Space) → does VoiceOver announce the change?
-- Compare what VoiceOver says vs what ARIA attributes say it should say
+Custom widget operation:
+- Navigate to the widget with VoiceOver
+- Is the role announced? ("combobox", "tab", "dialog" — not just "group")
+- Is the state announced? ("expanded", "selected", "checked")
+- Operate it with keyboard (arrows, Enter, Space, Escape)
+- Does VoiceOver announce the state change?
 
-**Focus management**
-- Open modal → does VO announce "dialog"? Does focus move inside?
-- Tab through modal → does focus stay trapped?
-- Close modal → does focus return?
-- SPA navigation → is new content announced?
+Focus management:
+- Open a modal → VO announces "dialog"? Focus moves inside?
+- Tab within modal → focus trapped?
+- Close modal → focus returns to trigger?
+- SPA navigation → new content announced?
 
-**Live regions**
-- Trigger an action (form submit, add to cart) → is the status announced?
-- Trigger an error → is it announced assertively?
-- Loading states → announced?
+Live regions:
+- Submit a form → success/error announced?
+- Add to cart → status announced?
+- Loading state → announced?
 
-**Form flow**
-- Tab through all fields → does VO announce each label?
-- Submit with errors → does VO announce which fields have errors?
-- Required fields → announced as required?
+Form flow:
+- Tab through fields → each label announced?
+- Submit with empty required fields → errors announced? Which field?
+- Error messages associated with inputs?
 
-**Reading experience**
-- Walk through page with `next` → is the experience coherent?
-- Are decorative elements properly hidden?
-- Is there content that's visually present but skipped by VO (or vice versa)?
+**Evidence:** The agent records what VoiceOver announced at each step as a transcript.
 
-**Output:** Agent's findings from interactive testing, with what VoiceOver announced vs what was expected.
+### Criteria the agent assesses
 
-## Phase 4: Report Generation
+Every WCAG 2.2 AA criterion gets a conformance level. Here's how each phase contributes:
 
-### Format Option A: QA Issue List
+| Criterion | Phase 1 (axe) | Phase 2 (tree reasoning) | Phase 3 (VoiceOver) |
+|-----------|---------------|--------------------------|---------------------|
+| 1.1.1 Non-text Content | Missing alt, empty alt on functional images | Alt text quality, SVG descriptions | What VO actually announces for images |
+| 1.2.x Time-based Media | Detects video/audio presence | Checks for captions/transcripts | N/A |
+| 1.3.1 Info and Relationships | Heading gaps, missing labels, table headers | Heading meaningfulness, list usage, ARIA patterns | VO announces correct roles/relationships? |
+| 1.3.2 Meaningful Sequence | DOM order vs visual order | Reading order coherence | VO reading order makes sense? |
+| 1.3.4 Orientation | Viewport meta | N/A | N/A |
+| 1.3.5 Identify Input Purpose | autocomplete attributes | N/A | N/A |
+| 1.4.1 Use of Color | N/A | Agent looks at screenshots for color-only info | N/A |
+| 1.4.3 Contrast | Color contrast ratios | N/A | N/A |
+| 1.4.4 Resize Text | N/A | Test at 200% zoom via viewport | N/A |
+| 1.4.10 Reflow | N/A | Test at 320px wide | N/A |
+| 1.4.11 Non-text Contrast | UI component contrast | N/A | N/A |
+| 1.4.12 Text Spacing | N/A | Apply text spacing overrides, check for clipping | N/A |
+| 1.4.13 Content on Hover | N/A | Hover tooltips dismissable, hoverable, persistent? | N/A |
+| 2.1.1 Keyboard | Tab through page | All interactive elements reachable? | All elements reachable and operable via VO? |
+| 2.1.2 No Keyboard Trap | Tab through all components | Focus stuck anywhere? | VO cursor stuck anywhere? |
+| 2.4.1 Bypass Blocks | Skip link present | Skip link works | VO can use skip link |
+| 2.4.2 Page Titled | Empty/missing title | Title descriptive? | VO announces title on load |
+| 2.4.3 Focus Order | Tab order matches visual | Logical sequence? | N/A |
+| 2.4.4 Link Purpose | Empty links, ambiguous text | Link text meaningful in context? | VO announces clear link purpose? |
+| 2.4.6 Headings and Labels | Present/absent | Descriptive? | VO announces meaningful headings? |
+| 2.4.7 Focus Visible | Focus styles present | Adequate visibility? | N/A (visual) |
+| 2.4.11 Focus Not Obscured | N/A | Sticky headers covering focused elements? | N/A |
+| 2.5.x Input Modalities | Touch target size (44x44) | N/A | N/A |
+| 3.1.1 Language of Page | lang attribute | Correct language? | N/A |
+| 3.1.2 Language of Parts | lang on foreign-language content | N/A | N/A |
+| 3.2.1 On Focus | N/A | Focus causes unexpected changes? | N/A |
+| 3.2.2 On Input | N/A | Input causes unexpected changes? | N/A |
+| 3.3.1 Error Identification | N/A | Errors described in text? | Errors announced by VO? |
+| 3.3.2 Labels or Instructions | Input labels present | Labels clear and helpful? | VO announces labels? |
+| 3.3.3 Error Suggestion | N/A | Suggestions provided? | Suggestions announced? |
+| 3.3.4 Error Prevention | N/A | Reversible/confirmed/reviewed? | N/A |
+| 4.1.2 Name, Role, Value | Missing names/roles | Correct for widget type? | VO announces correct name/role/state? |
+| 4.1.3 Status Messages | aria-live present | Appropriate politeness? | Actually announced by VO? |
 
-For dogfooding/QA, a flat list of issues:
+### Conformance levels
 
-```markdown
-## Accessibility Issues: https://app.com/dashboard
+For each criterion, the agent assigns:
 
-### Critical
-1. **Missing form labels** — 3 inputs in the search form have no associated labels.
-   VO announces: "edit text" with no indication of purpose.
-   WCAG: 1.3.1, 4.1.2
-   Fix: Add `<label>` elements or `aria-label` attributes.
+- **supports** — fully meets the criterion (evidence: all axe checks pass, tree looks correct, VO confirms)
+- **partially_supports** — some instances pass, some fail (explain which)
+- **does_not_support** — fails the criterion (explain how)
+- **not_applicable** — the criterion doesn't apply (no video = skip 1.2.x)
+- **not_evaluated** — couldn't test (no VoiceOver available for Phase 3 items, note this)
 
-2. **Keyboard trap in date picker** — Tab enters the date picker but cannot exit.
-   VO announces: stuck cycling through date cells.
-   WCAG: 2.1.2
-   Fix: Add Escape key handler to close picker and return focus.
+## What to Build
 
-### Serious
-3. **Heading hierarchy skip** — h1 "Dashboard" → h3 "Recent Activity" (no h2)
-   WCAG: 1.3.1
-   ...
+### In vo-driver:
+1. **Auto-enter web content** — `start` should navigate past browser chrome and into web content automatically
+2. **`eval` endpoint** — run JS in the page (for axe-core injection if not using browse)
 
-### Moderate
-...
+### Skill docs:
+3. **Page auditor skill** — the agent persona + instructions for the three-phase audit
+4. **Report builder skill** — instructions for synthesizing multi-page findings into ACR/VPAT
 
-### Passing
-- Skip link present and functional
-- All images have meaningful alt text
-- Landmarks properly defined (nav, main, footer)
-```
+### Templates:
+5. **VPAT 2.5 template** — the actual ITI format with all WCAG 2.2 AA criteria rows
 
-### Format Option B: ACR/VPAT Table
-
-For formal accessibility conformance reporting:
-
-```markdown
-# Voluntary Product Accessibility Template (VPAT)
-# Based on WCAG 2.2 Level AA
-
-| Criteria | Conformance Level | Remarks |
-|----------|------------------|---------|
-| **1.1.1 Non-text Content** | Partially Supports | 12 of 15 images have appropriate alt text. 3 decorative images in the footer expose filenames to screen readers (missing alt=""). |
-| **1.2.1 Audio-only and Video-only** | Not Applicable | No audio or video content present. |
-| **1.3.1 Info and Relationships** | Does Not Support | Heading hierarchy skips levels in 3 sections. Search form inputs lack programmatic labels. Navigation uses div-based layout without landmark roles. |
-| **1.3.2 Meaningful Sequence** | Supports | Reading order matches visual layout. Tab order is logical. |
-| **1.3.3 Sensory Characteristics** | Supports | Instructions do not rely solely on shape, color, or position. |
-| ... | ... | ... |
-```
-
-Conformance levels:
-- **Supports** — fully meets the criterion
-- **Partially Supports** — some aspects meet, some don't (explain)
-- **Does Not Support** — fails the criterion (explain)
-- **Not Applicable** — criterion doesn't apply to this content
-- **Not Evaluated** — wasn't tested
-
-### Evidence
-
-Each finding should include:
-- What was tested (URL, component, interaction)
-- What was observed (VoiceOver announcement, DOM state, screenshot)
-- What was expected
-- WCAG criterion and level
-- Severity (critical/serious/moderate for QA; conformance level for ACR)
-
-## Agent Persona
-
-The auditor agent should be instructed roughly as:
-
-```
-You are an accessibility auditor performing a WCAG 2.2 AA conformance evaluation.
-
-You have two tools:
-- browse: headless browser for screenshots, DOM inspection, JS evaluation, and
-  reading the accessibility tree. Use this for automated checks and tree analysis.
-- vo-driver: VoiceOver screen reader for interactive testing. Use this to verify
-  how the page actually behaves with assistive technology.
-
-Your workflow:
-1. Navigate to the target URL with browse
-2. Run automated DOM checks (Phase 1)
-3. Read and reason about the accessibility tree (Phase 2)
-4. If vo-driver is available, perform interactive testing (Phase 3)
-5. Compile findings into [QA list / ACR table] format
-
-For each WCAG criterion:
-- State whether it passes, partially passes, fails, or is not applicable
-- Provide specific evidence (what you observed)
-- For failures, describe the impact on users and suggest a fix
-
-Be thorough but efficient. Don't test criteria that clearly don't apply (no video
-on page = skip 1.2.x). Focus interactive testing on custom widgets, forms, and
-dynamic content where automated checks can't reach.
-```
-
-## What We Need to Build
-
-1. **vo-driver auto-enter** — `start` should land inside web content automatically, not at browser chrome
-2. **Automated check scripts** — JS snippets for Phase 1 that return structured JSON (can be run via browse's `eval` or vo-driver adding an `eval` endpoint)
-3. **The agent persona/skill doc** — instructions for the auditor agent
-4. **Report templates** — QA issue list and ACR/VPAT table formats
-
-What we DON'T need to build:
-- A new CLI tool — browse + vo-driver are the tools
-- A fixed audit script — the agent IS the audit logic
-- Integration between browse and vo-driver — they're used sequentially on the same URL
+### Optional:
+6. **Automated check scripts** — pre-built JS for Phase 1 if not using axe (lighter weight, but axe is better)
+7. **axe integration** — add `@axe-core/playwright` as a dependency, expose via endpoint
