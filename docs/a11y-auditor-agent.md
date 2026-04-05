@@ -2,222 +2,196 @@
 
 ## Overview
 
-Two-agent architecture for WCAG 2.2 AA accessibility evaluation:
+Two-layer architecture for WCAG 2.2 AA accessibility evaluation:
 
-1. **Page auditor** — tests a single URL, outputs structured findings
-2. **Report builder** — takes findings from multiple page auditors, produces the ACR/VPAT
+1. **Browse agent** — explores the app with browse, interacts with everything, invokes the auditor when it encounters new states or components
+2. **Page auditor** — tests the current page state (or a scoped section), outputs structured findings
 
-This document covers the page auditor. The report builder is a separate concern.
+A separate **report builder** agent (future) synthesizes findings across all audited states into an ACR/VPAT.
 
-## Page Auditor
+## How It Works
 
-### Input
+The browse agent is already exploring — clicking, filling forms, opening modals, navigating pages. It knows when context has changed. At each new state, it invokes the auditor:
 
-```json
-{
-  "url": "https://app.com/dashboard",
-  "scope": "#main",              // optional: CSS selector to scope audit
-  "voiceover": true,             // optional: run Phase 3 (requires macOS + display)
-  "flows": [                     // optional: interaction sequences to test
-    { "name": "search", "steps": ["focus search input", "type query", "submit", "verify results"] }
-  ]
-}
+```bash
+# browse agent exploring an app
+$B goto https://app.com/dashboard
+$B snapshot -i
+# agent sees dashboard loaded → audit it
+bun vo-driver.mjs audit                     # full page
+
+$B click @e5                                # open settings modal
+# agent sees modal appeared → audit just the modal
+bun vo-driver.mjs audit ".modal-dialog"
+
+$B goto https://app.com/settings
+$B snapshot -i
+$B fill @e2 ""                              # clear required field
+$B click @e8                                # submit
+# agent sees error state → audit the form
+bun vo-driver.mjs audit "form#settings"
+
+$B goto https://app.com/data
+# agent sees a data table → audit the table specifically
+bun vo-driver.mjs audit "table.data-grid"
 ```
 
-In practice, the orchestrating agent spawns the page auditor subagent with a prompt like:
-"Audit https://app.com/dashboard for WCAG 2.2 AA. Focus on the main content area. Test the search flow. VoiceOver is available."
+The auditor doesn't navigate or interact. It reads what's on screen right now.
 
-### Output
+## Audit Command
 
-Structured findings per WCAG criterion:
+```bash
+# Full page audit
+bun vo-driver.mjs audit
+
+# Scoped to a CSS selector
+bun vo-driver.mjs audit ".modal-dialog"
+bun vo-driver.mjs audit "form#checkout"
+bun vo-driver.mjs audit "nav.primary"
+
+# With a URL (navigates first, then audits)
+bun vo-driver.mjs audit --url https://app.com/login
+
+# URL + scope
+bun vo-driver.mjs audit --url https://app.com/settings "form#profile"
+```
+
+### What `audit` does
+
+1. **If `--url` given:** navigate to it, wait for load
+2. **Run axe-core** scoped to selector (or full page)
+   - Returns violations, passes, incomplete, inapplicable
+3. **Enter web content** automatically (GO_TO_BEGINNING → find web content → START_INTERACTING)
+4. **If selector given:** navigate VoiceOver to that element
+5. **Walk the scoped area with VoiceOver:**
+   - All headings (level + text + what VO announces)
+   - All landmarks
+   - All images (check what VO announces — meaningful alt or "unlabeled image"?)
+   - All form controls (labels announced?)
+   - All links (text announced?)
+   - All buttons (labels announced?)
+   - Reading order (first ~30 items via snapshot)
+6. **Output structured JSON**
+
+### Output Format
 
 ```json
 {
   "url": "https://app.com/dashboard",
+  "selector": ".modal-dialog",
   "timestamp": "2026-04-05T12:00:00Z",
-  "criteria": {
-    "1.1.1": {
-      "name": "Non-text Content",
-      "level": "A",
-      "conformance": "partially_supports",
-      "findings": [
-        {
-          "type": "violation",
-          "severity": "serious",
-          "source": "axe",
-          "element": "img.hero-banner",
-          "description": "Image alt text is the filename: 'hero-v2.jpg'",
-          "impact": "Screen reader user cannot understand the image purpose",
-          "suggestion": "Replace with descriptive alt text"
-        },
-        {
-          "type": "pass",
-          "source": "axe",
-          "description": "14 of 15 images have appropriate alt text"
-        }
-      ]
-    },
-    "1.3.1": {
-      "name": "Info and Relationships",
-      "level": "A",
-      "conformance": "does_not_support",
-      "findings": [...]
-    },
-    ...
+  "axe": {
+    "violations": [
+      {
+        "id": "image-alt",
+        "impact": "critical",
+        "wcag": ["1.1.1"],
+        "description": "Images must have alternate text",
+        "nodes": [
+          { "selector": "img.avatar", "html": "<img class=\"avatar\" src=\"...\">" }
+        ]
+      }
+    ],
+    "incomplete": [
+      {
+        "id": "color-contrast",
+        "impact": "serious",
+        "wcag": ["1.4.3"],
+        "description": "Elements must meet minimum color contrast ratio thresholds",
+        "nodes": [{ "selector": ".muted-text" }]
+      }
+    ],
+    "passes": 42,
+    "inapplicable": 18
   },
-  "evidence": {
-    "screenshots": ["/tmp/audit/dashboard.png"],
-    "voiceover_transcript": [...],
-    "axe_results": { "violations": 8, "passes": 47, "incomplete": 3 }
+  "voiceover": {
+    "headings": [
+      { "level": 1, "text": "Dashboard", "announced": "heading level 1 Dashboard" },
+      { "level": 3, "text": "Recent", "announced": "heading level 3 Recent", "issue": "skipped h2" }
+    ],
+    "landmarks": [],
+    "images": [
+      { "announced": "Unlabeled image", "issue": "missing alt text" },
+      { "announced": "User avatar, image", "issue": null }
+    ],
+    "formControls": [
+      { "announced": "Search, search text field", "issue": null },
+      { "announced": "edit text", "issue": "no label" }
+    ],
+    "links": [
+      { "announced": "Settings, link", "issue": null },
+      { "announced": "link", "issue": "empty link text" }
+    ],
+    "buttons": [
+      { "announced": "Submit, button", "issue": null },
+      { "announced": "button", "issue": "no label" }
+    ],
+    "readingOrder": [
+      "heading level 1 Dashboard",
+      "Search, search text field",
+      "heading level 3 Recent",
+      "..."
+    ]
   }
 }
 ```
 
-### Three Phases
+## What the Browse Agent Does With This
 
-#### Phase 1: Automated checks (axe-core via browse)
+The browse agent receives the JSON and reasons about it:
 
-Run axe against the page. One call, structured results.
+- **axe violations** → direct issues, cite WCAG criterion and suggest fixes
+- **axe incomplete** → agent judges (is this alt text meaningful? is this contrast sufficient in context?)
+- **VoiceOver headings** → agent judges hierarchy and label quality
+- **VoiceOver "unlabeled image"** → definite issue
+- **VoiceOver "edit text" with no label** → definite issue
+- **VoiceOver reading order** → agent judges coherence
+- **Missing landmarks** → agent notes based on page structure
 
-```bash
-$B goto <url>
-$B eval "await new AxeBuilder({ page }).withTags(['wcag2a','wcag2aa','wcag22aa']).analyze()"
-```
+The agent also does things the audit command can't:
+- Opens the modal and audits it → then closes it and checks focus returns
+- Fills the form and submits → then audits the error state
+- Compares the pre/post state: "did submitting the form trigger a live region announcement?"
 
-Or if using vo-driver's Playwright instance, inject axe-core and run it.
-
-axe returns:
-- **violations** — definite failures (map directly to findings)
-- **passes** — confirmed passing checks
-- **incomplete** — axe couldn't determine; needs human/agent review → feed into Phase 2
-- **inapplicable** — criteria that don't apply to this page content
-
-This covers ~60 WCAG rules automatically.
-
-#### Phase 2: Accessibility tree reasoning (browse)
-
-The agent reads the a11y tree and reasons about things axe can't judge.
-
-```bash
-$B snapshot             # full tree
-$B snapshot -s "#main"  # scoped
-$B screenshot /tmp/audit/page.png
-```
-
-The agent reviews:
-
-**axe's "incomplete" items first** — these are axe saying "I found something but need a human to judge." The agent IS that human. Example: axe flags an image with alt text but can't judge if the alt text is meaningful. The agent reads the alt text, looks at the page context, and decides.
-
-**Then broader reasoning:**
-- Alt text quality: descriptive or just filename/placeholder?
-- Heading text: meaningful section labels or generic ("Section 1")?
-- Reading order: does the tree sequence make sense for the page's visual layout?
-- ARIA correctness: are custom widgets using the right patterns for their type?
-- Link text: clear purpose or vague ("click here", "learn more")?
-- Information conveyed only visually: errors shown only by color, required shown only by asterisk?
-
-**Evidence:** The agent takes a screenshot and saves the tree snapshot for the report.
-
-#### Phase 3: VoiceOver interactive testing (vo-driver)
-
-Only runs when VoiceOver is available (macOS with display). Tests things that can't be determined from static analysis.
-
-```bash
-bun vo-driver.mjs start <url>
-# agent enters web content and explores
-bun vo-driver.mjs stop
-```
-
-**What to test:**
-
-Custom widget operation:
-- Navigate to the widget with VoiceOver
-- Is the role announced? ("combobox", "tab", "dialog" — not just "group")
-- Is the state announced? ("expanded", "selected", "checked")
-- Operate it with keyboard (arrows, Enter, Space, Escape)
-- Does VoiceOver announce the state change?
-
-Focus management:
-- Open a modal → VO announces "dialog"? Focus moves inside?
-- Tab within modal → focus trapped?
-- Close modal → focus returns to trigger?
-- SPA navigation → new content announced?
-
-Live regions:
-- Submit a form → success/error announced?
-- Add to cart → status announced?
-- Loading state → announced?
-
-Form flow:
-- Tab through fields → each label announced?
-- Submit with empty required fields → errors announced? Which field?
-- Error messages associated with inputs?
-
-**Evidence:** The agent records what VoiceOver announced at each step as a transcript.
-
-### Criteria the agent assesses
-
-Every WCAG 2.2 AA criterion gets a conformance level. Here's how each phase contributes:
-
-| Criterion | Phase 1 (axe) | Phase 2 (tree reasoning) | Phase 3 (VoiceOver) |
-|-----------|---------------|--------------------------|---------------------|
-| 1.1.1 Non-text Content | Missing alt, empty alt on functional images | Alt text quality, SVG descriptions | What VO actually announces for images |
-| 1.2.x Time-based Media | Detects video/audio presence | Checks for captions/transcripts | N/A |
-| 1.3.1 Info and Relationships | Heading gaps, missing labels, table headers | Heading meaningfulness, list usage, ARIA patterns | VO announces correct roles/relationships? |
-| 1.3.2 Meaningful Sequence | DOM order vs visual order | Reading order coherence | VO reading order makes sense? |
-| 1.3.4 Orientation | Viewport meta | N/A | N/A |
-| 1.3.5 Identify Input Purpose | autocomplete attributes | N/A | N/A |
-| 1.4.1 Use of Color | N/A | Agent looks at screenshots for color-only info | N/A |
-| 1.4.3 Contrast | Color contrast ratios | N/A | N/A |
-| 1.4.4 Resize Text | N/A | Test at 200% zoom via viewport | N/A |
-| 1.4.10 Reflow | N/A | Test at 320px wide | N/A |
-| 1.4.11 Non-text Contrast | UI component contrast | N/A | N/A |
-| 1.4.12 Text Spacing | N/A | Apply text spacing overrides, check for clipping | N/A |
-| 1.4.13 Content on Hover | N/A | Hover tooltips dismissable, hoverable, persistent? | N/A |
-| 2.1.1 Keyboard | Tab through page | All interactive elements reachable? | All elements reachable and operable via VO? |
-| 2.1.2 No Keyboard Trap | Tab through all components | Focus stuck anywhere? | VO cursor stuck anywhere? |
-| 2.4.1 Bypass Blocks | Skip link present | Skip link works | VO can use skip link |
-| 2.4.2 Page Titled | Empty/missing title | Title descriptive? | VO announces title on load |
-| 2.4.3 Focus Order | Tab order matches visual | Logical sequence? | N/A |
-| 2.4.4 Link Purpose | Empty links, ambiguous text | Link text meaningful in context? | VO announces clear link purpose? |
-| 2.4.6 Headings and Labels | Present/absent | Descriptive? | VO announces meaningful headings? |
-| 2.4.7 Focus Visible | Focus styles present | Adequate visibility? | N/A (visual) |
-| 2.4.11 Focus Not Obscured | N/A | Sticky headers covering focused elements? | N/A |
-| 2.5.x Input Modalities | Touch target size (44x44) | N/A | N/A |
-| 3.1.1 Language of Page | lang attribute | Correct language? | N/A |
-| 3.1.2 Language of Parts | lang on foreign-language content | N/A | N/A |
-| 3.2.1 On Focus | N/A | Focus causes unexpected changes? | N/A |
-| 3.2.2 On Input | N/A | Input causes unexpected changes? | N/A |
-| 3.3.1 Error Identification | N/A | Errors described in text? | Errors announced by VO? |
-| 3.3.2 Labels or Instructions | Input labels present | Labels clear and helpful? | VO announces labels? |
-| 3.3.3 Error Suggestion | N/A | Suggestions provided? | Suggestions announced? |
-| 3.3.4 Error Prevention | N/A | Reversible/confirmed/reviewed? | N/A |
-| 4.1.2 Name, Role, Value | Missing names/roles | Correct for widget type? | VO announces correct name/role/state? |
-| 4.1.3 Status Messages | aria-live present | Appropriate politeness? | Actually announced by VO? |
-
-### Conformance levels
-
-For each criterion, the agent assigns:
-
-- **supports** — fully meets the criterion (evidence: all axe checks pass, tree looks correct, VO confirms)
-- **partially_supports** — some instances pass, some fail (explain which)
-- **does_not_support** — fails the criterion (explain how)
-- **not_applicable** — the criterion doesn't apply (no video = skip 1.2.x)
-- **not_evaluated** — couldn't test (no VoiceOver available for Phase 3 items, note this)
+These interactive tests are done by the browse agent orchestrating both browse (for interaction) and vo-driver (for reading the result).
 
 ## What to Build
 
-### In vo-driver:
-1. **Auto-enter web content** — `start` should navigate past browser chrome and into web content automatically
-2. **`eval` endpoint** — run JS in the page (for axe-core injection if not using browse)
+### Phase 1: PoC
+1. **`audit` command in vo-driver** — runs axe + VoiceOver walk, outputs JSON
+2. **Auto-enter web content** — the start/audit commands handle the GO_TO_BEGINNING/next/next/START_INTERACTING dance automatically
+3. **axe-core integration** — add `@axe-core/playwright` as a dependency, inject into page
 
-### Skill docs:
-3. **Page auditor skill** — the agent persona + instructions for the three-phase audit
-4. **Report builder skill** — instructions for synthesizing multi-page findings into ACR/VPAT
+### Phase 2: Integration
+4. **Selector scoping** — axe scoped via `.include()`, VO navigated to element
+5. **Attach to browse's browser** — `--cdp` flag to share Playwright session
 
-### Templates:
-5. **VPAT 2.5 template** — the actual ITI format with all WCAG 2.2 AA criteria rows
+### Phase 3: Reporting
+6. **Report builder agent skill** — takes audit JSONs, produces ACR/VPAT
+7. **VPAT 2.5 template** — standard ITI format
 
-### Optional:
-6. **Automated check scripts** — pre-built JS for Phase 1 if not using axe (lighter weight, but axe is better)
-7. **axe integration** — add `@axe-core/playwright` as a dependency, expose via endpoint
+## Architecture
+
+```
+Browse agent (exploring the app)
+  │
+  │  encounters new state/component
+  │
+  ├─── $B snapshot -i          (sees the visual state)
+  │
+  ├─── bun vo-driver.mjs audit ".modal"
+  │      │
+  │      ├── axe-core (scoped to .modal)
+  │      ├── VoiceOver walk (headings, controls, images...)
+  │      └── → structured JSON
+  │
+  │  agent reasons about findings
+  │  agent interacts further (close modal, check focus)
+  │  agent moves on to next state
+  │
+  ▼
+Findings accumulated across all states
+  │
+  ▼
+Report builder agent → ACR/VPAT
+```
