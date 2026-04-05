@@ -25,6 +25,7 @@ const DEFAULT_PORT = 7483;
 const DEFAULT_CDP_PORT = 9222;
 const LOG_FILE = "/tmp/vo-driver.log";
 const PID_FILE = "/tmp/vo-driver.pid";
+const CLI_TIMEOUT_MS = 30000;
 
 // ---------------------------------------------------------------------------
 // Command catalog — VoiceOver-standard names
@@ -115,7 +116,7 @@ let state = {
   browser: null,
   page: null,
   cdpPort: DEFAULT_CDP_PORT,
-  transcript: [],       // { index, spoken, name, role }
+  transcript: [],
   transcriptIndex: 0,
 };
 
@@ -129,46 +130,36 @@ function log(msg, err = false) {
 }
 
 // ---------------------------------------------------------------------------
-// Response parsing — extract name and role from VoiceOver announcements
+// Response parsing
+//
+// VoiceOver's itemText is "Name role", e.g. "Example Domain heading level 1".
+// We split on known role suffixes. This is heuristic — names containing role
+// words (e.g. "Link to button factory") could misparse. For precise role info,
+// use the accessibility tree via Playwright instead.
 // ---------------------------------------------------------------------------
 
+const ROLE_PATTERN = new RegExp(
+  "\\s+(" + [
+    "heading level \\d+",
+    "search text field", "text field", "edit text",
+    "pop up button", "radio button", "menu item",
+    "toolbar item palette", "selected tab, group",
+    "web content",
+    "link", "button", "checkbox", "tab", "image",
+    "group", "list", "table", "dialog",
+  ].join("|") + ")$",
+  "i"
+);
+
 function parseVoResponse(spoken, itemText) {
-  // itemText from guidepup is usually "Name role" e.g. "Example Domain heading level 1"
-  // spoken is the full announcement including context hints
   const name = itemText || "";
   let role = "";
-
-  // Common role patterns at the end of itemText
-  const rolePatterns = [
-    /\s+(heading level \d+)$/i,
-    /\s+(link)$/i,
-    /\s+(button)$/i,
-    /\s+(text field)$/i,
-    /\s+(search text field)$/i,
-    /\s+(edit text)$/i,
-    /\s+(checkbox)$/i,
-    /\s+(radio button)$/i,
-    /\s+(pop up button)$/i,
-    /\s+(menu item)$/i,
-    /\s+(tab)$/i,
-    /\s+(image)$/i,
-    /\s+(group)$/i,
-    /\s+(list)$/i,
-    /\s+(table)$/i,
-    /\s+(dialog)$/i,
-    /\s+(web content)$/i,
-    /\s+(toolbar item palette)$/i,
-    /\s+(selected tab, group)$/i,
-  ];
-
   let parsedName = name;
-  for (const pat of rolePatterns) {
-    const m = name.match(pat);
-    if (m) {
-      role = m[1];
-      parsedName = name.slice(0, m.index);
-      break;
-    }
+
+  const m = name.match(ROLE_PATTERN);
+  if (m) {
+    role = m[1];
+    parsedName = name.slice(0, m.index);
   }
 
   return { spoken, name: parsedName.trim(), role };
@@ -181,7 +172,7 @@ function recordTranscript(entry) {
 }
 
 // ---------------------------------------------------------------------------
-// AppleScript helpers (used only for `press` and browser focus)
+// AppleScript helpers
 // ---------------------------------------------------------------------------
 
 function runAppleScript(script, timeout = 10000) {
@@ -198,22 +189,27 @@ function runAppleScript(script, timeout = 10000) {
   });
 }
 
-async function getSpokenPhraseRaw() {
-  try {
-    return await runAppleScript('tell application "VoiceOver" to get content of last phrase', 5000);
-  } catch { return ""; }
+function voAppleScript(voCommand, timeout = 5000) {
+  return runAppleScript(`tell application "VoiceOver" to ${voCommand}`, timeout);
 }
 
 // ---------------------------------------------------------------------------
-// VoiceOver operations
+// VoiceOver operations — read from LogStore instead of extra round-trips
 // ---------------------------------------------------------------------------
+
+async function lastFromLog() {
+  const phrases = await voiceOver.spokenPhraseLog();
+  const items = await voiceOver.itemTextLog();
+  return {
+    spoken: phrases.at(-1) || "",
+    itemText: items.at(-1) || "",
+  };
+}
 
 async function voAction(action) {
   await action();
-  const spoken = await voiceOver.lastSpokenPhrase();
-  const itemText = await voiceOver.itemText();
-  const result = parseVoResponse(spoken, itemText);
-  return recordTranscript(result);
+  const { spoken, itemText } = await lastFromLog();
+  return recordTranscript(parseVoResponse(spoken, itemText));
 }
 
 async function voNext() { return voAction(() => voiceOver.next()); }
@@ -239,50 +235,50 @@ async function voPerform(commandName) {
 }
 
 // ---------------------------------------------------------------------------
-// Enter web content — auto-navigate from browser chrome into page
+// Enter web content — all raw AppleScript for speed
 // ---------------------------------------------------------------------------
 
 async function voEnter() {
-  // Check if already inside web content by looking at current item
+  // Check if already inside web content
   try {
-    const spoken = await voiceOver.lastSpokenPhrase();
+    const spoken = await voAppleScript("return content of last phrase");
     if (spoken.toLowerCase().includes("inside of web content") ||
-        spoken.toLowerCase().includes("in ") && spoken.toLowerCase().includes("web content")) {
-      const itemText = await voiceOver.itemText();
+        (spoken.toLowerCase().includes("in ") && spoken.toLowerCase().includes("web content"))) {
+      const itemText = await voAppleScript("return text under cursor of vo cursor");
       const result = parseVoResponse(spoken, itemText);
       log(`Already in web content: ${itemText}`);
       return recordTranscript(result);
     }
   } catch {}
 
-  // Use raw AppleScript to quickly walk to web content — much faster than guidepup's
-  // next() which polls for phrase stabilization after each move
-  const beginCmd = voiceOver.commanderCommands.GO_TO_BEGINNING;
-  if (beginCmd) await voiceOver.perform(beginCmd);
+  // Go to beginning via commander
+  try {
+    await voAppleScript('tell commander to perform command "go to beginning"');
+    await new Promise((r) => setTimeout(r, 500));
+  } catch {}
 
+  // Walk forward until we find "web content"
   for (let i = 0; i < 10; i++) {
-    // Quick check via raw AppleScript (no LogStore polling)
     let itemText = "";
     try {
-      itemText = await runAppleScript(
-        'tell application "VoiceOver" to return text under cursor of vo cursor', 3000);
+      itemText = await voAppleScript("return text under cursor of vo cursor", 3000);
     } catch {}
 
     if (itemText.toLowerCase().includes("web content")) {
-      // Found it — interact to enter
-      const interactCmd = voiceOver.commanderCommands.START_INTERACTING_WITH_ITEM;
-      if (interactCmd) await voiceOver.perform(interactCmd);
-      const spoken = await voiceOver.lastSpokenPhrase();
-      const finalItem = await voiceOver.itemText();
+      // Enter it
+      try {
+        await voAppleScript('tell commander to perform command "start interacting with item"');
+        await new Promise((r) => setTimeout(r, 500));
+      } catch {}
+      const spoken = await voAppleScript("return content of last phrase").catch(() => "");
+      const finalItem = await voAppleScript("return text under cursor of vo cursor").catch(() => "");
       const result = parseVoResponse(spoken, finalItem);
       log(`Entered web content: ${finalItem}`);
       return recordTranscript(result);
     }
 
-    // Move forward with raw AppleScript (fast, no polling)
     try {
-      await runAppleScript(
-        'tell application "VoiceOver" to tell vo cursor to move right', 5000);
+      await voAppleScript("tell vo cursor to move right");
       await new Promise((r) => setTimeout(r, 300));
     } catch { break; }
   }
@@ -291,7 +287,7 @@ async function voEnter() {
 }
 
 // ---------------------------------------------------------------------------
-// Press — raw keystrokes via AppleScript (for Tab, arrows in rotor, etc.)
+// Press — raw keystrokes via AppleScript
 // ---------------------------------------------------------------------------
 
 const KEY_CODES = {
@@ -317,9 +313,8 @@ async function voPress(key, modifiers = []) {
 
   await runAppleScript(script);
   await new Promise((r) => setTimeout(r, 600));
-  const spoken = await getSpokenPhraseRaw();
-  const result = { spoken, name: spoken, role: "" };
-  return recordTranscript(result);
+  const spoken = await voAppleScript("return content of last phrase").catch(() => "");
+  return recordTranscript({ spoken, name: spoken, role: "" });
 }
 
 // ---------------------------------------------------------------------------
@@ -343,9 +338,26 @@ function clearTranscript() {
 // Browser + VoiceOver lifecycle
 // ---------------------------------------------------------------------------
 
-async function focusBrowser() {
+function detectBrowserApp() {
+  // Playwright's Chromium app name varies by version. Find it dynamically.
   try {
-    spawnSync("osascript", ["-e", 'tell application "Google Chrome for Testing" to activate']);
+    const result = spawnSync("osascript", ["-e",
+      'tell application "System Events" to get name of every process whose name contains "Chrome"']);
+    const names = result.stdout.toString().trim().split(", ");
+    const testing = names.find((n) => n.includes("Testing"));
+    if (testing) return testing;
+    const chrome = names.find((n) => n.includes("Chrome") || n.includes("Chromium"));
+    if (chrome) return chrome;
+  } catch {}
+  return "Google Chrome for Testing";
+}
+
+let browserAppName = null;
+
+async function focusBrowser() {
+  if (!browserAppName) browserAppName = detectBrowserApp();
+  try {
+    spawnSync("osascript", ["-e", `tell application "${browserAppName}" to activate`]);
     await new Promise((r) => setTimeout(r, 500));
     if (state.page) {
       await state.page.bringToFront();
@@ -359,7 +371,6 @@ async function focusBrowser() {
 async function initialize(url, cdpPort) {
   state.cdpPort = cdpPort;
 
-  // Launch browser with CDP debugging port exposed
   state.browser = await chromium.launch({
     headless: false,
     args: [`--remote-debugging-port=${cdpPort}`],
@@ -372,21 +383,19 @@ async function initialize(url, cdpPort) {
     state.currentUrl = url;
   }
 
-  // Start VoiceOver
   await voiceOver.start();
   state.voiceoverActive = true;
   log("VoiceOver started");
 
-  // Max out speech rate
+  // Max out speech rate for faster phrase capture
   try {
     spawnSync("defaults", ["write",
       "com.apple.VoiceOver4/default",
       "SCRCategories_SCRCategorySystemWide_SCRSpeechLanguages_default_SCRSpeechComponentSettings_SCRRateAsPercent",
       "-int", "100"]);
     log("Speech rate set to 100");
-  } catch (e) { log(`speech rate warning: ${e.message}`); }
+  } catch (e) { log(`speech rate warning: ${e.message}`, true); }
 
-  // Focus browser
   await new Promise((r) => setTimeout(r, 1500));
   await focusBrowser();
   log("Browser focused");
@@ -398,23 +407,27 @@ async function navigate(url) {
   state.currentUrl = url;
   await focusBrowser();
 
-  // Auto-enter web content
   try {
     return await voEnter();
   } catch (e) {
-    log(`navigate enter warning: ${e.message}`);
+    log(`navigate enter: ${e.message}`, true);
     return { spoken: "", name: "", role: "" };
   }
 }
 
 async function cleanup() {
-  try { if (state.browser) { await state.browser.close(); state.browser = null; } } catch {}
+  try {
+    if (state.browser) { await state.browser.close(); state.browser = null; }
+  } catch (e) { log(`browser close: ${e.message}`, true); }
+
   try {
     if (state.voiceoverActive) { await voiceOver.stop(); state.voiceoverActive = false; }
-  } catch {
+  } catch (e) {
+    log(`guidepup stop: ${e.message}`, true);
     try { spawnSync("osascript", ["-e", 'tell application "VoiceOver" to quit']); } catch {}
     state.voiceoverActive = false;
   }
+
   state.page = null;
   state.currentUrl = null;
 }
@@ -535,11 +548,9 @@ async function startServer(port, cdpPort, url) {
     });
   });
 
-  // Enter web content after server is listening (so CLI can connect)
+  // Enter web content after server is listening (so CLI can connect even if enter is slow)
   if (url) {
-    try {
-      await voEnter();
-    } catch (e) { log(`auto-enter warning: ${e.message}`); }
+    try { await voEnter(); } catch (e) { log(`auto-enter: ${e.message}`, true); }
   }
 
   const shutdown = async () => {
@@ -562,31 +573,28 @@ async function cli(args, port) {
   const [cmd, ...rest] = args;
   const base = `http://127.0.0.1:${port}`;
 
-  // Parse --json flag from rest args
   const jsonFlag = rest.includes("--json");
   const cleanRest = rest.filter((a) => a !== "--json");
 
-  // Helpers
   const post = async (path, body) => {
     const r = await fetch(`${base}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(CLI_TIMEOUT_MS),
     });
     const d = await r.json();
-    if (!r.ok || d.error) {
-      console.error(`Error: ${d.error}`);
-      process.exit(1);
-    }
+    if (!r.ok) { console.error(`Error: ${d.error}`); process.exit(1); }
     return d;
   };
 
   const get = async (path) => {
-    const r = await fetch(`${base}${path}`);
+    const r = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(CLI_TIMEOUT_MS) });
     return r.json();
   };
 
   const printVO = (d) => {
+    if (d.error) { console.error(`Error: ${d.error}`); process.exit(1); }
     if (jsonFlag) {
       console.log(JSON.stringify(d));
     } else {
@@ -599,11 +607,11 @@ async function cli(args, port) {
   switch (cmd) {
     case "start": {
       const url = cleanRest[0] || "about:blank";
-      console.log(`Starting vo-driver...`);
+      console.log("Starting vo-driver...");
 
       // Already running?
       try {
-        const r = await fetch(`${base}/`);
+        const r = await fetch(`${base}/`, { signal: AbortSignal.timeout(2000) });
         if (r.ok) {
           const d = await r.json();
           console.log(`Already running. CDP on ws://127.0.0.1:${d.cdpPort}`);
@@ -615,14 +623,11 @@ async function cli(args, port) {
         }
       } catch {}
 
-      // Clean stale PID
       if (existsSync(PID_FILE)) { try { unlinkSync(PID_FILE); } catch {} }
 
-      // Parse cdp-port for the daemon
       const cdpIdx = args.indexOf("--cdp-port");
       const cdpPort = cdpIdx !== -1 ? args[cdpIdx + 1] : DEFAULT_CDP_PORT;
 
-      // Spawn daemon with URL — it handles navigate + enter internally
       const serveArgs = [
         process.argv[1], "serve",
         "--port", port.toString(),
@@ -633,9 +638,11 @@ async function cli(args, port) {
       const child = spawn(process.argv[0], serveArgs, { detached: true, stdio: "ignore" });
       child.unref();
 
-      // Poll until ready
       for (let i = 0; i < 200; i++) {
-        try { const r = await fetch(`${base}/`); if (r.ok) break; } catch {}
+        try {
+          const r = await fetch(`${base}/`, { signal: AbortSignal.timeout(2000) });
+          if (r.ok) break;
+        } catch {}
         if (i === 199) { console.error("Server failed to start"); process.exit(1); }
         await new Promise((r) => setTimeout(r, 200));
       }
@@ -652,18 +659,17 @@ async function cli(args, port) {
 
     case "press": {
       if (!cleanRest[0]) { console.error("press requires a key name"); process.exit(1); }
-      const d = await post("/press", {
+      printVO(await post("/press", {
         key: cleanRest[0],
         modifiers: cleanRest.slice(1).flatMap((m) => m.split(",")).filter(Boolean),
-      });
-      printVO(d);
+      }));
       break;
     }
 
     case "perform": {
       if (!cleanRest[0]) { console.error("perform requires a command name"); process.exit(1); }
       const d = await post("/perform", { command: cleanRest[0] });
-      if (!jsonFlag) console.log(`Performed: ${cleanRest[0]}`);
+      if (!jsonFlag && !d.error) console.log(`Performed: ${cleanRest[0]}`);
       printVO(d);
       break;
     }
@@ -671,7 +677,7 @@ async function cli(args, port) {
     case "navigate": {
       if (!cleanRest[0]) { console.error("navigate requires a URL"); process.exit(1); }
       const d = await post("/navigate", { url: cleanRest[0] });
-      if (!jsonFlag) console.log(`Navigated to ${cleanRest[0]}`);
+      if (!jsonFlag && !d.error) console.log(`Navigated to ${cleanRest[0]}`);
       printVO(d);
       break;
     }
@@ -691,7 +697,10 @@ async function cli(args, port) {
       const clear = cleanRest.includes("--clear");
 
       if (clear) {
-        const d = await fetch(`${base}/transcript`, { method: "DELETE" }).then((r) => r.json());
+        const d = await fetch(`${base}/transcript`, {
+          method: "DELETE",
+          signal: AbortSignal.timeout(CLI_TIMEOUT_MS),
+        }).then((r) => r.json());
         if (jsonFlag) console.log(JSON.stringify(d));
         else console.log(`Cleared ${d.cleared} entries`);
       } else {
@@ -719,7 +728,11 @@ async function cli(args, port) {
     }
 
     case "stop": {
-      try { await fetch(`${base}/stop`, { method: "POST" }); console.log("Stopped"); return; } catch {}
+      try {
+        await fetch(`${base}/stop`, { method: "POST", signal: AbortSignal.timeout(5000) });
+        console.log("Stopped");
+        return;
+      } catch {}
       if (existsSync(PID_FILE)) {
         const pid = parseInt(readFileSync(PID_FILE, "utf-8"));
         process.kill(pid, "SIGTERM");
@@ -746,7 +759,7 @@ async function cli(args, port) {
 }
 
 // ---------------------------------------------------------------------------
-// Main — parse flags and dispatch
+// Main
 // ---------------------------------------------------------------------------
 
 const args = process.argv.slice(2);
