@@ -1,17 +1,18 @@
 #!/usr/bin/env bun
 
 /**
- * VoiceOver Driver — interactive VoiceOver automation for accessibility testing.
+ * vo-driver — VoiceOver screen reader automation for accessibility testing.
  *
  * Two modes:
- *   Daemon:  bun vo-driver.mjs serve [--port 7483]
+ *   Daemon:  bun vo-driver.mjs serve [--port 7483] [--cdp-port 9222]
  *   CLI:     bun vo-driver.mjs <command> [args]
  *
- * The CLI spawns/connects to the daemon over HTTP on localhost.
+ * The daemon owns a headed Chromium browser with VoiceOver attached.
+ * Other tools (agent-browser, audit.mjs) connect via CDP to the same browser.
  */
 
 import { createServer } from "http";
-import { spawn, spawnSync, execFile } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "fs";
 import { voiceOver } from "@guidepup/guidepup";
 import { chromium } from "playwright";
@@ -20,12 +21,13 @@ import { chromium } from "playwright";
 // Config
 // ---------------------------------------------------------------------------
 
-const PORT = 7483;
+const DEFAULT_PORT = 7483;
+const DEFAULT_CDP_PORT = 9222;
 const LOG_FILE = "/tmp/vo-driver.log";
 const PID_FILE = "/tmp/vo-driver.pid";
 
 // ---------------------------------------------------------------------------
-// Command catalog
+// Command catalog — VoiceOver-standard names
 // ---------------------------------------------------------------------------
 
 const COMMANDS = {
@@ -67,7 +69,6 @@ const COMMANDS = {
   // -- Interaction --
   START_INTERACTING:             { type: "commander", name: "START_INTERACTING_WITH_ITEM" },
   STOP_INTERACTING:              { type: "commander", name: "STOP_INTERACTING_WITH_ITEM" },
-  ACTIVATE:                      { type: "keyboard", name: "performDefaultActionForItem" },
   ESCAPE:                        { type: "commander", name: "ESCAPE" },
 
   // -- Rotor --
@@ -113,6 +114,9 @@ let state = {
   currentUrl: null,
   browser: null,
   page: null,
+  cdpPort: DEFAULT_CDP_PORT,
+  transcript: [],       // { index, spoken, name, role }
+  transcriptIndex: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -125,7 +129,59 @@ function log(msg, err = false) {
 }
 
 // ---------------------------------------------------------------------------
-// AppleScript helpers (used only for `press`, `snapshot`, and focus management)
+// Response parsing — extract name and role from VoiceOver announcements
+// ---------------------------------------------------------------------------
+
+function parseVoResponse(spoken, itemText) {
+  // itemText from guidepup is usually "Name role" e.g. "Example Domain heading level 1"
+  // spoken is the full announcement including context hints
+  const name = itemText || "";
+  let role = "";
+
+  // Common role patterns at the end of itemText
+  const rolePatterns = [
+    /\s+(heading level \d+)$/i,
+    /\s+(link)$/i,
+    /\s+(button)$/i,
+    /\s+(text field)$/i,
+    /\s+(search text field)$/i,
+    /\s+(edit text)$/i,
+    /\s+(checkbox)$/i,
+    /\s+(radio button)$/i,
+    /\s+(pop up button)$/i,
+    /\s+(menu item)$/i,
+    /\s+(tab)$/i,
+    /\s+(image)$/i,
+    /\s+(group)$/i,
+    /\s+(list)$/i,
+    /\s+(table)$/i,
+    /\s+(dialog)$/i,
+    /\s+(web content)$/i,
+    /\s+(toolbar item palette)$/i,
+    /\s+(selected tab, group)$/i,
+  ];
+
+  let parsedName = name;
+  for (const pat of rolePatterns) {
+    const m = name.match(pat);
+    if (m) {
+      role = m[1];
+      parsedName = name.slice(0, m.index);
+      break;
+    }
+  }
+
+  return { spoken, name: parsedName.trim(), role };
+}
+
+function recordTranscript(entry) {
+  entry.index = state.transcriptIndex++;
+  state.transcript.push(entry);
+  return entry;
+}
+
+// ---------------------------------------------------------------------------
+// AppleScript helpers (used only for `press` and browser focus)
 // ---------------------------------------------------------------------------
 
 function runAppleScript(script, timeout = 10000) {
@@ -149,50 +205,89 @@ async function getSpokenPhraseRaw() {
 }
 
 // ---------------------------------------------------------------------------
-// VoiceOver operations (via guidepup — no Promise.race, let guidepup handle timeouts)
+// VoiceOver operations
 // ---------------------------------------------------------------------------
 
-async function voNext() {
-  await voiceOver.next();
+async function voAction(action) {
+  await action();
   const spoken = await voiceOver.lastSpokenPhrase();
   const itemText = await voiceOver.itemText();
-  return { success: true, spoken, itemText };
+  const result = parseVoResponse(spoken, itemText);
+  return recordTranscript(result);
 }
 
-async function voPrevious() {
-  await voiceOver.previous();
-  const spoken = await voiceOver.lastSpokenPhrase();
-  const itemText = await voiceOver.itemText();
-  return { success: true, spoken, itemText };
-}
-
-async function voAct() {
-  await voiceOver.act();
-  const spoken = await voiceOver.lastSpokenPhrase();
-  const itemText = await voiceOver.itemText();
-  return { success: true, spoken, itemText };
-}
+async function voNext() { return voAction(() => voiceOver.next()); }
+async function voPrevious() { return voAction(() => voiceOver.previous()); }
+async function voAct() { return voAction(() => voiceOver.act()); }
 
 async function voPerform(commandName) {
   const entry = COMMANDS[commandName];
-
   let commandObj;
+
   if (entry) {
     const source = entry.type === "commander"
       ? voiceOver.commanderCommands
       : voiceOver.keyboardCommands;
     commandObj = source[entry.name];
-    if (!commandObj) return { success: false, error: `${entry.type} command "${entry.name}" not found in guidepup` };
+    if (!commandObj) return { error: `${entry.type} command "${entry.name}" not found in guidepup` };
   } else {
-    // Try as raw commander command name
     commandObj = voiceOver.commanderCommands[commandName];
-    if (!commandObj) return { success: false, error: `Unknown command: ${commandName}` };
+    if (!commandObj) return { error: `Unknown command: ${commandName}` };
   }
 
-  await voiceOver.perform(commandObj);
-  const spoken = await voiceOver.lastSpokenPhrase();
-  const itemText = await voiceOver.itemText();
-  return { success: true, spoken, itemText };
+  return voAction(() => voiceOver.perform(commandObj));
+}
+
+// ---------------------------------------------------------------------------
+// Enter web content — auto-navigate from browser chrome into page
+// ---------------------------------------------------------------------------
+
+async function voEnter() {
+  // Check if already inside web content by looking at current item
+  try {
+    const spoken = await voiceOver.lastSpokenPhrase();
+    if (spoken.toLowerCase().includes("inside of web content") ||
+        spoken.toLowerCase().includes("in ") && spoken.toLowerCase().includes("web content")) {
+      const itemText = await voiceOver.itemText();
+      const result = parseVoResponse(spoken, itemText);
+      log(`Already in web content: ${itemText}`);
+      return recordTranscript(result);
+    }
+  } catch {}
+
+  // Use raw AppleScript to quickly walk to web content — much faster than guidepup's
+  // next() which polls for phrase stabilization after each move
+  const beginCmd = voiceOver.commanderCommands.GO_TO_BEGINNING;
+  if (beginCmd) await voiceOver.perform(beginCmd);
+
+  for (let i = 0; i < 10; i++) {
+    // Quick check via raw AppleScript (no LogStore polling)
+    let itemText = "";
+    try {
+      itemText = await runAppleScript(
+        'tell application "VoiceOver" to return text under cursor of vo cursor', 3000);
+    } catch {}
+
+    if (itemText.toLowerCase().includes("web content")) {
+      // Found it — interact to enter
+      const interactCmd = voiceOver.commanderCommands.START_INTERACTING_WITH_ITEM;
+      if (interactCmd) await voiceOver.perform(interactCmd);
+      const spoken = await voiceOver.lastSpokenPhrase();
+      const finalItem = await voiceOver.itemText();
+      const result = parseVoResponse(spoken, finalItem);
+      log(`Entered web content: ${finalItem}`);
+      return recordTranscript(result);
+    }
+
+    // Move forward with raw AppleScript (fast, no polling)
+    try {
+      await runAppleScript(
+        'tell application "VoiceOver" to tell vo cursor to move right', 5000);
+      await new Promise((r) => setTimeout(r, 300));
+    } catch { break; }
+  }
+
+  return { error: "Could not find web content area" };
 }
 
 // ---------------------------------------------------------------------------
@@ -223,38 +318,52 @@ async function voPress(key, modifiers = []) {
   await runAppleScript(script);
   await new Promise((r) => setTimeout(r, 600));
   const spoken = await getSpokenPhraseRaw();
-  return { success: true, spoken, itemText: spoken };
+  const result = { spoken, name: spoken, role: "" };
+  return recordTranscript(result);
 }
 
 // ---------------------------------------------------------------------------
-// Snapshot — raw AppleScript walk (skips guidepup capture for speed)
+// Transcript
 // ---------------------------------------------------------------------------
 
-async function voSnapshot(steps = 30) {
-  const results = [];
-  let lastPhrase = "", repeatCount = 0;
-
-  for (let i = 0; i < steps; i++) {
-    try {
-      await runAppleScript('tell application "VoiceOver" to tell vo cursor to move right');
-    } catch { break; }
-    await new Promise((r) => setTimeout(r, 500));
-
-    const spoken = await getSpokenPhraseRaw();
-    results.push({ step: i + 1, spoken, itemText: spoken });
-
-    if (spoken === lastPhrase) { if (++repeatCount >= 3) break; }
-    else { repeatCount = 0; lastPhrase = spoken; }
+function getTranscript(since) {
+  if (since !== undefined) {
+    return state.transcript.filter((e) => e.index > since);
   }
-  return { success: true, steps: results.length, results };
+  return [...state.transcript];
+}
+
+function clearTranscript() {
+  const entries = [...state.transcript];
+  state.transcript = [];
+  return entries;
 }
 
 // ---------------------------------------------------------------------------
 // Browser + VoiceOver lifecycle
 // ---------------------------------------------------------------------------
 
-async function initialize(url) {
-  state.browser = await chromium.launch({ headless: false });
+async function focusBrowser() {
+  try {
+    spawnSync("osascript", ["-e", 'tell application "Google Chrome for Testing" to activate']);
+    await new Promise((r) => setTimeout(r, 500));
+    if (state.page) {
+      await state.page.bringToFront();
+      await new Promise((r) => setTimeout(r, 300));
+      await state.page.click("body", { force: true });
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  } catch (e) { log(`focus warning: ${e.message}`); }
+}
+
+async function initialize(url, cdpPort) {
+  state.cdpPort = cdpPort;
+
+  // Launch browser with CDP debugging port exposed
+  state.browser = await chromium.launch({
+    headless: false,
+    args: [`--remote-debugging-port=${cdpPort}`],
+  });
   const ctx = await state.browser.newContext();
   state.page = await ctx.newPage();
 
@@ -263,11 +372,12 @@ async function initialize(url) {
     state.currentUrl = url;
   }
 
+  // Start VoiceOver
   await voiceOver.start();
   state.voiceoverActive = true;
   log("VoiceOver started");
 
-  // Max out speech rate so phrase capture is fast
+  // Max out speech rate
   try {
     spawnSync("defaults", ["write",
       "com.apple.VoiceOver4/default",
@@ -276,34 +386,25 @@ async function initialize(url) {
     log("Speech rate set to 100");
   } catch (e) { log(`speech rate warning: ${e.message}`); }
 
-  // Bring browser to foreground
+  // Focus browser
   await new Promise((r) => setTimeout(r, 1500));
-  try {
-    spawnSync("osascript", ["-e", 'tell application "Google Chrome for Testing" to activate']);
-    await new Promise((r) => setTimeout(r, 500));
-    await state.page.bringToFront();
-    await new Promise((r) => setTimeout(r, 500));
-    await state.page.click("body", { force: true });
-    await new Promise((r) => setTimeout(r, 300));
-    log("Browser focused");
-  } catch (e) { log(`focus warning: ${e.message}`); }
+  await focusBrowser();
+  log("Browser focused");
 }
 
 async function navigate(url) {
-  if (!state.page) return { success: false, error: "No page" };
+  if (!state.page) return { error: "No page" };
   await state.page.goto(url, { waitUntil: "load" });
   state.currentUrl = url;
+  await focusBrowser();
 
+  // Auto-enter web content
   try {
-    spawnSync("osascript", ["-e", 'tell application "Google Chrome for Testing" to activate']);
-    await new Promise((r) => setTimeout(r, 500));
-    await state.page.bringToFront();
-    await new Promise((r) => setTimeout(r, 300));
-    await state.page.click("body", { force: true });
-    await new Promise((r) => setTimeout(r, 300));
-  } catch (e) { log(`navigate focus: ${e.message}`); }
-
-  return { success: true, url };
+    return await voEnter();
+  } catch (e) {
+    log(`navigate enter warning: ${e.message}`);
+    return { spoken: "", name: "", role: "" };
+  }
 }
 
 async function cleanup() {
@@ -342,7 +443,12 @@ async function handle(req, res) {
 
   try {
     if (path === "/" && method === "GET")
-      return json(res, 200, { status: "running", voiceoverActive: state.voiceoverActive, currentUrl: state.currentUrl });
+      return json(res, 200, {
+        status: "running",
+        voiceoverActive: state.voiceoverActive,
+        currentUrl: state.currentUrl,
+        cdpPort: state.cdpPort,
+      });
 
     if (path === "/next" && method === "POST")
       return json(res, 200, await voNext());
@@ -363,29 +469,28 @@ async function handle(req, res) {
       return json(res, 200, await voPress(key, modifiers));
     }
 
+    if (path === "/enter" && method === "POST")
+      return json(res, 200, await voEnter());
+
     if (path === "/navigate" && method === "POST") {
       const { url: navUrl } = JSON.parse(await readBody(req));
       return json(res, 200, await navigate(navUrl));
     }
 
-    if (path === "/snapshot" && method === "POST") {
-      const { steps } = JSON.parse(await readBody(req) || "{}");
-      return json(res, 200, await voSnapshot(steps));
-    }
-
-    if (path === "/last-phrase" && method === "GET") {
-      const spoken = await voiceOver.lastSpokenPhrase();
-      return json(res, 200, { spoken });
-    }
-
     if (path === "/item-text" && method === "GET") {
       const itemText = await voiceOver.itemText();
-      return json(res, 200, { itemText });
+      return json(res, 200, parseVoResponse("", itemText));
     }
 
-    if (path === "/phrase-log" && method === "GET") {
-      const phraseLog = await voiceOver.spokenPhraseLog();
-      return json(res, 200, { phraseLog });
+    if (path === "/transcript" && method === "GET") {
+      const since = url.searchParams.get("since");
+      const entries = since !== null ? getTranscript(parseInt(since)) : getTranscript();
+      return json(res, 200, { entries, length: state.transcript.length });
+    }
+
+    if (path === "/transcript" && method === "DELETE") {
+      const entries = clearTranscript();
+      return json(res, 200, { cleared: entries.length });
     }
 
     if (path === "/commands" && method === "GET") {
@@ -416,15 +521,26 @@ async function handle(req, res) {
 // Server startup
 // ---------------------------------------------------------------------------
 
-async function startServer(port, url) {
-  await initialize(url);
+async function startServer(port, cdpPort, url) {
+  await initialize(url, cdpPort);
 
   const server = createServer(handle);
-  server.listen(port, "127.0.0.1", () => {
-    log(`Server on http://127.0.0.1:${port}`);
-    console.log(`Server ready on http://127.0.0.1:${port}`);
-    try { writeFileSync(PID_FILE, process.pid.toString()); } catch {}
+  await new Promise((resolve) => {
+    server.listen(port, "127.0.0.1", () => {
+      log(`Server on http://127.0.0.1:${port}, CDP on port ${cdpPort}`);
+      console.log(`Server ready on http://127.0.0.1:${port}`);
+      console.log(`CDP available on ws://127.0.0.1:${cdpPort}`);
+      try { writeFileSync(PID_FILE, process.pid.toString()); } catch {}
+      resolve();
+    });
   });
+
+  // Enter web content after server is listening (so CLI can connect)
+  if (url) {
+    try {
+      await voEnter();
+    } catch (e) { log(`auto-enter warning: ${e.message}`); }
+  }
 
   const shutdown = async () => {
     server.close();
@@ -446,6 +562,10 @@ async function cli(args, port) {
   const [cmd, ...rest] = args;
   const base = `http://127.0.0.1:${port}`;
 
+  // Parse --json flag from rest args
+  const jsonFlag = rest.includes("--json");
+  const cleanRest = rest.filter((a) => a !== "--json");
+
   // Helpers
   const post = async (path, body) => {
     const r = await fetch(`${base}${path}`, {
@@ -454,7 +574,10 @@ async function cli(args, port) {
       body: body ? JSON.stringify(body) : undefined,
     });
     const d = await r.json();
-    if (!r.ok) { console.error(`Error: ${d.error}`); process.exit(1); }
+    if (!r.ok || d.error) {
+      console.error(`Error: ${d.error}`);
+      process.exit(1);
+    }
     return d;
   };
 
@@ -464,22 +587,30 @@ async function cli(args, port) {
   };
 
   const printVO = (d) => {
-    if (d.spoken) console.log(`Spoken: "${d.spoken}"`);
-    if (d.itemText) console.log(`Item: "${d.itemText}"`);
+    if (jsonFlag) {
+      console.log(JSON.stringify(d));
+    } else {
+      if (d.spoken) console.log(`Spoken: "${d.spoken}"`);
+      if (d.name) console.log(`Name: "${d.name}"`);
+      if (d.role) console.log(`Role: "${d.role}"`);
+    }
   };
 
   switch (cmd) {
     case "start": {
-      const url = rest[0] || "about:blank";
-      console.log(`Starting server and navigating to ${url}...`);
+      const url = cleanRest[0] || "about:blank";
+      console.log(`Starting vo-driver...`);
 
       // Already running?
       try {
         const r = await fetch(`${base}/`);
         if (r.ok) {
-          console.log("Server already running.");
-          if (url !== "about:blank") await post("/navigate", { url });
-          console.log("Ready");
+          const d = await r.json();
+          console.log(`Already running. CDP on ws://127.0.0.1:${d.cdpPort}`);
+          if (url !== "about:blank") {
+            const nav = await post("/navigate", { url });
+            printVO(nav);
+          }
           return;
         }
       } catch {}
@@ -487,10 +618,19 @@ async function cli(args, port) {
       // Clean stale PID
       if (existsSync(PID_FILE)) { try { unlinkSync(PID_FILE); } catch {} }
 
-      // Spawn daemon
-      const child = spawn(process.argv[0], [process.argv[1], "serve", "--port", port.toString()], {
-        detached: true, stdio: "ignore",
-      });
+      // Parse cdp-port for the daemon
+      const cdpIdx = args.indexOf("--cdp-port");
+      const cdpPort = cdpIdx !== -1 ? args[cdpIdx + 1] : DEFAULT_CDP_PORT;
+
+      // Spawn daemon with URL — it handles navigate + enter internally
+      const serveArgs = [
+        process.argv[1], "serve",
+        "--port", port.toString(),
+        "--cdp-port", cdpPort.toString(),
+      ];
+      if (url !== "about:blank") serveArgs.push(url);
+
+      const child = spawn(process.argv[0], serveArgs, { detached: true, stdio: "ignore" });
       child.unref();
 
       // Poll until ready
@@ -500,57 +640,81 @@ async function cli(args, port) {
         await new Promise((r) => setTimeout(r, 200));
       }
 
-      if (url !== "about:blank") await post("/navigate", { url });
-      console.log("Server started and ready");
+      const status = await get("/");
+      console.log(`Ready. CDP available on ws://127.0.0.1:${status.cdpPort}`);
       break;
     }
 
+    case "enter":    printVO(await post("/enter")); break;
     case "next":     printVO(await post("/next")); break;
     case "previous": printVO(await post("/previous")); break;
     case "act":      printVO(await post("/act")); break;
 
     case "press": {
-      if (!rest[0]) { console.error("press requires a key name"); process.exit(1); }
-      const d = await post("/press", { key: rest[0], modifiers: rest.slice(1).flatMap((m) => m.split(",")).filter(Boolean) });
-      if (d.spoken) console.log(`Spoken: "${d.spoken}"`);
+      if (!cleanRest[0]) { console.error("press requires a key name"); process.exit(1); }
+      const d = await post("/press", {
+        key: cleanRest[0],
+        modifiers: cleanRest.slice(1).flatMap((m) => m.split(",")).filter(Boolean),
+      });
+      printVO(d);
       break;
     }
 
     case "perform": {
-      if (!rest[0]) { console.error("perform requires a command name"); process.exit(1); }
-      const d = await post("/perform", { command: rest[0] });
-      console.log(`Performed: ${rest[0]}`);
+      if (!cleanRest[0]) { console.error("perform requires a command name"); process.exit(1); }
+      const d = await post("/perform", { command: cleanRest[0] });
+      if (!jsonFlag) console.log(`Performed: ${cleanRest[0]}`);
       printVO(d);
       break;
     }
 
     case "navigate": {
-      if (!rest[0]) { console.error("navigate requires a URL"); process.exit(1); }
-      await post("/navigate", { url: rest[0] });
-      console.log(`Navigated to ${rest[0]}`);
+      if (!cleanRest[0]) { console.error("navigate requires a URL"); process.exit(1); }
+      const d = await post("/navigate", { url: cleanRest[0] });
+      if (!jsonFlag) console.log(`Navigated to ${cleanRest[0]}`);
+      printVO(d);
       break;
     }
 
-    case "snapshot": {
-      const steps = rest[0] === "--steps" ? parseInt(rest[1]) || 30 : 30;
-      console.log(`Snapshot: ${steps} steps...`);
-      const d = await post("/snapshot", { steps });
-      d.results.forEach((r) => console.log(`[${r.step}] "${r.spoken}"`));
+    case "item-text": {
+      const d = await get("/item-text");
+      if (jsonFlag) console.log(JSON.stringify(d));
+      else {
+        if (d.name) console.log(`Name: "${d.name}"`);
+        if (d.role) console.log(`Role: "${d.role}"`);
+      }
       break;
     }
 
-    case "last-phrase":  console.log((await get("/last-phrase")).spoken); break;
-    case "item-text":    console.log((await get("/item-text")).itemText); break;
-    case "phrase-log":   (await get("/phrase-log")).phraseLog.forEach((p, i) => console.log(`[${i + 1}] ${p}`)); break;
+    case "transcript": {
+      const since = cleanRest[0] === "--since" ? cleanRest[1] : null;
+      const clear = cleanRest.includes("--clear");
+
+      if (clear) {
+        const d = await fetch(`${base}/transcript`, { method: "DELETE" }).then((r) => r.json());
+        if (jsonFlag) console.log(JSON.stringify(d));
+        else console.log(`Cleared ${d.cleared} entries`);
+      } else {
+        const q = since !== null ? `?since=${since}` : "";
+        const d = await get(`/transcript${q}`);
+        if (jsonFlag) console.log(JSON.stringify(d));
+        else d.entries.forEach((e) => console.log(`[${e.index}] ${e.role ? `(${e.role}) ` : ""}${e.name || e.spoken}`));
+      }
+      break;
+    }
+
     case "commands": {
-      const f = rest[0] || "";
-      (await get(`/commands?filter=${encodeURIComponent(f)}`)).commands.forEach((c) => console.log(c));
+      const f = cleanRest[0] || "";
+      const d = await get(`/commands?filter=${encodeURIComponent(f)}`);
+      if (jsonFlag) console.log(JSON.stringify(d));
+      else d.commands.forEach((c) => console.log(c));
       break;
     }
 
     case "status": {
       const d = await get("/");
-      console.log(`Status: ${d.status}\nVoiceOver: ${d.voiceoverActive}\nURL: ${d.currentUrl || "(none)"}`);
+      if (jsonFlag) console.log(JSON.stringify(d));
+      else console.log(`Status: ${d.status}\nVoiceOver: ${d.voiceoverActive}\nURL: ${d.currentUrl || "(none)"}\nCDP: ws://127.0.0.1:${d.cdpPort}`);
       break;
     }
 
@@ -575,23 +739,29 @@ async function cli(args, port) {
     }
 
     default:
-      console.error(`Unknown: ${cmd}\nCommands: start next previous act press perform navigate snapshot status stop kill last-phrase item-text phrase-log commands`);
+      console.error(`Unknown: ${cmd}`);
+      console.error("Commands: start stop kill status enter navigate next previous act press perform transcript item-text commands");
       process.exit(1);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Main
+// Main — parse flags and dispatch
 // ---------------------------------------------------------------------------
 
 const args = process.argv.slice(2);
-let port = PORT;
-const pi = args.indexOf("--port");
-if (pi !== -1) port = parseInt(args[pi + 1]) || PORT;
+
+function getFlag(name, fallback) {
+  const i = args.indexOf(`--${name}`);
+  return i !== -1 && args[i + 1] ? parseInt(args[i + 1]) || fallback : fallback;
+}
+
+const port = getFlag("port", DEFAULT_PORT);
+const cdpPort = getFlag("cdp-port", DEFAULT_CDP_PORT);
 
 if (args[0] === "serve") {
   const rest = args.slice(1).filter((a, i, arr) => !a.startsWith("--") && !(i > 0 && arr[i - 1]?.startsWith("--")));
-  startServer(port, rest[0] || null).catch((e) => { console.error(e.message); process.exit(1); });
+  startServer(port, cdpPort, rest[0] || null).catch((e) => { console.error(e.message); process.exit(1); });
 } else {
   cli(args, port).catch((e) => { console.error(e.message); process.exit(1); });
 }
