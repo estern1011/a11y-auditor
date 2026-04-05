@@ -1,197 +1,240 @@
 # Accessibility Auditor — Design Document
 
-## Overview
+## Architecture
 
-Two-layer architecture for WCAG 2.2 AA accessibility evaluation:
+Three tools sharing one browser via CDP:
 
-1. **Browse agent** — explores the app with browse, interacts with everything, invokes the auditor when it encounters new states or components
-2. **Page auditor** — tests the current page state (or a scoped section), outputs structured findings
+```
+┌──────────────────────────────────────────────────────────┐
+│                  Auditor skill (persona)                  │
+│                                                          │
+│  "You are an accessibility auditor with three tools..."  │
+└────────┬──────────────────┬──────────────────┬───────────┘
+         │                  │                  │
+   ┌─────▼─────┐    ┌──────▼──────┐    ┌──────▼──────┐
+   │ vo-driver  │    │  audit.mjs  │    │agent-browser│
+   │            │    │             │    │             │
+   │ Screen     │    │ Automated   │    │ Page        │
+   │ reader     │    │ checks      │    │ interaction │
+   │            │    │             │    │             │
+   │ Owns the   │    │ axe-core +  │    │ click, type │
+   │ browser +  │    │ a11y tree   │    │ screenshot  │
+   │ VoiceOver  │    │             │    │ snapshot    │
+   │            │    │ Connects    │    │             │
+   │ CDP :9222  │◄───│ via CDP     │    │ Connects    │
+   │            │◄───│             │    │ via CDP     │
+   └────────────┘    └─────────────┘    └─────────────┘
+```
 
-A separate **report builder** agent (future) synthesizes findings across all audited states into an ACR/VPAT.
+- **vo-driver** owns the headed browser + VoiceOver, exposes CDP on port 9222
+- **audit.mjs** (separate tool) connects via CDP, runs axe-core + returns accessibility tree
+- **agent-browser** connects via `--cdp 9222` for interaction, screenshots, DOM queries
+- **One skill doc** (auditor persona) teaches the agent to orchestrate all three
 
 ## How It Works
 
-The browse agent is already exploring — clicking, filling forms, opening modals, navigating pages. It knows when context has changed. At each new state, it invokes the auditor:
+The agent explores with agent-browser. When it encounters new states, it runs audit.mjs for automated checks and uses vo-driver to verify screen reader behavior.
 
 ```bash
-# browse agent exploring an app
-$B goto https://app.com/dashboard
-$B snapshot -i
-# agent sees dashboard loaded → audit it
-bun vo-driver.mjs audit                     # full page
+# 1. Agent starts vo-driver (browser + VoiceOver + CDP)
+bun vo-driver.mjs start https://app.com
 
-$B click @e5                                # open settings modal
-# agent sees modal appeared → audit just the modal
-bun vo-driver.mjs audit ".modal-dialog"
+# 2. Agent connects agent-browser to same browser
+agent-browser --cdp 9222 snapshot -i
 
-$B goto https://app.com/settings
-$B snapshot -i
-$B fill @e2 ""                              # clear required field
-$B click @e8                                # submit
-# agent sees error state → audit the form
-bun vo-driver.mjs audit "form#settings"
+# 3. Agent runs automated checks
+bun audit.mjs --cdp 9222
 
-$B goto https://app.com/data
-# agent sees a data table → audit the table specifically
-bun vo-driver.mjs audit "table.data-grid"
+# 4. Agent interacts via agent-browser
+agent-browser --cdp 9222 click @e3        # open modal
+
+# 5. Agent audits the modal
+bun audit.mjs --cdp 9222 ".modal-dialog"
+
+# 6. Agent verifies with VoiceOver
+bun vo-driver.mjs enter                   # re-enter web content
+bun vo-driver.mjs perform FIND_NEXT_HEADING
+bun vo-driver.mjs press Tab               # test keyboard nav
+bun vo-driver.mjs transcript --since 12   # what did VO say?
+
+# 7. Agent closes modal via agent-browser, checks focus return
+agent-browser --cdp 9222 press Escape
+bun vo-driver.mjs item-text               # where did focus land?
 ```
 
-The auditor doesn't navigate or interact. It reads what's on screen right now.
+## vo-driver Command Surface
 
-## Audit Command
+### Session
+```bash
+bun vo-driver.mjs start <url>           # launch browser + VoiceOver + CDP
+bun vo-driver.mjs start <url> --cdp-port 9333  # custom CDP port
+bun vo-driver.mjs stop                  # graceful shutdown
+bun vo-driver.mjs kill                  # force kill
+bun vo-driver.mjs status               # check state
+bun vo-driver.mjs enter                # navigate into web content (auto on start/navigate)
+bun vo-driver.mjs navigate <url>       # go to new URL + re-enter web content
+```
+
+### Movement
+```bash
+bun vo-driver.mjs next                 # VO+Right
+bun vo-driver.mjs previous             # VO+Left
+```
+
+### Interaction
+```bash
+bun vo-driver.mjs act                  # VO+Space (activate current item)
+bun vo-driver.mjs press <key> [mods]   # raw keystroke (Tab, Return, Escape, arrows, etc.)
+```
+
+### VoiceOver Commands
+```bash
+bun vo-driver.mjs perform <COMMAND>    # any VoiceOver command
+```
+
+Uses VoiceOver-standard command names (FIND_NEXT_HEADING, START_INTERACTING, etc.) so agents with existing VoiceOver knowledge feel at home.
+
+### Queries
+```bash
+bun vo-driver.mjs transcript                # full session transcript
+bun vo-driver.mjs transcript --since 42     # entries after index 42
+bun vo-driver.mjs transcript --clear        # clear and return
+bun vo-driver.mjs item-text                 # current focused item
+bun vo-driver.mjs commands [filter]         # list available perform commands
+```
+
+### Flags
+```bash
+--json          # structured JSON output (default: human-readable)
+--cdp-port N    # CDP port (default: 9222)
+```
+
+### Response Format
+
+```
+$ bun vo-driver.mjs next
+Spoken: "heading level 1 Example Domain"
+Name: "Example Domain"
+Role: "heading level 1"
+
+$ bun vo-driver.mjs next --json
+{"spoken":"heading level 1 Example Domain","name":"Example Domain","role":"heading level 1"}
+```
+
+### Exit Codes
+- **0** — command succeeded (including "Heading not found" — that's useful info)
+- **1** — actual error (VoiceOver not running, daemon not started, timeout)
+
+## audit.mjs
+
+Separate lightweight tool. Connects to any browser via CDP. Runs axe-core scoped to an optional CSS selector, returns violations + incomplete + accessibility tree.
 
 ```bash
-# Full page audit
-bun vo-driver.mjs audit
-
-# Scoped to a CSS selector
-bun vo-driver.mjs audit ".modal-dialog"
-bun vo-driver.mjs audit "form#checkout"
-bun vo-driver.mjs audit "nav.primary"
-
-# With a URL (navigates first, then audits)
-bun vo-driver.mjs audit --url https://app.com/login
-
-# URL + scope
-bun vo-driver.mjs audit --url https://app.com/settings "form#profile"
+bun audit.mjs --cdp 9222                    # full page
+bun audit.mjs --cdp 9222 ".modal-dialog"    # scoped to selector
+bun audit.mjs --cdp 9222 "form#checkout"    # scoped to form
 ```
 
-### What `audit` does
-
-1. **If `--url` given:** navigate to it, wait for load
-2. **Run axe-core** scoped to selector (or full page)
-   - Returns violations, passes, incomplete, inapplicable
-3. **Enter web content** automatically (GO_TO_BEGINNING → find web content → START_INTERACTING)
-4. **If selector given:** navigate VoiceOver to that element
-5. **Walk the scoped area with VoiceOver:**
-   - All headings (level + text + what VO announces)
-   - All landmarks
-   - All images (check what VO announces — meaningful alt or "unlabeled image"?)
-   - All form controls (labels announced?)
-   - All links (text announced?)
-   - All buttons (labels announced?)
-   - Reading order (first ~30 items via snapshot)
-6. **Output structured JSON**
-
-### Output Format
-
+Output (always JSON):
 ```json
 {
-  "url": "https://app.com/dashboard",
   "selector": ".modal-dialog",
-  "timestamp": "2026-04-05T12:00:00Z",
   "axe": {
-    "violations": [
-      {
-        "id": "image-alt",
-        "impact": "critical",
-        "wcag": ["1.1.1"],
-        "description": "Images must have alternate text",
-        "nodes": [
-          { "selector": "img.avatar", "html": "<img class=\"avatar\" src=\"...\">" }
-        ]
-      }
-    ],
-    "incomplete": [
-      {
-        "id": "color-contrast",
-        "impact": "serious",
-        "wcag": ["1.4.3"],
-        "description": "Elements must meet minimum color contrast ratio thresholds",
-        "nodes": [{ "selector": ".muted-text" }]
-      }
-    ],
-    "passes": 42,
+    "violations": [...],
+    "incomplete": [...],
+    "passes": 34,
     "inapplicable": 18
   },
-  "voiceover": {
-    "headings": [
-      { "level": 1, "text": "Dashboard", "announced": "heading level 1 Dashboard" },
-      { "level": 3, "text": "Recent", "announced": "heading level 3 Recent", "issue": "skipped h2" }
-    ],
-    "landmarks": [],
-    "images": [
-      { "announced": "Unlabeled image", "issue": "missing alt text" },
-      { "announced": "User avatar, image", "issue": null }
-    ],
-    "formControls": [
-      { "announced": "Search, search text field", "issue": null },
-      { "announced": "edit text", "issue": "no label" }
-    ],
-    "links": [
-      { "announced": "Settings, link", "issue": null },
-      { "announced": "link", "issue": "empty link text" }
-    ],
-    "buttons": [
-      { "announced": "Submit, button", "issue": null },
-      { "announced": "button", "issue": "no label" }
-    ],
-    "readingOrder": [
-      "heading level 1 Dashboard",
-      "Search, search text field",
-      "heading level 3 Recent",
-      "..."
-    ]
-  }
+  "tree": { ... }
 }
 ```
 
-## What the Browse Agent Does With This
+Dependencies: `@axe-core/playwright` only.
 
-The browse agent receives the JSON and reasons about it:
+## Auditor Skill Doc
 
-- **axe violations** → direct issues, cite WCAG criterion and suggest fixes
-- **axe incomplete** → agent judges (is this alt text meaningful? is this contrast sufficient in context?)
-- **VoiceOver headings** → agent judges hierarchy and label quality
-- **VoiceOver "unlabeled image"** → definite issue
-- **VoiceOver "edit text" with no label** → definite issue
-- **VoiceOver reading order** → agent judges coherence
-- **Missing landmarks** → agent notes based on page structure
+The skill doc is an agent persona:
 
-The agent also does things the audit command can't:
-- Opens the modal and audits it → then closes it and checks focus returns
-- Fills the form and submits → then audits the error state
-- Compares the pre/post state: "did submitting the form trigger a live region announcement?"
+```
+You are an accessibility auditor performing WCAG 2.2 AA evaluations.
 
-These interactive tests are done by the browse agent orchestrating both browse (for interaction) and vo-driver (for reading the result).
+You have three tools:
+- vo-driver: your screen reader (start it first — it owns the browser)
+- audit.mjs: your automated checker (axe-core + accessibility tree)
+- agent-browser: your hands on the page (interaction, screenshots)
+
+Connect agent-browser and audit.mjs to vo-driver's browser via --cdp 9222.
+
+Workflow:
+1. Start vo-driver (launches browser + VoiceOver)
+2. Explore with agent-browser (click, type, navigate)
+3. Run audit.mjs on each new state (pages, modals, error states)
+4. Use vo-driver to verify findings that need screen reader confirmation
+5. Collect evidence (screenshots, VO transcripts, axe results)
+6. Report findings per WCAG criterion
+
+When to use each tool:
+- audit.mjs: "does this page have a11y issues?" (fast, automated)
+- agent-browser: "let me interact with this page" (click, type, screenshot)
+- vo-driver: "what does a screen reader actually say/do here?" (targeted verification)
+
+Use vo-driver for:
+- Custom widget operation (Tab in, arrow keys, does VO announce changes?)
+- Focus management (modal open/close, SPA navigation)
+- Live region announcements (form submit, status updates)
+- Form flows (Tab through, submit with errors, hear error messages)
+- Verifying axe "incomplete" items that need human judgment
+```
+
+## Use Cases
+
+### QA an individual piece of work
+
+Agent explores the feature with agent-browser, runs audit.mjs on the states it encounters, uses vo-driver to spot-check interactive components. Fast, focused, integrated into dev workflow.
+
+### Conduct an accessibility audit (ACR/VPAT)
+
+Agent systematically tests representative pages/flows. For each page:
+1. audit.mjs for automated baseline
+2. agent-browser for screenshots and interaction testing
+3. vo-driver for screen reader verification of complex components
+
+Page auditor outputs structured findings. Separate report builder agent (future) synthesizes multi-page findings into VPAT 2.5 format.
+
+## Screen Reader Abstraction
+
+vo-driver is the VoiceOver/macOS implementation. The command interface (next, previous, act, press, enter, transcript, perform) is generic. Future backends:
+- nvda-driver (Windows)
+- orca-driver (Linux)
+
+The auditor skill programs against the interface. Swap implementations per OS.
 
 ## What to Build
 
-### Phase 1: PoC
-1. **`audit` command in vo-driver** — runs axe + VoiceOver walk, outputs JSON
-2. **Auto-enter web content** — the start/audit commands handle the GO_TO_BEGINNING/next/next/START_INTERACTING dance automatically
-3. **axe-core integration** — add `@axe-core/playwright` as a dependency, inject into page
+### Phase 1: Polish vo-driver
+- [ ] Expose CDP port on start (`--remote-debugging-port`)
+- [ ] `enter` command (auto-navigate into web content)
+- [ ] Auto-enter on `start` and `navigate`
+- [ ] `transcript` command (replaces phrase-log/last-phrase)
+- [ ] Response format: `spoken`, `name`, `role`
+- [ ] `--json` flag
+- [ ] Remove `snapshot` command
+- [ ] Remove `ACTIVATE` from perform catalog
+- [ ] Exit 0 for "not found" responses
 
-### Phase 2: Integration
-4. **Selector scoping** — axe scoped via `.include()`, VO navigated to element
-5. **Attach to browse's browser** — `--cdp` flag to share Playwright session
+### Phase 2: audit.mjs
+- [ ] New standalone CLI tool
+- [ ] Connects via CDP
+- [ ] Runs axe-core scoped to selector
+- [ ] Returns violations + incomplete + a11y tree as JSON
 
-### Phase 3: Reporting
-6. **Report builder agent skill** — takes audit JSONs, produces ACR/VPAT
-7. **VPAT 2.5 template** — standard ITI format
+### Phase 3: Auditor skill doc
+- [ ] Agent persona
+- [ ] Three-tool orchestration instructions
+- [ ] WCAG criterion testing guide (which tool for which check)
+- [ ] Evidence collection guidance
 
-## Architecture
-
-```
-Browse agent (exploring the app)
-  │
-  │  encounters new state/component
-  │
-  ├─── $B snapshot -i          (sees the visual state)
-  │
-  ├─── bun vo-driver.mjs audit ".modal"
-  │      │
-  │      ├── axe-core (scoped to .modal)
-  │      ├── VoiceOver walk (headings, controls, images...)
-  │      └── → structured JSON
-  │
-  │  agent reasons about findings
-  │  agent interacts further (close modal, check focus)
-  │  agent moves on to next state
-  │
-  ▼
-Findings accumulated across all states
-  │
-  ▼
-Report builder agent → ACR/VPAT
-```
+### Phase 4: Report builder (future)
+- [ ] Separate agent/skill
+- [ ] Takes structured findings from page auditors
+- [ ] Produces VPAT 2.5 format ACR
