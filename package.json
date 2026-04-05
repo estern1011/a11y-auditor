@@ -1,0 +1,22 @@
+{
+  "name": "vo-driver",
+  "version": "1.0.0",
+  "description": "Interactive VoiceOver driver for browser automation with AI agents",
+  "type": "module",
+  "main": "vo-driver.mjs",
+  "scripts": {
+    "start": "bun vo-driver.mjs serve",
+    "dev": "bun --watch vo-driver.mjs serve"
+  },
+  "keywords": ["voiceover", "accessibility", "automation", "playwright"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@guidepup/guidepup": "^0.24.0",
+    "playwright": "^1.40.0"
+  },
+  "engines": {
+    "bun": ">=1.0.0",
+    "node": ">=18.0.0"
+  }
+}
