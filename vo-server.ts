@@ -102,9 +102,13 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
     }
 
     if (path === "/transcript" && method === "GET") {
-      const since = url.searchParams.get("since");
-      const entries = since !== null ? getTranscript(parseInt(since, 10)) : getTranscript();
-      return json(res, 200, { entries, length: state.transcript.length });
+      const sinceParam = url.searchParams.get("since");
+      if (sinceParam !== null) {
+        const since = parseInt(sinceParam, 10);
+        if (Number.isNaN(since)) return json(res, 400, { error: "since must be an integer" });
+        return json(res, 200, { entries: getTranscript(since), length: state.transcript.length });
+      }
+      return json(res, 200, { entries: getTranscript(), length: state.transcript.length });
     }
 
     if (path === "/transcript" && method === "DELETE") {
@@ -163,7 +167,13 @@ export async function startServer(port: number, cdpPort: number, url: string | n
   await initialize(url, cdpPort);
 
   const server = createServer(handle);
-  await new Promise<void>((resolve) => {
+  await new Promise<void>((resolve, reject) => {
+    server.on("error", async (e) => {
+      log(`Server listen failed: ${e.message}`, true);
+      await cleanup();
+      removePidFile();
+      reject(e);
+    });
     server.listen(port, "127.0.0.1", () => {
       log(`Server on http://127.0.0.1:${port}, CDP on port ${cdpPort}`);
       console.log(`Server ready on http://127.0.0.1:${port}`);

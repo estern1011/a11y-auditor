@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from "fs";
 import {
   DEFAULT_PORT, DEFAULT_CDP_PORT, CLI_TIMEOUT_MS,
   STARTUP_POLL_MS, STARTUP_POLL_MAX,
-  sleep, removePidFile, PID_FILE,
+  sleep, removePidFile, PID_FILE, VO_STATE_FILE,
 } from "./vo-core.ts";
 
 // ---------------------------------------------------------------------------
@@ -191,10 +191,11 @@ export async function cli(args: string[], port: number, cdpPort: number) {
       const clear = cleanRest.includes("--clear");
 
       if (clear) {
-        const d = await fetch(`${base}/transcript`, {
+        const resp = await fetch(`${base}/transcript`, {
           method: "DELETE",
           signal: AbortSignal.timeout(CLI_TIMEOUT_MS),
-        }).then((r) => r.json()) as VoData;
+        });
+        const d: VoData = await resp.json();
         if (jsonFlag) console.log(JSON.stringify(d));
         else console.log(`Cleared ${d.cleared} entries`);
       } else {
@@ -245,8 +246,16 @@ export async function cli(args: string[], port: number, cdpPort: number) {
       if (!existsSync(PID_FILE)) { console.error("No PID file"); process.exit(1); }
       const pid = parseInt(readFileSync(PID_FILE, "utf-8"), 10);
       process.kill(pid, "SIGKILL");
+      // Only quit VoiceOver if we started it
+      let weStartedVO = true;
+      try {
+        const stateData = JSON.parse(readFileSync(VO_STATE_FILE, "utf-8"));
+        weStartedVO = stateData.weStartedVoiceOver !== false;
+      } catch {}
+      if (weStartedVO) {
+        spawnSync("osascript", ["-e", 'tell application "VoiceOver" to quit']);
+      }
       removePidFile();
-      spawnSync("osascript", ["-e", 'tell application "VoiceOver" to quit']);
       console.log("Killed");
       break;
     }

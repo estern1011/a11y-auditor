@@ -171,9 +171,9 @@ if (import.meta.main) {
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(CLI_TIMEOUT_MS),
     });
-    const d = await r.json();
+    const d: Record<string, unknown> = await r.json();
     if (!r.ok) {
-      console.error(`Error: ${(d as { error: string }).error}`);
+      console.error(`Error: ${typeof d.error === "string" ? d.error : r.statusText}`);
       process.exit(1);
     }
     console.log(JSON.stringify(d, null, 2));

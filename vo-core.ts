@@ -605,14 +605,19 @@ export async function initialize(url: string | null, cdpPort: number) {
 }
 
 export async function navigate(url: string): Promise<VoResult> {
-  if (!state.page) return translateError("No page");
-  await state.page.goto(url, { waitUntil: "load" });
-  state.currentUrl = url;
-  await focusBrowser();
-  return voEnter();
+  return withLock(async () => {
+    if (!state.page) return translateError("No page");
+    await state.page.goto(url, { waitUntil: "load" });
+    state.currentUrl = url;
+    await focusBrowser();
+    return _voEnterInner();
+  });
 }
 
 export async function cleanup() {
+  // Wait for any in-flight VO operation to finish before tearing down
+  await operationLock;
+
   // Restore original speech rate before stopping VoiceOver
   if (state.originalSpeechRate !== null) {
     try {
