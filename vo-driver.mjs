@@ -25,7 +25,28 @@ const DEFAULT_PORT = 7483;
 const DEFAULT_CDP_PORT = 9222;
 const LOG_FILE = "/tmp/vo-driver.log";
 const PID_FILE = "/tmp/vo-driver.pid";
-const CLI_TIMEOUT_MS = 30000;
+
+const CLI_TIMEOUT_MS = 30_000;
+const STARTUP_POLL_MS = 200;
+const STARTUP_POLL_MAX = 200; // 200 * 200ms = 40s max wait for daemon
+const MAX_TRANSCRIPT_ENTRIES = 10_000;
+const MAX_REQUEST_BODY = 1_000_000; // 1MB
+
+// Delays for VoiceOver to settle after actions (ms)
+const VO_SETTLE_MS = 500;       // after VO cursor moves or commands
+const VO_QUICK_SETTLE_MS = 300; // after fast operations (focus, click)
+const VO_PRESS_SETTLE_MS = 600; // after raw keystrokes
+const VO_INIT_SETTLE_MS = 1500; // after VoiceOver startup
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function removePidFile() {
+  try { if (existsSync(PID_FILE)) unlinkSync(PID_FILE); } catch {}
+}
 
 // ---------------------------------------------------------------------------
 // Command catalog — VoiceOver-standard names
@@ -46,10 +67,12 @@ const COMMANDS = {
   FIND_NEXT_CONTROL:             { type: "keyboard", name: "findNextControl" },
   FIND_PREVIOUS_CONTROL:         { type: "keyboard", name: "findPreviousControl" },
   FIND_NEXT_TEXT_FIELD:           { type: "commander", name: "FIND_NEXT_TEXT_FIELD" },
+  // Note: guidepup has no FIND_PREVIOUS_TEXT_FIELD; FIND_PREVIOUS_FIELD finds any field type
   FIND_PREVIOUS_TEXT_FIELD:       { type: "commander", name: "FIND_PREVIOUS_FIELD" },
   FIND_NEXT_CHECKBOX:            { type: "commander", name: "FIND_NEXT_TICKBOX" },
   FIND_PREVIOUS_CHECKBOX:        { type: "commander", name: "FIND_PREVIOUS_TICKBOX" },
   FIND_NEXT_RADIO_GROUP:         { type: "commander", name: "FIND_NEXT_RADIO_GROUP" },
+  // Note: guidepup has no FIND_PREVIOUS_RADIO_GROUP; FIND_PREVIOUS_GROUP finds any group type
   FIND_PREVIOUS_RADIO_GROUP:     { type: "commander", name: "FIND_PREVIOUS_GROUP" },
   FIND_NEXT_TABLE:               { type: "keyboard", name: "findNextTable" },
   FIND_PREVIOUS_TABLE:           { type: "keyboard", name: "findPreviousTable" },
@@ -168,6 +191,10 @@ function parseVoResponse(spoken, itemText) {
 function recordTranscript(entry) {
   entry.index = state.transcriptIndex++;
   state.transcript.push(entry);
+  // Cap transcript to prevent memory leak in long sessions
+  if (state.transcript.length > MAX_TRANSCRIPT_ENTRIES) {
+    state.transcript = state.transcript.slice(-MAX_TRANSCRIPT_ENTRIES);
+  }
   return entry;
 }
 
@@ -175,7 +202,7 @@ function recordTranscript(entry) {
 // AppleScript helpers
 // ---------------------------------------------------------------------------
 
-function runAppleScript(script, timeout = 10000) {
+function runAppleScript(script, timeout = 10_000) {
   return new Promise((resolve, reject) => {
     const proc = spawn("osascript", ["-e", script]);
     let out = "", err = "";
@@ -194,7 +221,7 @@ function voAppleScript(voCommand, timeout = 5000) {
 }
 
 // ---------------------------------------------------------------------------
-// VoiceOver operations — read from LogStore instead of extra round-trips
+// VoiceOver operations — read from LogStore (no extra round-trips)
 // ---------------------------------------------------------------------------
 
 async function lastFromLog() {
@@ -249,27 +276,35 @@ async function voEnter() {
       log(`Already in web content: ${itemText}`);
       return recordTranscript(result);
     }
-  } catch {}
+  } catch (e) {
+    log(`voEnter check: ${e.message}`);
+  }
 
-  // Go to beginning via commander
+  // Go to beginning
   try {
     await voAppleScript('tell commander to perform command "go to beginning"');
-    await new Promise((r) => setTimeout(r, 500));
-  } catch {}
+    await sleep(VO_SETTLE_MS);
+  } catch (e) {
+    log(`voEnter go to beginning: ${e.message}`, true);
+  }
 
   // Walk forward until we find "web content"
   for (let i = 0; i < 10; i++) {
     let itemText = "";
     try {
       itemText = await voAppleScript("return text under cursor of vo cursor", 3000);
-    } catch {}
+    } catch (e) {
+      log(`voEnter read item ${i}: ${e.message}`);
+    }
 
     if (itemText.toLowerCase().includes("web content")) {
-      // Enter it
       try {
         await voAppleScript('tell commander to perform command "start interacting with item"');
-        await new Promise((r) => setTimeout(r, 500));
-      } catch {}
+        await sleep(VO_SETTLE_MS);
+      } catch (e) {
+        log(`voEnter interact: ${e.message}`, true);
+        return { error: `Failed to enter web content: ${e.message}` };
+      }
       const spoken = await voAppleScript("return content of last phrase").catch(() => "");
       const finalItem = await voAppleScript("return text under cursor of vo cursor").catch(() => "");
       const result = parseVoResponse(spoken, finalItem);
@@ -279,8 +314,11 @@ async function voEnter() {
 
     try {
       await voAppleScript("tell vo cursor to move right");
-      await new Promise((r) => setTimeout(r, 300));
-    } catch { break; }
+      await sleep(VO_QUICK_SETTLE_MS);
+    } catch (e) {
+      log(`voEnter move ${i}: ${e.message}`, true);
+      break;
+    }
   }
 
   return { error: "Could not find web content area" };
@@ -297,13 +335,21 @@ const KEY_CODES = {
   PageUp: 116, PageDown: 121,
 };
 
-const MOD_MAP = {
-  control: "control down", option: "option down",
-  command: "command down", shift: "shift down",
+const VALID_MODIFIERS = {
+  control: "control down",
+  option: "option down",
+  command: "command down",
+  shift: "shift down",
 };
 
 async function voPress(key, modifiers = []) {
-  const modStr = modifiers.map((m) => MOD_MAP[m]).filter(Boolean).join(", ");
+  // Validate modifiers
+  const unknown = modifiers.filter((m) => !VALID_MODIFIERS[m]);
+  if (unknown.length > 0) {
+    return { error: `Unknown modifier(s): ${unknown.join(", ")}. Valid: ${Object.keys(VALID_MODIFIERS).join(", ")}` };
+  }
+
+  const modStr = modifiers.map((m) => VALID_MODIFIERS[m]).join(", ");
   const usingClause = modStr ? ` using {${modStr}}` : "";
   const code = KEY_CODES[key];
 
@@ -312,7 +358,7 @@ async function voPress(key, modifiers = []) {
     : `tell application "System Events" to keystroke "${key}"${usingClause}`;
 
   await runAppleScript(script);
-  await new Promise((r) => setTimeout(r, 600));
+  await sleep(VO_PRESS_SETTLE_MS);
   const spoken = await voAppleScript("return content of last phrase").catch(() => "");
   return recordTranscript({ spoken, name: spoken, role: "" });
 }
@@ -339,17 +385,16 @@ function clearTranscript() {
 // ---------------------------------------------------------------------------
 
 function detectBrowserApp() {
-  // Playwright's Chromium app name varies by version. Find it dynamically.
   try {
     const result = spawnSync("osascript", ["-e",
       'tell application "System Events" to get name of every process whose name contains "Chrome"']);
     const names = result.stdout.toString().trim().split(", ");
-    const testing = names.find((n) => n.includes("Testing"));
-    if (testing) return testing;
-    const chrome = names.find((n) => n.includes("Chrome") || n.includes("Chromium"));
-    if (chrome) return chrome;
-  } catch {}
-  return "Google Chrome for Testing";
+    return names.find((n) => n.includes("Testing"))
+      || names.find((n) => n.includes("Chrome") || n.includes("Chromium"))
+      || "Google Chrome for Testing";
+  } catch {
+    return "Google Chrome for Testing";
+  }
 }
 
 let browserAppName = null;
@@ -358,12 +403,12 @@ async function focusBrowser() {
   if (!browserAppName) browserAppName = detectBrowserApp();
   try {
     spawnSync("osascript", ["-e", `tell application "${browserAppName}" to activate`]);
-    await new Promise((r) => setTimeout(r, 500));
+    await sleep(VO_SETTLE_MS);
     if (state.page) {
       await state.page.bringToFront();
-      await new Promise((r) => setTimeout(r, 300));
+      await sleep(VO_QUICK_SETTLE_MS);
       await state.page.click("body", { force: true });
-      await new Promise((r) => setTimeout(r, 300));
+      await sleep(VO_QUICK_SETTLE_MS);
     }
   } catch (e) { log(`focus warning: ${e.message}`); }
 }
@@ -396,7 +441,7 @@ async function initialize(url, cdpPort) {
     log("Speech rate set to 100");
   } catch (e) { log(`speech rate warning: ${e.message}`, true); }
 
-  await new Promise((r) => setTimeout(r, 1500));
+  await sleep(VO_INIT_SETTLE_MS);
   await focusBrowser();
   log("Browser focused");
 }
@@ -442,11 +487,24 @@ function json(res, code, data) {
 }
 
 function readBody(req) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let b = "";
-    req.on("data", (c) => (b += c));
+    let size = 0;
+    req.on("data", (c) => {
+      size += c.length;
+      if (size > MAX_REQUEST_BODY) { reject(new Error("Request body too large")); return; }
+      b += c;
+    });
     req.on("end", () => resolve(b));
   });
+}
+
+function parseBody(body) {
+  try {
+    return JSON.parse(body || "{}");
+  } catch {
+    return null;
+  }
 }
 
 async function handle(req, res) {
@@ -473,21 +531,24 @@ async function handle(req, res) {
       return json(res, 200, await voAct());
 
     if (path === "/perform" && method === "POST") {
-      const { command } = JSON.parse(await readBody(req));
-      return json(res, 200, await voPerform(command));
+      const body = parseBody(await readBody(req));
+      if (!body || !body.command) return json(res, 400, { error: "command required" });
+      return json(res, 200, await voPerform(body.command));
     }
 
     if (path === "/press" && method === "POST") {
-      const { key, modifiers } = JSON.parse(await readBody(req));
-      return json(res, 200, await voPress(key, modifiers));
+      const body = parseBody(await readBody(req));
+      if (!body || !body.key) return json(res, 400, { error: "key required" });
+      return json(res, 200, await voPress(body.key, body.modifiers));
     }
 
     if (path === "/enter" && method === "POST")
       return json(res, 200, await voEnter());
 
     if (path === "/navigate" && method === "POST") {
-      const { url: navUrl } = JSON.parse(await readBody(req));
-      return json(res, 200, await navigate(navUrl));
+      const body = parseBody(await readBody(req));
+      if (!body || !body.url) return json(res, 400, { error: "url required" });
+      return json(res, 200, await navigate(body.url));
     }
 
     if (path === "/item-text" && method === "GET") {
@@ -497,7 +558,7 @@ async function handle(req, res) {
 
     if (path === "/transcript" && method === "GET") {
       const since = url.searchParams.get("since");
-      const entries = since !== null ? getTranscript(parseInt(since)) : getTranscript();
+      const entries = since !== null ? getTranscript(parseInt(since, 10)) : getTranscript();
       return json(res, 200, { entries, length: state.transcript.length });
     }
 
@@ -517,7 +578,7 @@ async function handle(req, res) {
       json(res, 200, { success: true });
       setImmediate(async () => {
         await cleanup();
-        try { if (existsSync(PID_FILE)) unlinkSync(PID_FILE); } catch {}
+        removePidFile();
         process.exit(0);
       });
       return;
@@ -535,6 +596,9 @@ async function handle(req, res) {
 // ---------------------------------------------------------------------------
 
 async function startServer(port, cdpPort, url) {
+  // Truncate log file on daemon startup
+  try { writeFileSync(LOG_FILE, ""); } catch {}
+
   await initialize(url, cdpPort);
 
   const server = createServer(handle);
@@ -558,7 +622,7 @@ async function startServer(port, cdpPort, url) {
     const timer = setTimeout(() => process.exit(1), 5000);
     await cleanup();
     clearTimeout(timer);
-    try { if (existsSync(PID_FILE)) unlinkSync(PID_FILE); } catch {}
+    removePidFile();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);
@@ -569,7 +633,36 @@ async function startServer(port, cdpPort, url) {
 // CLI client
 // ---------------------------------------------------------------------------
 
-async function cli(args, port) {
+const USAGE = `Usage: bun vo-driver.mjs <command> [options]
+
+Session:
+  start <url> [--cdp-port N]   Launch browser + VoiceOver + CDP
+  stop                         Graceful shutdown
+  kill                         Force kill daemon + VoiceOver
+  status                       Check daemon state
+  enter                        Navigate into web content
+  navigate <url>               Go to URL + re-enter web content
+
+Movement:
+  next                         Move VO cursor forward
+  previous                     Move VO cursor backward
+
+Interaction:
+  act                          Activate current item (VO+Space)
+  press <key> [modifiers...]   Send raw keystroke (Tab, Return, etc.)
+  perform <COMMAND>            Run a VoiceOver command
+
+Queries:
+  transcript [--since N] [--clear]   Session transcript
+  item-text                          Current focused item
+  commands [filter]                  List perform commands
+
+Flags:
+  --json        Structured JSON output
+  --port N      HTTP port (default: ${DEFAULT_PORT})
+  --cdp-port N  Chrome DevTools Protocol port (default: ${DEFAULT_CDP_PORT})`;
+
+async function cli(args, port, cdpPort) {
   const [cmd, ...rest] = args;
   const base = `http://127.0.0.1:${port}`;
 
@@ -590,6 +683,11 @@ async function cli(args, port) {
 
   const get = async (path) => {
     const r = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(CLI_TIMEOUT_MS) });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+      console.error(`Error: ${d.error}`);
+      process.exit(1);
+    }
     return r.json();
   };
 
@@ -623,11 +721,9 @@ async function cli(args, port) {
         }
       } catch {}
 
-      if (existsSync(PID_FILE)) { try { unlinkSync(PID_FILE); } catch {} }
+      removePidFile();
 
-      const cdpIdx = args.indexOf("--cdp-port");
-      const cdpPort = cdpIdx !== -1 ? args[cdpIdx + 1] : DEFAULT_CDP_PORT;
-
+      // Spawn daemon with URL — it handles navigate + enter internally
       const serveArgs = [
         process.argv[1], "serve",
         "--port", port.toString(),
@@ -638,13 +734,13 @@ async function cli(args, port) {
       const child = spawn(process.argv[0], serveArgs, { detached: true, stdio: "ignore" });
       child.unref();
 
-      for (let i = 0; i < 200; i++) {
+      for (let i = 0; i < STARTUP_POLL_MAX; i++) {
         try {
           const r = await fetch(`${base}/`, { signal: AbortSignal.timeout(2000) });
           if (r.ok) break;
         } catch {}
-        if (i === 199) { console.error("Server failed to start"); process.exit(1); }
-        await new Promise((r) => setTimeout(r, 200));
+        if (i === STARTUP_POLL_MAX - 1) { console.error("Server failed to start"); process.exit(1); }
+        await sleep(STARTUP_POLL_MS);
       }
 
       const status = await get("/");
@@ -682,15 +778,7 @@ async function cli(args, port) {
       break;
     }
 
-    case "item-text": {
-      const d = await get("/item-text");
-      if (jsonFlag) console.log(JSON.stringify(d));
-      else {
-        if (d.name) console.log(`Name: "${d.name}"`);
-        if (d.role) console.log(`Role: "${d.role}"`);
-      }
-      break;
-    }
+    case "item-text": printVO(await get("/item-text")); break;
 
     case "transcript": {
       const since = cleanRest[0] === "--since" ? cleanRest[1] : null;
@@ -734,7 +822,7 @@ async function cli(args, port) {
         return;
       } catch {}
       if (existsSync(PID_FILE)) {
-        const pid = parseInt(readFileSync(PID_FILE, "utf-8"));
+        const pid = parseInt(readFileSync(PID_FILE, "utf-8"), 10);
         process.kill(pid, "SIGTERM");
         console.log(`Sent SIGTERM to ${pid}`);
       } else { console.error("No running server"); process.exit(1); }
@@ -743,38 +831,53 @@ async function cli(args, port) {
 
     case "kill": {
       if (!existsSync(PID_FILE)) { console.error("No PID file"); process.exit(1); }
-      const pid = parseInt(readFileSync(PID_FILE, "utf-8"));
+      const pid = parseInt(readFileSync(PID_FILE, "utf-8"), 10);
       process.kill(pid, "SIGKILL");
-      unlinkSync(PID_FILE);
+      removePidFile();
       spawnSync("osascript", ["-e", 'tell application "VoiceOver" to quit']);
       console.log("Killed");
       break;
     }
 
+    case "help": case "--help": case "-h":
+      console.log(USAGE);
+      break;
+
     default:
-      console.error(`Unknown: ${cmd}`);
-      console.error("Commands: start stop kill status enter navigate next previous act press perform transcript item-text commands");
+      console.error(`Unknown command: ${cmd}\n`);
+      console.error(USAGE);
       process.exit(1);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Main
+// Main — parse flags and dispatch
 // ---------------------------------------------------------------------------
 
 const args = process.argv.slice(2);
 
 function getFlag(name, fallback) {
   const i = args.indexOf(`--${name}`);
-  return i !== -1 && args[i + 1] ? parseInt(args[i + 1]) || fallback : fallback;
+  if (i === -1 || !args[i + 1]) return fallback;
+  const val = parseInt(args[i + 1], 10);
+  if (Number.isNaN(val)) {
+    console.error(`Invalid --${name} value: ${args[i + 1]} (expected integer)`);
+    process.exit(1);
+  }
+  return val;
 }
 
 const port = getFlag("port", DEFAULT_PORT);
 const cdpPort = getFlag("cdp-port", DEFAULT_CDP_PORT);
 
 if (args[0] === "serve") {
-  const rest = args.slice(1).filter((a, i, arr) => !a.startsWith("--") && !(i > 0 && arr[i - 1]?.startsWith("--")));
-  startServer(port, cdpPort, rest[0] || null).catch((e) => { console.error(e.message); process.exit(1); });
+  // Extract positional args (not flags or flag values)
+  const positional = args.slice(1).filter((a, i, arr) =>
+    !a.startsWith("--") && !(i > 0 && arr[i - 1]?.startsWith("--"))
+  );
+  startServer(port, cdpPort, positional[0] || null).catch((e) => { console.error(e.message); process.exit(1); });
+} else if (args.length === 0) {
+  console.log(USAGE);
 } else {
-  cli(args, port).catch((e) => { console.error(e.message); process.exit(1); });
+  cli(args, port, cdpPort).catch((e) => { console.error(e.message); process.exit(1); });
 }
