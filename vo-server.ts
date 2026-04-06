@@ -8,7 +8,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import { writeFileSync } from "fs";
 import {
-  state, log, voNext, voPrevious, voAct, voPerform, voPress, voEnter,
+  getPage, getStatus, getTranscriptLength, errorMsg,
+  log, voNext, voPrevious, voAct, voPerform, voPress, voEnter,
   navigate, initialize, cleanup, getTranscript, clearTranscript,
   getItemText, removePidFile, COMMANDS,
   LOG_FILE, PID_FILE, MAX_REQUEST_BODY,
@@ -28,13 +29,15 @@ function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let b = "";
     let size = 0;
+    let settled = false;
     req.on("data", (c: Buffer) => {
+      if (settled) return;
       size += c.length;
-      if (size > MAX_REQUEST_BODY) { reject(new Error("Request body too large")); return; }
+      if (size > MAX_REQUEST_BODY) { settled = true; req.destroy(); reject(new Error("Request body too large")); return; }
       b += c;
     });
-    req.on("end", () => resolve(b));
-    req.on("error", reject);
+    req.on("end", () => { if (!settled) { settled = true; resolve(b); } });
+    req.on("error", (e) => { if (!settled) { settled = true; reject(e); } });
   });
 }
 
@@ -57,12 +60,7 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
 
   try {
     if (path === "/" && method === "GET")
-      return json(res, 200, {
-        status: "running",
-        voiceoverActive: state.voiceoverActive,
-        currentUrl: state.currentUrl,
-        cdpPort: state.cdpPort,
-      });
+      return json(res, 200, { status: "running", ...getStatus() });
 
     if (path === "/next" && method === "POST")
       return json(res, 200, await voNext());
@@ -106,9 +104,9 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
       if (sinceParam !== null) {
         const since = parseInt(sinceParam, 10);
         if (Number.isNaN(since)) return json(res, 400, { error: "since must be an integer" });
-        return json(res, 200, { entries: getTranscript(since), length: state.transcript.length });
+        return json(res, 200, { entries: getTranscript(since), length: getTranscriptLength() });
       }
-      return json(res, 200, { entries: getTranscript(), length: state.transcript.length });
+      return json(res, 200, { entries: getTranscript(), length: getTranscriptLength() });
     }
 
     if (path === "/transcript" && method === "DELETE") {
@@ -117,7 +115,8 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
     }
 
     if (path === "/audit" && method === "POST") {
-      if (!state.page) return json(res, 400, { error: "No page open. Run: start <url>" });
+      const page = getPage();
+      if (!page) return json(res, 400, { error: "No page open. Run: start <url>" });
       const body = parseBody(await readBody(req));
       const options: Parameters<typeof runAxeAudit>[1] = {};
       if (body) {
@@ -127,7 +126,7 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
         if (Array.isArray(body.disableRules)) options.disableRules = body.disableRules.filter((r): r is string => typeof r === "string");
         if (typeof body.includeTree === "boolean") options.includeTree = body.includeTree;
       }
-      const result = await runAxeAudit(state.page, options);
+      const result = await runAxeAudit(page, options);
       return json(res, 200, result);
     }
 
@@ -150,7 +149,7 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
 
     json(res, 404, { error: "Not found" });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errorMsg(e);
     log(`HTTP error: ${msg}`, true);
     json(res, 500, { error: msg });
   }
@@ -185,7 +184,7 @@ export async function startServer(port: number, cdpPort: number, url: string | n
 
   // Enter web content after server is listening (so CLI can connect even if enter is slow)
   if (url) {
-    try { await voEnter(); } catch (e) { log(`auto-enter: ${e instanceof Error ? e.message : String(e)}`, true); }
+    try { await voEnter(); } catch (e) { log(`auto-enter: ${errorMsg(e)}`, true); }
   }
 
   const shutdown = async () => {

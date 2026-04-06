@@ -88,7 +88,7 @@ export async function runAxeAudit(page: Page, options: AuditOptions = {}): Promi
 function formatResult(r: Result) {
   return {
     id: r.id,
-    impact: r.impact ?? undefined,
+    impact: r.impact,
     description: r.description,
     help: r.help,
     helpUrl: r.helpUrl,
@@ -127,19 +127,31 @@ if (import.meta.main) {
   let disableRules: string[] = [];
   let includeTree = true;
 
+  function requireArg(flag: string, i: number): string {
+    if (!args[i + 1]) { console.error(`${flag} requires a value`); process.exit(1); }
+    return args[i + 1];
+  }
+
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
-      case "--port":
-        port = parseInt(args[++i], 10);
+      case "--port": {
+        const val = parseInt(requireArg("--port", i), 10);
+        if (Number.isNaN(val)) { console.error(`Invalid --port value: ${args[i + 1]}`); process.exit(1); }
+        port = val;
+        i++;
         break;
+      }
       case "--tags":
-        tags = args[++i].split(",");
+        tags = requireArg("--tags", i).split(",");
+        i++;
         break;
       case "--rules":
-        rules = args[++i].split(",");
+        rules = requireArg("--rules", i).split(",");
+        i++;
         break;
       case "--disable":
-        disableRules = args[++i].split(",");
+        disableRules = requireArg("--disable", i).split(",");
+        i++;
         break;
       case "--no-tree":
         includeTree = false;

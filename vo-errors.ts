@@ -4,12 +4,12 @@
  * Raw errors from guidepup and AppleScript are technical and unhelpful to an
  * agent. This module translates them into actionable messages with concrete
  * suggestions for recovery.
+ *
+ * Returns VoError (from vo-types.ts) so translated errors slot directly into
+ * VoResult without a separate type.
  */
 
-export interface TranslatedError {
-  error: string;
-  suggestion: string;
-}
+import type { VoError } from "./vo-types.ts";
 
 interface ErrorPattern {
   pattern: RegExp;
@@ -71,7 +71,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
   },
 ];
 
-export function translateError(err: unknown, context: ErrorContext = {}): TranslatedError {
+export function translateError(err: unknown, context: ErrorContext = {}): VoError {
   const raw = err instanceof Error ? err.message : String(err);
 
   for (const { pattern, message, suggestion } of ERROR_PATTERNS) {

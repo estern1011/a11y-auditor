@@ -162,25 +162,75 @@ bun vo-driver.ts item-text                    # where did focus go on close?
 bun audit.ts "#widget-selector"
 ```
 
-#### Phase 6: Visual Checks (1.4.3, 1.4.4, 1.4.10, 1.4.11, 1.4.12, 1.4.13)
+#### Phase 6: Visual + Cross-Reference Review (1.4.1, 1.4.3, 1.4.4, 1.4.10, 1.4.11, 1.4.12, 1.4.13)
 
-These require screenshots and judgment. Take screenshots and evaluate, but flag confidence level.
+This phase is where you catch what automated tools miss. You systematically compare what's **visible** in screenshots against what's **exposed** in the a11y tree and automated findings, then reason about every element.
 
+##### Step 1: Gather evidence
 ```bash
-# Contrast — axe catches most issues in Phase 1
-# For non-text contrast (1.4.11), screenshot focus indicators and UI controls:
+# Full page screenshot
 agent-browser --cdp 9222 screenshot
 
-# Reflow at 320px (1.4.10)
-# Resize viewport via agent-browser, screenshot, check for horizontal scroll
-agent-browser --cdp 9222 screenshot
-
-# Text spacing (1.4.12) — inject CSS overrides
-# Line height 1.5x, paragraph spacing 2x, letter spacing 0.12em, word spacing 0.16em
-
-# Content on hover/focus (1.4.13)
-# Hover over tooltips/popovers via agent-browser, check dismissibility
+# A11y tree + automated findings (if not already captured in Phase 1)
+bun audit.ts
 ```
+
+##### Step 2: Cross-reference screenshot vs a11y tree
+
+Look at the screenshot and a11y tree side by side. For **every visible element**, ask:
+
+- **Is it in the a11y tree?** A visible interactive element with no tree node means it's invisible to AT.
+- **Does its tree name match its visual label?** A button that says "Submit" visually but "btn-3" to AT is a mismatch.
+- **Is information conveyed visually also conveyed non-visually?** Color-coded status (green/red), icon-only buttons, priority indicators — do they have text alternatives in the tree?
+- **Are custom widgets exposing the right role + state?** A visual checkbox should have `role=checkbox` + `checked/unchecked` state. An expanded accordion should have `expanded=true`. Compare what you see in the screenshot to what the tree exposes.
+
+Flag every mismatch. These are the bugs automated tools don't catch.
+
+##### Step 3: Color and contrast (1.4.1, 1.4.3, 1.4.11)
+
+- **Color-only information (1.4.1):** Scan the screenshot for anything that uses color alone to convey meaning — status indicators, error states, required fields, priority markers. Each must have a non-color alternative (text label, icon, pattern).
+- **Text contrast (1.4.3):** axe catches most issues in Phase 1. Review axe's "incomplete" contrast items and check any text that looks light or hard to read in the screenshot.
+- **Non-text contrast (1.4.11):** Check UI components and graphical objects — borders, icons, focus indicators, form field boundaries. These need 3:1 contrast against their background. Look especially at: disabled-looking elements, subtle borders, light icons.
+
+##### Step 4: Focus indicators (2.4.7, 2.4.11)
+
+Tab through each interactive element, taking a screenshot at each stop:
+```bash
+bun vo-driver.ts press Tab
+agent-browser --cdp 9222 screenshot     # capture focus state
+bun vo-driver.ts item-text              # what does VO announce?
+# Repeat for each interactive element
+```
+
+For each focused element, check:
+- Is there a **visible** focus indicator in the screenshot?
+- Is it distinguishable enough? (Not just a faint color change)
+- Does the VO announcement match what's visually focused?
+
+##### Step 5: Reflow at 320px (1.4.10)
+```bash
+# Resize viewport to 320px width
+agent-browser --cdp 9222 execute "window.innerWidth" # note current width
+agent-browser --cdp 9222 execute "document.documentElement.style.maxWidth='320px'"
+agent-browser --cdp 9222 screenshot
+```
+Check: is there horizontal scrolling? Is content cut off or overlapping?
+
+##### Step 6: Text spacing (1.4.12)
+```bash
+# Inject WCAG text spacing overrides
+agent-browser --cdp 9222 execute "document.body.style.lineHeight='1.5'; document.body.style.letterSpacing='0.12em'; document.body.style.wordSpacing='0.16em'; document.querySelectorAll('p').forEach(p => p.style.marginBottom='2em')"
+agent-browser --cdp 9222 screenshot
+```
+Check: is content still readable? No clipping, overlapping, or disappearing text?
+
+##### Step 7: Content on hover/focus (1.4.13)
+For any tooltips, popovers, or hover-triggered content:
+```bash
+agent-browser --cdp 9222 hover @ref    # hover over trigger element
+agent-browser --cdp 9222 screenshot     # capture hover state
+```
+Check: can the hover content be dismissed (Escape)? Can you hover over the tooltip itself? Does it persist until dismissed?
 
 #### Phase 7: Remaining Criteria Checklist
 

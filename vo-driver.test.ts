@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { parseVoResponse, ROLE_PATTERN, STATE_KEYWORDS, COMMANDS, KEY_CODES, VALID_MODIFIERS } from "./vo-core.ts";
+import { parseVoResponse, ROLE_PATTERN, STATE_KEYWORDS, COMMANDS, KEY_CODES, VALID_MODIFIERS } from "./vo-types.ts";
 import { translateError, type ErrorContext } from "./vo-errors.ts";
 import { getFlag } from "./vo-driver.ts";
 
@@ -333,6 +333,20 @@ describe("KEY_CODES", () => {
     expect(KEY_CODES.Right).toBeDefined();
     expect(KEY_CODES.Up).toBeDefined();
     expect(KEY_CODES.Down).toBeDefined();
+  });
+
+  test("function keys F1-F12 are defined", () => {
+    for (let i = 1; i <= 12; i++) {
+      expect(KEY_CODES[`F${i}`]).toBeDefined();
+      expect(typeof KEY_CODES[`F${i}`]).toBe("number");
+    }
+  });
+
+  test("all key codes are valid macOS virtual key codes", () => {
+    for (const [name, code] of Object.entries(KEY_CODES)) {
+      expect(code).toBeGreaterThanOrEqual(0);
+      expect(code).toBeLessThan(256);
+    }
   });
 });
 

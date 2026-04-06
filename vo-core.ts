@@ -13,6 +13,17 @@ import type { MacOSKeyboardCommand } from "@guidepup/guidepup";
 import { chromium } from "playwright";
 import type { Page, Browser } from "playwright";
 import { translateError, type ErrorContext } from "./vo-errors.ts";
+import {
+  type VoResponse, type VoError, type VoResult, type TranscriptEntry,
+  isVoError, parseVoResponse, COMMANDS, KEY_CODES, VALID_MODIFIERS,
+} from "./vo-types.ts";
+
+// Re-export vo-types.ts surface so consumers can import from vo-core alone
+export type { VoResponse, VoError, VoResult, TranscriptEntry } from "./vo-types.ts";
+export {
+  isVoError, parseVoResponse, STATE_KEYWORDS, ROLE_PATTERN,
+  COMMANDS, KEY_CODES, VALID_MODIFIERS,
+} from "./vo-types.ts";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -45,12 +56,14 @@ const VO_INIT_SETTLE_MS = 1500;
 // ---------------------------------------------------------------------------
 
 let operationLock: Promise<void> = Promise.resolve();
+let shuttingDown = false;
 
 function withLock<T>(fn: () => Promise<T>): Promise<T> {
+  if (shuttingDown) return Promise.reject(new Error("Driver is shutting down"));
   const prev = operationLock;
-  let resolve: () => void;
-  operationLock = new Promise((r) => (resolve = r));
-  return prev.then(fn).finally(() => resolve!());
+  const { promise, resolve } = Promise.withResolvers<void>();
+  operationLock = promise;
+  return prev.then(fn).finally(resolve);
 }
 
 // ---------------------------------------------------------------------------
@@ -59,7 +72,7 @@ function withLock<T>(fn: () => Promise<T>): Promise<T> {
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function errorMsg(e: unknown): string {
+export function errorMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
@@ -69,117 +82,40 @@ export function removePidFile() {
 }
 
 // ---------------------------------------------------------------------------
-// Command catalog — VoiceOver-standard names
-// ---------------------------------------------------------------------------
-
-interface CommandEntry {
-  type: "keyboard" | "commander";
-  name: string;
-}
-
-export const COMMANDS: Record<string, CommandEntry> = {
-  FIND_NEXT_HEADING:             { type: "keyboard", name: "findNextHeading" },
-  FIND_PREVIOUS_HEADING:         { type: "keyboard", name: "findPreviousHeading" },
-  FIND_NEXT_HEADING_SAME_LEVEL:  { type: "keyboard", name: "findNextHeadingOfSameLevel" },
-  FIND_PREVIOUS_HEADING_SAME_LEVEL: { type: "keyboard", name: "findPreviousHeadingOfSameLevel" },
-  FIND_NEXT_LINK:                { type: "keyboard", name: "findNextLink" },
-  FIND_PREVIOUS_LINK:            { type: "keyboard", name: "findPreviousLink" },
-  FIND_NEXT_VISITED_LINK:        { type: "keyboard", name: "findNextVisitedLink" },
-  FIND_PREVIOUS_VISITED_LINK:    { type: "keyboard", name: "findPreviousVisitedLink" },
-  FIND_NEXT_BUTTON:              { type: "commander", name: "FIND_NEXT_BUTTON" },
-  FIND_PREVIOUS_BUTTON:          { type: "commander", name: "FIND_PREVIOUS_BUTTON" },
-  FIND_NEXT_CONTROL:             { type: "keyboard", name: "findNextControl" },
-  FIND_PREVIOUS_CONTROL:         { type: "keyboard", name: "findPreviousControl" },
-  // Note: FIND_NEXT_TEXT_FIELD, FIND_NEXT_TICKBOX, FIND_NEXT_RADIO_GROUP exist in
-  // guidepup's CommanderCommands enum but VoiceOver's commander rejects them at
-  // runtime with "Command does not exist (6)". Use FIND_NEXT_CONTROL instead —
-  // it finds any form control (fields, checkboxes, radios, buttons).
-  FIND_NEXT_TABLE:               { type: "keyboard", name: "findNextTable" },
-  FIND_PREVIOUS_TABLE:           { type: "keyboard", name: "findPreviousTable" },
-  FIND_NEXT_LIST:                { type: "keyboard", name: "findNextList" },
-  FIND_PREVIOUS_LIST:            { type: "keyboard", name: "findPreviousList" },
-  FIND_NEXT_LANDMARK:            { type: "commander", name: "FIND_NEXT_LANDMARK" },
-  FIND_PREVIOUS_LANDMARK:        { type: "commander", name: "FIND_PREVIOUS_LANDMARK" },
-  FIND_NEXT_IMAGE:               { type: "keyboard", name: "findNextGraphic" },
-  FIND_PREVIOUS_IMAGE:           { type: "keyboard", name: "findPreviousGraphic" },
-  FIND_NEXT_FRAME:               { type: "commander", name: "FIND_NEXT_FRAME" },
-  FIND_PREVIOUS_FRAME:           { type: "commander", name: "FIND_PREVIOUS_FRAME" },
-  // Note: FIND_NEXT_LIVE_REGION exists in guidepup enum but VoiceOver rejects it.
-
-  GO_TO_BEGINNING:               { type: "commander", name: "GO_TO_BEGINNING" },
-  GO_TO_END:                     { type: "commander", name: "GO_TO_END" },
-
-  START_INTERACTING:             { type: "commander", name: "START_INTERACTING_WITH_ITEM" },
-  STOP_INTERACTING:              { type: "commander", name: "STOP_INTERACTING_WITH_ITEM" },
-  ESCAPE:                        { type: "commander", name: "ESCAPE" },
-
-  OPEN_ROTOR:                    { type: "commander", name: "ROTOR" },
-  OPEN_WEB_ROTOR:                { type: "keyboard", name: "openWebItemRotor" },
-  ROTOR_UP:                      { type: "commander", name: "MOVE_UP_IN_ROTOR" },
-  ROTOR_DOWN:                    { type: "commander", name: "MOVE_DOWN_IN_ROTOR" },
-  ROTATE_LEFT:                   { type: "commander", name: "ROTATE_LEFT" },
-  ROTATE_RIGHT:                  { type: "commander", name: "ROTATE_RIGHT" },
-
-  READ_CURRENT_ITEM:             { type: "commander", name: "READ_CONTENTS_OF_VOICEOVER_CURSOR" },
-  READ_ALL:                      { type: "keyboard", name: "readAllText" },
-  READ_LINE:                     { type: "keyboard", name: "readLine" },
-  READ_WORD:                     { type: "keyboard", name: "readWord" },
-  READ_FROM_TOP:                 { type: "keyboard", name: "readFromBeginningToCurrent" },
-  READ_LINK_URL:                 { type: "keyboard", name: "readLinkAddress" },
-  READ_PAGE_STATS:               { type: "keyboard", name: "readWebpageStatistics" },
-
-  READ_TABLE_ROW:                { type: "keyboard", name: "readTableRow" },
-  READ_TABLE_COLUMN:             { type: "keyboard", name: "readTableColumn" },
-  READ_TABLE_HEADER:             { type: "keyboard", name: "readTableColumnHeader" },
-  READ_TABLE_POSITION:           { type: "keyboard", name: "readTableRowAndColumnNumbers" },
-
-  SYNC_CURSOR_TO_KEYBOARD:       { type: "keyboard", name: "moveCursorToKeyboardFocus" },
-  SYNC_KEYBOARD_TO_CURSOR:       { type: "keyboard", name: "moveKeyboardFocusToCursor" },
-  DESCRIBE_KEYBOARD_FOCUS:       { type: "keyboard", name: "describeItemWithKeyboardFocus" },
-
-  TOGGLE_DOM_GROUP_NAV:          { type: "commander", name: "TOGGLE_WEB_NAVIGATION_DOM_OR_GROUP" },
-  TOGGLE_QUICK_NAV:              { type: "commander", name: "TOGGLE_QUICK_NAV_ON_OR_OFF" },
-  TOGGLE_SINGLE_KEY_NAV:         { type: "commander", name: "TOGGLE_SINGLE_KEY_QUICK_NAV_ON_OR_OFF" },
-};
-
-// ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
-export interface VoResponse {
-  spoken: string;
-  name: string;
-  role: string;
-  state: string[];
-  index?: number;
+interface DriverState {
+  voiceoverActive: boolean;
+  weStartedVoiceOver: boolean;
+  currentUrl: string | null;
+  browser: Browser | null;
+  page: Page | null;
+  cdpPort: number;
+  transcript: TranscriptEntry[];
+  transcriptIndex: number;
+  originalSpeechRate: string | null;
 }
 
-export interface VoError {
-  error: string;
-  suggestion?: string;
-}
-
-export type VoResult = VoResponse | VoError;
-
-export function isVoError(r: VoResult): r is VoError {
-  return "error" in r;
-}
-
-interface TranscriptEntry extends VoResponse {
-  index: number;
-}
-
-export const state = {
+const state: DriverState = {
   voiceoverActive: false,
   weStartedVoiceOver: false,
-  currentUrl: null as string | null,
-  browser: null as Browser | null,
-  page: null as Page | null,
+  currentUrl: null,
+  browser: null,
+  page: null,
   cdpPort: DEFAULT_CDP_PORT,
-  transcript: [] as TranscriptEntry[],
+  transcript: [],
   transcriptIndex: 0,
-  originalSpeechRate: null as string | null,
+  originalSpeechRate: null,
 };
+
+// --- State accessors (no direct mutation from outside vo-core) ---
+
+export function getPage(): Page | null { return state.page; }
+export function getStatus(): { voiceoverActive: boolean; currentUrl: string | null; cdpPort: number } {
+  return { voiceoverActive: state.voiceoverActive, currentUrl: state.currentUrl, cdpPort: state.cdpPort };
+}
+export function getTranscriptLength(): number { return state.transcript.length; }
 
 // ---------------------------------------------------------------------------
 // Logging
@@ -190,80 +126,8 @@ export function log(msg: string, err = false) {
   try { writeFileSync(LOG_FILE, line, { flag: "a" }); } catch {}
 }
 
-// ---------------------------------------------------------------------------
-// Response parsing
-//
-// VoiceOver's itemText is "Name role", e.g. "Example Domain heading level 1".
-// We split on known role suffixes. This is heuristic — names containing role
-// words (e.g. "Link to button factory") could misparse. For precise role info,
-// use the accessibility tree via Playwright instead.
-// ---------------------------------------------------------------------------
-
-export const STATE_KEYWORDS: readonly string[] = [
-  "not selected",  // must come before "selected" to match first
-  "has popup",
-  "checked", "unchecked",
-  "expanded", "collapsed",
-  "selected",
-  "dimmed",
-  "required",
-  "visited",
-];
-
-const STATE_PATTERN = new RegExp(
-  ",?\\s*(" + STATE_KEYWORDS.join("|") + ")(?=\\s|,|$)",
-  "gi"
-);
-
-export const ROLE_PATTERN = new RegExp(
-  "\\s+(" + [
-    "heading level \\d+",
-    "search text field", "text field", "edit text",
-    "pop up button", "radio button", "menu item",
-    "toolbar item palette", "selected tab, group",
-    "web content",
-    "link", "button", "checkbox", "tab", "image",
-    "group", "list", "table", "dialog",
-  ].join("|") + ")$",
-  "i"
-);
-
-export function parseVoResponse(spoken: string, itemText: string): VoResponse {
-  let text = itemText || "";
-  const state: string[] = [];
-
-  // Extract state keywords before role parsing
-  STATE_PATTERN.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = STATE_PATTERN.exec(text)) !== null) {
-    state.push(match[1].toLowerCase());
-  }
-  if (state.length > 0) {
-    text = text.replace(STATE_PATTERN, "")
-      .replace(/,\s*,/g, ",")       // collapse double commas
-      .replace(/^\s*,\s*/, "")       // leading comma
-      .replace(/,\s*$/g, "")         // trailing comma
-      .replace(/\s{2,}/g, " ")
-      .trim();
-  }
-
-  let role = "";
-  let parsedName = text;
-
-  const m = text.match(ROLE_PATTERN);
-  if (m) {
-    role = m[1];
-    parsedName = text.slice(0, m.index);
-  }
-
-  // Clean trailing comma/whitespace left between name and role after state removal
-  parsedName = parsedName.replace(/,\s*$/, "").trim();
-
-  return { spoken, name: parsedName, role, state };
-}
-
-function recordTranscript(entry: VoResponse): VoResponse {
-  const indexed = { ...entry, index: state.transcriptIndex++ };
+function recordTranscript(entry: VoResponse): TranscriptEntry {
+  const indexed: TranscriptEntry = { ...entry, index: state.transcriptIndex++ };
   state.transcript.push(indexed);
   if (state.transcript.length > MAX_TRANSCRIPT_ENTRIES) {
     state.transcript = state.transcript.slice(-MAX_TRANSCRIPT_ENTRIES);
@@ -296,11 +160,19 @@ export function runAppleScript(script: string, timeout = 10_000): Promise<string
   return new Promise((resolve, reject) => {
     const proc = spawn("osascript", ["-e", script]);
     let out = "", err = "";
+    let settled = false;
     proc.stdout.on("data", (d: Buffer) => (out += d));
     proc.stderr.on("data", (d: Buffer) => (err += d));
-    const timer = setTimeout(() => { proc.kill("SIGKILL"); reject(new Error("AppleScript timeout")); }, timeout);
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      proc.kill("SIGKILL");
+      reject(new Error("AppleScript timeout"));
+    }, timeout);
     proc.on("close", (code: number) => {
       clearTimeout(timer);
+      if (settled) return;
+      settled = true;
       code === 0 ? resolve(out.trim()) : reject(new Error(err.trim() || `exit ${code}`));
     });
   });
@@ -323,32 +195,22 @@ async function lastFromLog(): Promise<{ spoken: string; itemText: string }> {
   };
 }
 
-async function voAction(action: () => Promise<void>): Promise<VoResponse> {
+async function voAction(action: () => Promise<void>): Promise<TranscriptEntry> {
   await action();
   const { spoken, itemText } = await lastFromLog();
   return recordTranscript(parseVoResponse(spoken, itemText));
 }
 
-export async function voNext(): Promise<VoResult> {
+function lockedVoAction(action: () => Promise<void>): Promise<VoResult> {
   return withLock(async () => {
-    try { return await voAction(() => voiceOver.next()); }
+    try { return await voAction(action); }
     catch (e) { return translateError(e); }
   });
 }
 
-export async function voPrevious(): Promise<VoResult> {
-  return withLock(async () => {
-    try { return await voAction(() => voiceOver.previous()); }
-    catch (e) { return translateError(e); }
-  });
-}
-
-export async function voAct(): Promise<VoResult> {
-  return withLock(async () => {
-    try { return await voAction(() => voiceOver.act()); }
-    catch (e) { return translateError(e); }
-  });
-}
+export function voNext(): Promise<VoResult> { return lockedVoAction(() => voiceOver.next()); }
+export function voPrevious(): Promise<VoResult> { return lockedVoAction(() => voiceOver.previous()); }
+export function voAct(): Promise<VoResult> { return lockedVoAction(() => voiceOver.act()); }
 
 export async function voPerform(commandName: string): Promise<VoResult> {
   return withLock(async () => {
@@ -389,17 +251,18 @@ export async function voEnter(): Promise<VoResult> {
 }
 
 async function _voEnterInner(): Promise<VoResult> {
-  // Strategy: exit web content one level at a time until we land on the
-  // "web content" container, then re-enter. If that doesn't work, go to
-  // the browser window top and walk forward to find it.
+  // Two strategies in sequence:
+  // 1. Climb up VoiceOver's containment hierarchy to find and re-enter web content
+  // 2. Tab-walk through browser chrome into the page, then sync VO cursor
+  return await _tryExitReenter() ?? await _tryTabWalk() ?? translateError("Could not find web content area");
+}
 
-  // Step 1: Try exiting up to find the "web content" container.
-  // STOP_INTERACTING moves up one containment level each time.
+/** Climb VO containment levels via STOP_INTERACTING until we hit the web content container, then START_INTERACTING. */
+async function _tryExitReenter(): Promise<VoResult | null> {
   for (let exit = 0; exit < 5; exit++) {
     try {
       const itemText = await voAppleScript("return text under cursor of vo cursor");
       if (itemText.toLowerCase().includes("web content")) {
-        // We're on the web content container — enter it
         await voAppleScript('tell commander to perform command "start interacting with item"');
         await sleep(VO_SETTLE_MS);
         const spoken = await voAppleScript("return content of last phrase").catch(() => "");
@@ -408,7 +271,6 @@ async function _voEnterInner(): Promise<VoResult> {
         log(`Entered web content (via exit/re-enter): ${finalItem}`);
         return recordTranscript(result);
       }
-      // Check spoken phrase — if it mentions "inside of web content" we're already in
       const spoken = await voAppleScript("return content of last phrase");
       if (spoken.toLowerCase().includes("inside of web content")) {
         const result = parseVoResponse(spoken, itemText);
@@ -427,79 +289,68 @@ async function _voEnterInner(): Promise<VoResult> {
       break;
     }
   }
+  return null;
+}
 
-  // Step 2: Climb didn't find it. Use Tab keystrokes to enter page content.
-  // Tab naturally moves focus through browser chrome and into the web page,
-  // bypassing VO's containment hierarchy which is hard to navigate reliably.
+/** Tab through browser chrome into page content, syncing VO cursor each step. */
+async function _tryTabWalk(): Promise<VoResult | null> {
   await focusBrowser();
 
   for (let i = 0; i < 20; i++) {
     try {
       await runAppleScript('tell application "System Events" to key code 48'); // Tab
       await sleep(VO_QUICK_SETTLE_MS);
+      // Sync VO cursor to keyboard focus so we read the right element
+      await voAppleScript('tell commander to perform command "move voiceover cursor to keyboard focus"');
+      await sleep(VO_QUICK_SETTLE_MS);
       const itemText = await voAppleScript("return text under cursor of vo cursor");
       const lower = itemText.toLowerCase();
-      // Once Tab lands on page content (a link, heading, or text in the web area),
-      // sync the VO cursor to keyboard focus so VO is inside web content.
       if (lower.includes("link") || lower.includes("heading") ||
           lower.includes("web content") || lower.includes("banner") ||
           lower.includes("main") || lower.includes("navigation")) {
-        await voAppleScript('tell commander to perform command "move voiceover cursor to keyboard focus"');
-        await sleep(VO_QUICK_SETTLE_MS);
         const spoken = await voAppleScript("return content of last phrase").catch(() => "");
-        const finalItem = await voAppleScript("return text under cursor of vo cursor").catch(() => "");
-        const result = parseVoResponse(spoken, finalItem);
-        log(`Entered web content (via Tab fallback): ${finalItem}`);
+        const result = parseVoResponse(spoken, itemText);
+        log(`Entered web content (via Tab fallback): ${itemText}`);
         return recordTranscript(result);
       }
     } catch (e) {
       log(`voEnter tab ${i}: ${errorMsg(e)}`);
     }
   }
-
-  return translateError("Could not find web content area");
+  return null;
 }
 
 // ---------------------------------------------------------------------------
 // Press — raw keystrokes via AppleScript
 // ---------------------------------------------------------------------------
 
-export const KEY_CODES: Record<string, number> = {
-  Return: 36, Enter: 36, Space: 49, Escape: 53, Tab: 48,
-  Left: 123, Right: 124, Down: 125, Up: 126,
-  Delete: 51, Backspace: 51, Home: 115, End: 119,
-  PageUp: 116, PageDown: 121,
-};
-
-export const VALID_MODIFIERS: Record<string, string> = {
-  control: "control down",
-  option: "option down",
-  command: "command down",
-  shift: "shift down",
-};
-
 export async function voPress(key: string, modifiers: string[] = []): Promise<VoResult> {
   return withLock(async () => {
     const unknown = modifiers.filter((m) => !VALID_MODIFIERS[m]);
     if (unknown.length > 0) {
-      return {
-        error: `Unknown modifier(s): ${unknown.join(", ")}. Valid: ${Object.keys(VALID_MODIFIERS).join(", ")}`,
-      };
+      return translateError(`Unknown modifier(s): ${unknown.join(", ")}`, { key });
     }
 
     const modStr = modifiers.map((m) => VALID_MODIFIERS[m]).join(", ");
     const usingClause = modStr ? ` using {${modStr}}` : "";
     const code = KEY_CODES[key];
 
-    const script = code !== undefined
-      ? `tell application "System Events" to key code ${code}${usingClause}`
-      : `tell application "System Events" to keystroke "${key}"${usingClause}`;
+    let script: string;
+    if (code !== undefined) {
+      script = `tell application "System Events" to key code ${code}${usingClause}`;
+    } else if (key.length === 1) {
+      const escaped = key.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+      script = `tell application "System Events" to keystroke "${escaped}"${usingClause}`;
+    } else {
+      return translateError(`Unknown key: "${key}". Use a named key (Return, Tab, etc.) or a single character.`, { key });
+    }
 
     try {
       await runAppleScript(script);
       await sleep(VO_PRESS_SETTLE_MS);
       const spoken = await voAppleScript("return content of last phrase").catch(() => "");
-      return recordTranscript({ spoken, name: spoken, role: "", state: [] });
+      const itemText = await voAppleScript("return text under cursor of vo cursor").catch(() => "");
+      return recordTranscript(parseVoResponse(spoken, itemText));
     } catch (e) {
       return translateError(e, { key });
     }
@@ -550,7 +401,7 @@ async function focusBrowser() {
   } catch (e) { log(`focus warning: ${errorMsg(e)}`); }
 }
 
-const SPEECH_RATE_KEY = "SCRCategories_SCRCategorySystemWide_SCRSpeechLanguages_default_SCRSpeechComponentSettings_SCRRateAsPercent";
+export const SPEECH_RATE_KEY = "SCRCategories_SCRCategorySystemWide_SCRSpeechLanguages_default_SCRSpeechComponentSettings_SCRRateAsPercent";
 
 export async function initialize(url: string | null, cdpPort: number) {
   state.cdpPort = cdpPort;
@@ -580,9 +431,6 @@ export async function initialize(url: string | null, cdpPort: number) {
   state.voiceoverActive = true;
   log("VoiceOver started");
 
-  // Persist state so CLI kill command knows whether we started VoiceOver
-  try { writeFileSync(VO_STATE_FILE, JSON.stringify({ weStartedVoiceOver: true })); } catch {}
-
   // Save original speech rate before overwriting
   try {
     const current = spawnSync("defaults", ["read", "com.apple.VoiceOver4/default", SPEECH_RATE_KEY]);
@@ -591,6 +439,14 @@ export async function initialize(url: string | null, cdpPort: number) {
       state.originalSpeechRate = val;
       log(`Saved original speech rate: ${val}`);
     }
+  } catch {}
+
+  // Persist state so CLI kill command can restore speech rate and check VO ownership
+  try {
+    writeFileSync(VO_STATE_FILE, JSON.stringify({
+      weStartedVoiceOver: true,
+      originalSpeechRate: state.originalSpeechRate,
+    }));
   } catch {}
 
   // Max out speech rate for faster phrase capture
@@ -606,16 +462,21 @@ export async function initialize(url: string | null, cdpPort: number) {
 
 export async function navigate(url: string): Promise<VoResult> {
   return withLock(async () => {
-    if (!state.page) return translateError("No page");
-    await state.page.goto(url, { waitUntil: "load" });
-    state.currentUrl = url;
-    await focusBrowser();
-    return _voEnterInner();
+    try {
+      if (!state.page) return translateError("No page");
+      await state.page.goto(url, { waitUntil: "load" });
+      state.currentUrl = url;
+      await focusBrowser();
+      return await _voEnterInner();
+    } catch (e) {
+      return translateError(e, { url });
+    }
   });
 }
 
 export async function cleanup() {
-  // Wait for any in-flight VO operation to finish before tearing down
+  // Reject new operations, then wait for any in-flight one to finish
+  shuttingDown = true;
   await operationLock;
 
   // Restore original speech rate before stopping VoiceOver
@@ -649,6 +510,7 @@ export async function cleanup() {
   state.currentUrl = null;
 }
 
+/** Read the current VO cursor item. Does not record to transcript (read-only query, not a navigation). */
 export async function getItemText(): Promise<VoResult> {
   return withLock(async () => {
     try {

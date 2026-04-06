@@ -5,7 +5,7 @@
  * Parses flags and dispatches to either the daemon (serve) or the CLI client.
  */
 
-import { DEFAULT_PORT, DEFAULT_CDP_PORT } from "./vo-core.ts";
+import { DEFAULT_PORT, DEFAULT_CDP_PORT, errorMsg } from "./vo-core.ts";
 import { startServer } from "./vo-server.ts";
 import { cli, USAGE } from "./vo-cli.ts";
 
@@ -38,14 +38,14 @@ if (import.meta.main) {
       !a.startsWith("--") && !(i > 0 && arr[i - 1]?.startsWith("--"))
     );
     startServer(port, cdpPort, positional[0] || null).catch((e) => {
-      console.error(e instanceof Error ? e.message : String(e));
+      console.error(errorMsg(e));
       process.exit(1);
     });
   } else if (args.length === 0) {
     console.log(USAGE);
   } else {
     cli(args, port, cdpPort).catch((e) => {
-      console.error(e instanceof Error ? e.message : String(e));
+      console.error(errorMsg(e));
       process.exit(1);
     });
   }
