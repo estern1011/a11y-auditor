@@ -71,14 +71,10 @@ export const COMMANDS: Record<string, CommandEntry> = {
   FIND_PREVIOUS_BUTTON:          { type: "commander", name: "FIND_PREVIOUS_BUTTON" },
   FIND_NEXT_CONTROL:             { type: "keyboard", name: "findNextControl" },
   FIND_PREVIOUS_CONTROL:         { type: "keyboard", name: "findPreviousControl" },
-  FIND_NEXT_TEXT_FIELD:           { type: "commander", name: "FIND_NEXT_TEXT_FIELD" },
-  // Note: guidepup has no FIND_PREVIOUS_TEXT_FIELD; FIND_PREVIOUS_FIELD finds any field type
-  FIND_PREVIOUS_TEXT_FIELD:       { type: "commander", name: "FIND_PREVIOUS_FIELD" },
-  FIND_NEXT_CHECKBOX:            { type: "commander", name: "FIND_NEXT_TICKBOX" },
-  FIND_PREVIOUS_CHECKBOX:        { type: "commander", name: "FIND_PREVIOUS_TICKBOX" },
-  FIND_NEXT_RADIO_GROUP:         { type: "commander", name: "FIND_NEXT_RADIO_GROUP" },
-  // Note: guidepup has no FIND_PREVIOUS_RADIO_GROUP; FIND_PREVIOUS_GROUP finds any group type
-  FIND_PREVIOUS_RADIO_GROUP:     { type: "commander", name: "FIND_PREVIOUS_GROUP" },
+  // Note: FIND_NEXT_TEXT_FIELD, FIND_NEXT_TICKBOX, FIND_NEXT_RADIO_GROUP exist in
+  // guidepup's CommanderCommands enum but VoiceOver's commander rejects them at
+  // runtime with "Command does not exist (6)". Use FIND_NEXT_CONTROL instead —
+  // it finds any form control (fields, checkboxes, radios, buttons).
   FIND_NEXT_TABLE:               { type: "keyboard", name: "findNextTable" },
   FIND_PREVIOUS_TABLE:           { type: "keyboard", name: "findPreviousTable" },
   FIND_NEXT_LIST:                { type: "keyboard", name: "findNextList" },
@@ -89,7 +85,7 @@ export const COMMANDS: Record<string, CommandEntry> = {
   FIND_PREVIOUS_IMAGE:           { type: "keyboard", name: "findPreviousGraphic" },
   FIND_NEXT_FRAME:               { type: "commander", name: "FIND_NEXT_FRAME" },
   FIND_PREVIOUS_FRAME:           { type: "commander", name: "FIND_PREVIOUS_FRAME" },
-  FIND_NEXT_LIVE_REGION:         { type: "commander", name: "FIND_NEXT_LIVE_REGION" },
+  // Note: FIND_NEXT_LIVE_REGION exists in guidepup enum but VoiceOver rejects it.
 
   GO_TO_BEGINNING:               { type: "commander", name: "GO_TO_BEGINNING" },
   GO_TO_END:                     { type: "commander", name: "GO_TO_END" },
@@ -351,55 +347,32 @@ export async function voEnter(): Promise<VoResult> {
     }
   }
 
-  // Step 2: Climb didn't find it. Go to the very beginning of the window
-  // and walk forward. We may need to START_INTERACTING into the window group.
-  try {
-    await voAppleScript('tell commander to perform command "go to beginning"');
-    await sleep(VO_SETTLE_MS);
-  } catch (e) {
-    log(`voEnter go to beginning: ${errorMsg(e)}`, true);
-  }
+  // Step 2: Climb didn't find it. Use Tab keystrokes to enter page content.
+  // Tab naturally moves focus through browser chrome and into the web page,
+  // bypassing VO's containment hierarchy which is hard to navigate reliably.
+  await focusBrowser();
 
-  // If GO_TO_BEGINNING landed on the window group, enter it
-  try {
-    const itemText = await voAppleScript("return text under cursor of vo cursor");
-    if (itemText.toLowerCase().includes("group") || itemText.toLowerCase().includes("chrome")) {
-      await voAppleScript('tell commander to perform command "start interacting with item"');
-      await sleep(VO_QUICK_SETTLE_MS);
-    }
-  } catch (e) {
-    log(`voEnter interact-window: ${errorMsg(e)}`);
-  }
-
-  for (let i = 0; i < 15; i++) {
-    let itemText = "";
+  for (let i = 0; i < 20; i++) {
     try {
-      itemText = await voAppleScript("return text under cursor of vo cursor", 3000);
-    } catch (e) {
-      log(`voEnter read item ${i}: ${errorMsg(e)}`);
-    }
-
-    if (itemText.toLowerCase().includes("web content")) {
-      try {
-        await voAppleScript('tell commander to perform command "start interacting with item"');
-        await sleep(VO_SETTLE_MS);
-      } catch (e) {
-        log(`voEnter interact: ${errorMsg(e)}`, true);
-        return translateError("Failed to enter web content: " + errorMsg(e));
+      await runAppleScript('tell application "System Events" to key code 48'); // Tab
+      await sleep(VO_QUICK_SETTLE_MS);
+      const itemText = await voAppleScript("return text under cursor of vo cursor");
+      const lower = itemText.toLowerCase();
+      // Once Tab lands on page content (a link, heading, or text in the web area),
+      // sync the VO cursor to keyboard focus so VO is inside web content.
+      if (lower.includes("link") || lower.includes("heading") ||
+          lower.includes("web content") || lower.includes("banner") ||
+          lower.includes("main") || lower.includes("navigation")) {
+        await voAppleScript('tell commander to perform command "move voiceover cursor to keyboard focus"');
+        await sleep(VO_QUICK_SETTLE_MS);
+        const spoken = await voAppleScript("return content of last phrase").catch(() => "");
+        const finalItem = await voAppleScript("return text under cursor of vo cursor").catch(() => "");
+        const result = parseVoResponse(spoken, finalItem);
+        log(`Entered web content (via Tab fallback): ${finalItem}`);
+        return recordTranscript(result);
       }
-      const spoken = await voAppleScript("return content of last phrase").catch(() => "");
-      const finalItem = await voAppleScript("return text under cursor of vo cursor").catch(() => "");
-      const result = parseVoResponse(spoken, finalItem);
-      log(`Entered web content: ${finalItem}`);
-      return recordTranscript(result);
-    }
-
-    try {
-      await voAppleScript("tell vo cursor to move right");
-      await sleep(VO_QUICK_SETTLE_MS);
     } catch (e) {
-      log(`voEnter move ${i}: ${errorMsg(e)}`, true);
-      break;
+      log(`voEnter tab ${i}: ${errorMsg(e)}`);
     }
   }
 

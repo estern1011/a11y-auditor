@@ -86,17 +86,13 @@ bun vo-driver.ts perform FIND_NEXT_LINK
 bun vo-driver.ts perform FIND_PREVIOUS_LINK
 bun vo-driver.ts perform FIND_NEXT_BUTTON
 bun vo-driver.ts perform FIND_PREVIOUS_BUTTON
-bun vo-driver.ts perform FIND_NEXT_CONTROL
-bun vo-driver.ts perform FIND_NEXT_TEXT_FIELD
-bun vo-driver.ts perform FIND_NEXT_CHECKBOX
-bun vo-driver.ts perform FIND_NEXT_RADIO_GROUP
+bun vo-driver.ts perform FIND_NEXT_CONTROL       # any form control (fields, checkboxes, radios)
 bun vo-driver.ts perform FIND_NEXT_LANDMARK
 bun vo-driver.ts perform FIND_PREVIOUS_LANDMARK
 bun vo-driver.ts perform FIND_NEXT_IMAGE
 bun vo-driver.ts perform FIND_NEXT_TABLE
 bun vo-driver.ts perform FIND_NEXT_LIST
 bun vo-driver.ts perform FIND_NEXT_FRAME
-bun vo-driver.ts perform FIND_NEXT_LIVE_REGION
 ```
 
 ### Position & Interaction
