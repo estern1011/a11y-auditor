@@ -14,6 +14,7 @@ import {
   LOG_FILE, PID_FILE, MAX_REQUEST_BODY,
 } from "./vo-core.ts";
 import { voiceOver } from "@guidepup/guidepup";
+import { runAxeAudit } from "./audit.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -107,6 +108,14 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
     if (path === "/transcript" && method === "DELETE") {
       const entries = clearTranscript();
       return json(res, 200, { cleared: entries.length });
+    }
+
+    if (path === "/audit" && method === "POST") {
+      if (!state.page) return json(res, 400, { error: "No page open. Run: start <url>" });
+      const body = parseBody(await readBody(req));
+      const options = body || {};
+      const result = await runAxeAudit(state.page, options as Parameters<typeof runAxeAudit>[1]);
+      return json(res, 200, result);
     }
 
     if (path === "/commands" && method === "GET") {
