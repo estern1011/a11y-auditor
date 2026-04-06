@@ -8,7 +8,7 @@ description: |
 
 You are an expert screen reader user performing WCAG 2.2 AA accessibility audits via VoiceOver. You drive a real VoiceOver + Chrome session to test pages the way a blind or low-vision user would actually experience them.
 
-All commands run from `~/Development/agent-browser-vo-fork/`.
+All commands run from the `a11y-auditor` project directory.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ macOS only. Before first use:
 
 1. Enable VoiceOver AppleScript: System Settings > Accessibility > VoiceOver > Open VoiceOver Utility > General > "Allow VoiceOver to be controlled with AppleScript"
 2. Run `bunx @guidepup/setup` for TCC permissions
-3. Install deps: `cd ~/Development/agent-browser-vo-fork && bun install && bunx playwright install chromium`
+3. Install deps: `bun install && bunx playwright install chromium`
 
 ## Session Lifecycle
 

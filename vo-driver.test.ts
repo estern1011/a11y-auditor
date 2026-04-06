@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { parseVoResponse, ROLE_PATTERN, COMMANDS, KEY_CODES, VALID_MODIFIERS } from "./vo-core.ts";
+import { parseVoResponse, ROLE_PATTERN, STATE_KEYWORDS, COMMANDS, KEY_CODES, VALID_MODIFIERS } from "./vo-core.ts";
 import { translateError, type ErrorContext } from "./vo-errors.ts";
 import { getFlag } from "./vo-driver.ts";
 
@@ -12,36 +12,42 @@ describe("parseVoResponse", () => {
     const r = parseVoResponse("Example Domain heading level 1", "Example Domain heading level 1");
     expect(r.name).toBe("Example Domain");
     expect(r.role).toBe("heading level 1");
+    expect(r.state).toEqual([]);
   });
 
   test("extracts link role", () => {
     const r = parseVoResponse("More info link", "More info link");
     expect(r.name).toBe("More info");
     expect(r.role).toBe("link");
+    expect(r.state).toEqual([]);
   });
 
   test("extracts button role", () => {
     const r = parseVoResponse("Submit button", "Submit button");
     expect(r.name).toBe("Submit");
     expect(r.role).toBe("button");
+    expect(r.state).toEqual([]);
   });
 
   test("extracts text field role", () => {
     const r = parseVoResponse("Email search text field", "Email search text field");
     expect(r.name).toBe("Email");
     expect(r.role).toBe("search text field");
+    expect(r.state).toEqual([]);
   });
 
   test("extracts checkbox role", () => {
     const r = parseVoResponse("Accept terms checkbox", "Accept terms checkbox");
     expect(r.name).toBe("Accept terms");
     expect(r.role).toBe("checkbox");
+    expect(r.state).toEqual([]);
   });
 
   test("extracts image role", () => {
     const r = parseVoResponse("Logo image", "Logo image");
     expect(r.name).toBe("Logo");
     expect(r.role).toBe("image");
+    expect(r.state).toEqual([]);
   });
 
   test("handles empty strings", () => {
@@ -49,6 +55,7 @@ describe("parseVoResponse", () => {
     expect(r.name).toBe("");
     expect(r.role).toBe("");
     expect(r.spoken).toBe("");
+    expect(r.state).toEqual([]);
   });
 
   test("preserves spoken separately from itemText", () => {
@@ -56,12 +63,14 @@ describe("parseVoResponse", () => {
     expect(r.spoken).toBe("spoken phrase");
     expect(r.name).toBe("Name");
     expect(r.role).toBe("button");
+    expect(r.state).toEqual([]);
   });
 
   test("returns full text when no role matches", () => {
     const r = parseVoResponse("just some text", "just some text");
     expect(r.name).toBe("just some text");
     expect(r.role).toBe("");
+    expect(r.state).toEqual([]);
   });
 
   test("handles heading levels 2-6", () => {
@@ -70,6 +79,7 @@ describe("parseVoResponse", () => {
       const r = parseVoResponse(text, text);
       expect(r.name).toBe("Section");
       expect(r.role).toBe(`heading level ${level}`);
+      expect(r.state).toEqual([]);
     }
   });
 
@@ -77,24 +87,107 @@ describe("parseVoResponse", () => {
     const r = parseVoResponse("main web content", "main web content");
     expect(r.name).toBe("main");
     expect(r.role).toBe("web content");
+    expect(r.state).toEqual([]);
   });
 
   test("extracts pop up button role", () => {
     const r = parseVoResponse("Sort by pop up button", "Sort by pop up button");
     expect(r.name).toBe("Sort by");
     expect(r.role).toBe("pop up button");
+    expect(r.state).toEqual([]);
   });
 
   test("extracts radio button role", () => {
     const r = parseVoResponse("Option A radio button", "Option A radio button");
     expect(r.name).toBe("Option A");
     expect(r.role).toBe("radio button");
+    expect(r.state).toEqual([]);
   });
 
   test("extracts dialog role", () => {
     const r = parseVoResponse("Confirm dialog", "Confirm dialog");
     expect(r.name).toBe("Confirm");
     expect(r.role).toBe("dialog");
+    expect(r.state).toEqual([]);
+  });
+
+  // State extraction tests
+
+  test("extracts unchecked state from checkbox", () => {
+    const r = parseVoResponse("Accept terms, unchecked, checkbox", "Accept terms, unchecked, checkbox");
+    expect(r.name).toBe("Accept terms");
+    expect(r.role).toBe("checkbox");
+    expect(r.state).toEqual(["unchecked"]);
+  });
+
+  test("extracts checked state from checkbox", () => {
+    const r = parseVoResponse("Accept terms, checked, checkbox", "Accept terms, checked, checkbox");
+    expect(r.name).toBe("Accept terms");
+    expect(r.role).toBe("checkbox");
+    expect(r.state).toEqual(["checked"]);
+  });
+
+  test("extracts expanded state", () => {
+    const r = parseVoResponse("Menu, expanded, button", "Menu, expanded, button");
+    expect(r.name).toBe("Menu");
+    expect(r.role).toBe("button");
+    expect(r.state).toEqual(["expanded"]);
+  });
+
+  test("extracts collapsed state", () => {
+    const r = parseVoResponse("Menu, collapsed, button", "Menu, collapsed, button");
+    expect(r.name).toBe("Menu");
+    expect(r.role).toBe("button");
+    expect(r.state).toEqual(["collapsed"]);
+  });
+
+  test("extracts dimmed state", () => {
+    const r = parseVoResponse("Submit, dimmed, button", "Submit, dimmed, button");
+    expect(r.name).toBe("Submit");
+    expect(r.role).toBe("button");
+    expect(r.state).toEqual(["dimmed"]);
+  });
+
+  test("extracts required state", () => {
+    const r = parseVoResponse("Email, required, text field", "Email, required, text field");
+    expect(r.name).toBe("Email");
+    expect(r.role).toBe("text field");
+    expect(r.state).toEqual(["required"]);
+  });
+
+  test("extracts visited state from link", () => {
+    const r = parseVoResponse("Home, visited, link", "Home, visited, link");
+    expect(r.name).toBe("Home");
+    expect(r.role).toBe("link");
+    expect(r.state).toEqual(["visited"]);
+  });
+
+  test("extracts selected state", () => {
+    const r = parseVoResponse("Tab 1, selected, tab", "Tab 1, selected, tab");
+    expect(r.name).toBe("Tab 1");
+    expect(r.role).toBe("tab");
+    expect(r.state).toEqual(["selected"]);
+  });
+
+  test("extracts has popup state", () => {
+    const r = parseVoResponse("Options, has popup, button", "Options, has popup, button");
+    expect(r.name).toBe("Options");
+    expect(r.role).toBe("button");
+    expect(r.state).toEqual(["has popup"]);
+  });
+
+  test("extracts multiple states", () => {
+    const r = parseVoResponse("Email, required, dimmed, text field", "Email, required, dimmed, text field");
+    expect(r.name).toBe("Email");
+    expect(r.role).toBe("text field");
+    expect(r.state).toEqual(["required", "dimmed"]);
+  });
+
+  test("extracts not selected state", () => {
+    const r = parseVoResponse("Tab 2, not selected, tab", "Tab 2, not selected, tab");
+    expect(r.name).toBe("Tab 2");
+    expect(r.role).toBe("tab");
+    expect(r.state).toEqual(["not selected"]);
   });
 });
 

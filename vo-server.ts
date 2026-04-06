@@ -38,7 +38,7 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function parseBody(body: string): Record<string, string | string[]> | null {
+function parseBody(body: string): Record<string, unknown> | null {
   try {
     return JSON.parse(body || "{}");
   } catch {
@@ -75,16 +75,17 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
 
     if (path === "/perform" && method === "POST") {
       const body = parseBody(await readBody(req));
-      if (!body || !body.command) return json(res, 400, { error: "command required" });
-      return json(res, 200, await voPerform(body.command as string));
+      if (!body || typeof body.command !== "string") return json(res, 400, { error: "command required (string)" });
+      return json(res, 200, await voPerform(body.command));
     }
 
     if (path === "/press" && method === "POST") {
       const body = parseBody(await readBody(req));
-      if (!body || !body.key) return json(res, 400, { error: "key required" });
-      const mods = Array.isArray(body.modifiers) ? body.modifiers as string[]
-        : body.modifiers ? [body.modifiers as string] : [];
-      return json(res, 200, await voPress(body.key as string, mods));
+      if (!body || typeof body.key !== "string") return json(res, 400, { error: "key required (string)" });
+      const mods = Array.isArray(body.modifiers)
+        ? body.modifiers.filter((m): m is string => typeof m === "string")
+        : typeof body.modifiers === "string" ? [body.modifiers] : [];
+      return json(res, 200, await voPress(body.key, mods));
     }
 
     if (path === "/enter" && method === "POST")
@@ -92,8 +93,8 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
 
     if (path === "/navigate" && method === "POST") {
       const body = parseBody(await readBody(req));
-      if (!body || !body.url) return json(res, 400, { error: "url required" });
-      return json(res, 200, await navigate(body.url as string));
+      if (!body || typeof body.url !== "string") return json(res, 400, { error: "url required (string)" });
+      return json(res, 200, await navigate(body.url));
     }
 
     if (path === "/item-text" && method === "GET") {
@@ -114,8 +115,15 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
     if (path === "/audit" && method === "POST") {
       if (!state.page) return json(res, 400, { error: "No page open. Run: start <url>" });
       const body = parseBody(await readBody(req));
-      const options = body || {};
-      const result = await runAxeAudit(state.page, options as Parameters<typeof runAxeAudit>[1]);
+      const options: Parameters<typeof runAxeAudit>[1] = {};
+      if (body) {
+        if (typeof body.selector === "string") options.selector = body.selector;
+        if (Array.isArray(body.tags)) options.tags = body.tags.filter((t): t is string => typeof t === "string");
+        if (Array.isArray(body.rules)) options.rules = body.rules.filter((r): r is string => typeof r === "string");
+        if (Array.isArray(body.disableRules)) options.disableRules = body.disableRules.filter((r): r is string => typeof r === "string");
+        if (typeof body.includeTree === "boolean") options.includeTree = body.includeTree;
+      }
+      const result = await runAxeAudit(state.page, options);
       return json(res, 200, result);
     }
 

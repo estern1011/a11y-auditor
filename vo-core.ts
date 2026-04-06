@@ -22,6 +22,7 @@ export const DEFAULT_PORT = 7483;
 export const DEFAULT_CDP_PORT = 9222;
 export const LOG_FILE = "/tmp/vo-driver.log";
 export const PID_FILE = "/tmp/vo-driver.pid";
+export const VO_STATE_FILE = "/tmp/vo-driver-state.json";
 
 export const CLI_TIMEOUT_MS = 30_000;
 export const STARTUP_POLL_MS = 200;
@@ -36,6 +37,23 @@ const VO_PRESS_SETTLE_MS = 600;
 const VO_INIT_SETTLE_MS = 1500;
 
 // ---------------------------------------------------------------------------
+// Operation lock — serializes all VoiceOver operations
+//
+// VoiceOver is a single global resource. Concurrent requests would cause
+// log entries to be attributed to the wrong command. Every exported function
+// that touches VoiceOver must go through withLock().
+// ---------------------------------------------------------------------------
+
+let operationLock: Promise<void> = Promise.resolve();
+
+function withLock<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = operationLock;
+  let resolve: () => void;
+  operationLock = new Promise((r) => (resolve = r));
+  return prev.then(fn).finally(() => resolve!());
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -47,6 +65,7 @@ function errorMsg(e: unknown): string {
 
 export function removePidFile() {
   try { if (existsSync(PID_FILE)) unlinkSync(PID_FILE); } catch {}
+  try { if (existsSync(VO_STATE_FILE)) unlinkSync(VO_STATE_FILE); } catch {}
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +150,7 @@ export interface VoResponse {
   spoken: string;
   name: string;
   role: string;
+  state: string[];
   index?: number;
 }
 
@@ -151,12 +171,14 @@ interface TranscriptEntry extends VoResponse {
 
 export const state = {
   voiceoverActive: false,
+  weStartedVoiceOver: false,
   currentUrl: null as string | null,
   browser: null as Browser | null,
   page: null as Page | null,
   cdpPort: DEFAULT_CDP_PORT,
   transcript: [] as TranscriptEntry[],
   transcriptIndex: 0,
+  originalSpeechRate: null as string | null,
 };
 
 // ---------------------------------------------------------------------------
@@ -177,6 +199,22 @@ export function log(msg: string, err = false) {
 // use the accessibility tree via Playwright instead.
 // ---------------------------------------------------------------------------
 
+export const STATE_KEYWORDS: readonly string[] = [
+  "not selected",  // must come before "selected" to match first
+  "has popup",
+  "checked", "unchecked",
+  "expanded", "collapsed",
+  "selected",
+  "dimmed",
+  "required",
+  "visited",
+];
+
+const STATE_PATTERN = new RegExp(
+  ",?\\s*(" + STATE_KEYWORDS.join("|") + ")(?=\\s|,|$)",
+  "gi"
+);
+
 export const ROLE_PATTERN = new RegExp(
   "\\s+(" + [
     "heading level \\d+",
@@ -191,17 +229,37 @@ export const ROLE_PATTERN = new RegExp(
 );
 
 export function parseVoResponse(spoken: string, itemText: string): VoResponse {
-  const name = itemText || "";
-  let role = "";
-  let parsedName = name;
+  let text = itemText || "";
+  const state: string[] = [];
 
-  const m = name.match(ROLE_PATTERN);
-  if (m) {
-    role = m[1];
-    parsedName = name.slice(0, m.index);
+  // Extract state keywords before role parsing
+  STATE_PATTERN.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = STATE_PATTERN.exec(text)) !== null) {
+    state.push(match[1].toLowerCase());
+  }
+  if (state.length > 0) {
+    text = text.replace(STATE_PATTERN, "")
+      .replace(/,\s*,/g, ",")       // collapse double commas
+      .replace(/^\s*,\s*/, "")       // leading comma
+      .replace(/,\s*$/g, "")         // trailing comma
+      .replace(/\s{2,}/g, " ")
+      .trim();
   }
 
-  return { spoken, name: parsedName.trim(), role };
+  let role = "";
+  let parsedName = text;
+
+  const m = text.match(ROLE_PATTERN);
+  if (m) {
+    role = m[1];
+    parsedName = text.slice(0, m.index);
+  }
+
+  // Clean trailing comma/whitespace left between name and role after state removal
+  parsedName = parsedName.replace(/,\s*$/, "").trim();
+
+  return { spoken, name: parsedName, role, state };
 }
 
 function recordTranscript(entry: VoResponse): VoResponse {
@@ -271,36 +329,55 @@ async function voAction(action: () => Promise<void>): Promise<VoResponse> {
   return recordTranscript(parseVoResponse(spoken, itemText));
 }
 
-export async function voNext(): Promise<VoResponse> { return voAction(() => voiceOver.next()); }
-export async function voPrevious(): Promise<VoResponse> { return voAction(() => voiceOver.previous()); }
-export async function voAct(): Promise<VoResponse> { return voAction(() => voiceOver.act()); }
+export async function voNext(): Promise<VoResult> {
+  return withLock(async () => {
+    try { return await voAction(() => voiceOver.next()); }
+    catch (e) { return translateError(e); }
+  });
+}
+
+export async function voPrevious(): Promise<VoResult> {
+  return withLock(async () => {
+    try { return await voAction(() => voiceOver.previous()); }
+    catch (e) { return translateError(e); }
+  });
+}
+
+export async function voAct(): Promise<VoResult> {
+  return withLock(async () => {
+    try { return await voAction(() => voiceOver.act()); }
+    catch (e) { return translateError(e); }
+  });
+}
 
 export async function voPerform(commandName: string): Promise<VoResult> {
-  const entry = COMMANDS[commandName];
-  const ctx: ErrorContext = { command: commandName };
-  let command: MacOSKeyboardCommand | VoiceOverCommanderCommands;
+  return withLock(async () => {
+    const entry = COMMANDS[commandName];
+    const ctx: ErrorContext = { command: commandName };
+    let command: MacOSKeyboardCommand | VoiceOverCommanderCommands;
 
-  if (entry) {
-    if (entry.type === "commander") {
-      const cmd = voiceOver.commanderCommands[entry.name as keyof typeof voiceOver.commanderCommands];
-      if (!cmd) return translateError(`commander command "${entry.name}" not found in guidepup`, ctx);
-      command = cmd;
-    } else {
-      const cmd = voiceOver.keyboardCommands[entry.name as keyof typeof voiceOver.keyboardCommands];
-      if (!cmd) return translateError(`keyboard command "${entry.name}" not found in guidepup`, ctx);
-      command = cmd;
+    try {
+      if (entry) {
+        if (entry.type === "commander") {
+          const cmd = voiceOver.commanderCommands[entry.name as keyof typeof voiceOver.commanderCommands];
+          if (!cmd) return translateError(`commander command "${entry.name}" not found in guidepup`, ctx);
+          command = cmd;
+        } else {
+          const cmd = voiceOver.keyboardCommands[entry.name as keyof typeof voiceOver.keyboardCommands];
+          if (!cmd) return translateError(`keyboard command "${entry.name}" not found in guidepup`, ctx);
+          command = cmd;
+        }
+      } else {
+        const cmd = voiceOver.commanderCommands[commandName as keyof typeof voiceOver.commanderCommands];
+        if (!cmd) return translateError(`Unknown command: ${commandName}`, ctx);
+        command = cmd;
+      }
+
+      return await voAction(() => voiceOver.perform(command));
+    } catch (e) {
+      return translateError(e, ctx);
     }
-  } else {
-    const cmd = voiceOver.commanderCommands[commandName as keyof typeof voiceOver.commanderCommands];
-    if (!cmd) return translateError(`Unknown command: ${commandName}`, ctx);
-    command = cmd;
-  }
-
-  try {
-    return await voAction(() => voiceOver.perform(command));
-  } catch (e) {
-    return translateError(e, ctx);
-  }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +385,10 @@ export async function voPerform(commandName: string): Promise<VoResult> {
 // ---------------------------------------------------------------------------
 
 export async function voEnter(): Promise<VoResult> {
+  return withLock(_voEnterInner);
+}
+
+async function _voEnterInner(): Promise<VoResult> {
   // Strategy: exit web content one level at a time until we land on the
   // "web content" container, then re-enter. If that doesn't work, go to
   // the browser window top and walk forward to find it.
@@ -398,45 +479,58 @@ export const VALID_MODIFIERS: Record<string, string> = {
 };
 
 export async function voPress(key: string, modifiers: string[] = []): Promise<VoResult> {
-  const unknown = modifiers.filter((m) => !VALID_MODIFIERS[m]);
-  if (unknown.length > 0) {
-    return {
-      error: `Unknown modifier(s): ${unknown.join(", ")}. Valid: ${Object.keys(VALID_MODIFIERS).join(", ")}`,
-    };
-  }
+  return withLock(async () => {
+    const unknown = modifiers.filter((m) => !VALID_MODIFIERS[m]);
+    if (unknown.length > 0) {
+      return {
+        error: `Unknown modifier(s): ${unknown.join(", ")}. Valid: ${Object.keys(VALID_MODIFIERS).join(", ")}`,
+      };
+    }
 
-  const modStr = modifiers.map((m) => VALID_MODIFIERS[m]).join(", ");
-  const usingClause = modStr ? ` using {${modStr}}` : "";
-  const code = KEY_CODES[key];
+    const modStr = modifiers.map((m) => VALID_MODIFIERS[m]).join(", ");
+    const usingClause = modStr ? ` using {${modStr}}` : "";
+    const code = KEY_CODES[key];
 
-  const script = code !== undefined
-    ? `tell application "System Events" to key code ${code}${usingClause}`
-    : `tell application "System Events" to keystroke "${key}"${usingClause}`;
+    const script = code !== undefined
+      ? `tell application "System Events" to key code ${code}${usingClause}`
+      : `tell application "System Events" to keystroke "${key}"${usingClause}`;
 
-  try {
-    await runAppleScript(script);
-    await sleep(VO_PRESS_SETTLE_MS);
-    const spoken = await voAppleScript("return content of last phrase").catch(() => "");
-    return recordTranscript({ spoken, name: spoken, role: "" });
-  } catch (e) {
-    return translateError(e, { key });
-  }
+    try {
+      await runAppleScript(script);
+      await sleep(VO_PRESS_SETTLE_MS);
+      const spoken = await voAppleScript("return content of last phrase").catch(() => "");
+      return recordTranscript({ spoken, name: spoken, role: "", state: [] });
+    } catch (e) {
+      return translateError(e, { key });
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Browser + VoiceOver lifecycle
 // ---------------------------------------------------------------------------
 
+const PLAYWRIGHT_BROWSER_APP = "Google Chrome for Testing";
+
 function detectBrowserApp(): string {
+  // Prefer the known Playwright-bundled browser. Only fall back to process
+  // scanning if it isn't running — avoids grabbing the user's personal Chrome.
+  try {
+    const check = spawnSync("osascript", ["-e",
+      `tell application "System Events" to get name of every process whose name is "${PLAYWRIGHT_BROWSER_APP}"`]);
+    const names = check.stdout.toString().trim();
+    if (names.includes(PLAYWRIGHT_BROWSER_APP)) return PLAYWRIGHT_BROWSER_APP;
+  } catch {}
+
   try {
     const result = spawnSync("osascript", ["-e",
       'tell application "System Events" to get name of every process whose name contains "Chrome"']);
     const names = result.stdout.toString().trim().split(", ");
     return names.find((n) => n.includes("Testing"))
       || names.find((n) => n.includes("Chrome") || n.includes("Chromium"))
-      || "Google Chrome for Testing";
+      || PLAYWRIGHT_BROWSER_APP;
   } catch {
-    return "Google Chrome for Testing";
+    return PLAYWRIGHT_BROWSER_APP;
   }
 }
 
@@ -456,6 +550,8 @@ async function focusBrowser() {
   } catch (e) { log(`focus warning: ${errorMsg(e)}`); }
 }
 
+const SPEECH_RATE_KEY = "SCRCategories_SCRCategorySystemWide_SCRSpeechLanguages_default_SCRSpeechComponentSettings_SCRRateAsPercent";
+
 export async function initialize(url: string | null, cdpPort: number) {
   state.cdpPort = cdpPort;
 
@@ -471,16 +567,35 @@ export async function initialize(url: string | null, cdpPort: number) {
     state.currentUrl = url;
   }
 
-  await voiceOver.start();
+  try {
+    await voiceOver.start();
+    state.weStartedVoiceOver = true;
+  } catch (e) {
+    // VoiceOver failed to start — close the browser we just launched
+    try { await state.browser.close(); } catch {}
+    state.browser = null;
+    state.page = null;
+    throw e;
+  }
   state.voiceoverActive = true;
   log("VoiceOver started");
 
+  // Persist state so CLI kill command knows whether we started VoiceOver
+  try { writeFileSync(VO_STATE_FILE, JSON.stringify({ weStartedVoiceOver: true })); } catch {}
+
+  // Save original speech rate before overwriting
+  try {
+    const current = spawnSync("defaults", ["read", "com.apple.VoiceOver4/default", SPEECH_RATE_KEY]);
+    const val = current.stdout.toString().trim();
+    if (val && current.status === 0) {
+      state.originalSpeechRate = val;
+      log(`Saved original speech rate: ${val}`);
+    }
+  } catch {}
+
   // Max out speech rate for faster phrase capture
   try {
-    spawnSync("defaults", ["write",
-      "com.apple.VoiceOver4/default",
-      "SCRCategories_SCRCategorySystemWide_SCRSpeechLanguages_default_SCRSpeechComponentSettings_SCRRateAsPercent",
-      "-int", "100"]);
+    spawnSync("defaults", ["write", "com.apple.VoiceOver4/default", SPEECH_RATE_KEY, "-int", "100"]);
     log("Speech rate set to 100");
   } catch (e) { log(`speech rate warning: ${errorMsg(e)}`, true); }
 
@@ -494,25 +609,34 @@ export async function navigate(url: string): Promise<VoResult> {
   await state.page.goto(url, { waitUntil: "load" });
   state.currentUrl = url;
   await focusBrowser();
-
-  try {
-    return await voEnter();
-  } catch (e) {
-    log(`navigate enter: ${errorMsg(e)}`, true);
-    return { spoken: "", name: "", role: "" };
-  }
+  return voEnter();
 }
 
 export async function cleanup() {
+  // Restore original speech rate before stopping VoiceOver
+  if (state.originalSpeechRate !== null) {
+    try {
+      spawnSync("defaults", ["write", "com.apple.VoiceOver4/default",
+        SPEECH_RATE_KEY, "-int", state.originalSpeechRate]);
+      log(`Restored speech rate to ${state.originalSpeechRate}`);
+    } catch (e) { log(`speech rate restore: ${errorMsg(e)}`, true); }
+    state.originalSpeechRate = null;
+  }
+
   try {
     if (state.browser) { await state.browser.close(); state.browser = null; }
   } catch (e) { log(`browser close: ${errorMsg(e)}`, true); }
 
   try {
-    if (state.voiceoverActive) { await voiceOver.stop(); state.voiceoverActive = false; }
+    if (state.voiceoverActive && state.weStartedVoiceOver) {
+      await voiceOver.stop();
+      state.voiceoverActive = false;
+    }
   } catch (e) {
     log(`guidepup stop: ${errorMsg(e)}`, true);
-    try { spawnSync("osascript", ["-e", 'tell application "VoiceOver" to quit']); } catch {}
+    if (state.weStartedVoiceOver) {
+      try { spawnSync("osascript", ["-e", 'tell application "VoiceOver" to quit']); } catch {}
+    }
     state.voiceoverActive = false;
   }
 
@@ -520,7 +644,13 @@ export async function cleanup() {
   state.currentUrl = null;
 }
 
-export async function getItemText(): Promise<VoResponse> {
-  const itemText = await voiceOver.itemText();
-  return parseVoResponse("", itemText);
+export async function getItemText(): Promise<VoResult> {
+  return withLock(async () => {
+    try {
+      const itemText = await voiceOver.itemText();
+      return parseVoResponse("", itemText);
+    } catch (e) {
+      return translateError(e);
+    }
+  });
 }

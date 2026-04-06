@@ -129,7 +129,7 @@ bun vo-driver.ts press Tab                    # for each field
 bun vo-driver.ts item-text                    # is label announced?
 
 # Test error handling — submit empty/invalid form
-agent-browser --cdp 9222 click @submit        # or press Return
+agent-browser --cdp 9222 click @e3             # click submit button by ref
 bun vo-driver.ts transcript --since N         # are errors announced?
 # Are error messages associated with fields?
 bun vo-driver.ts press Tab                    # tab to errored field

@@ -27,7 +27,7 @@ Three tools sharing one browser via CDP:
 ```
 
 - **vo-driver** owns the headed browser + VoiceOver, exposes CDP on port 9222
-- **audit.ts** (separate tool) connects via CDP, runs axe-core + returns accessibility tree
+- **audit.ts** runs in vo-driver's process via the `/audit` HTTP endpoint, runs axe-core + returns accessibility tree
 - **agent-browser** connects via `--cdp 9222` for interaction, screenshots, DOM queries
 - **One skill doc** (auditor persona) teaches the agent to orchestrate all three
 
@@ -42,14 +42,14 @@ bun vo-driver.ts start https://app.com
 # 2. Agent connects agent-browser to same browser
 agent-browser --cdp 9222 snapshot -i
 
-# 3. Agent runs automated checks
-bun audit.ts --cdp 9222
+# 3. Agent runs automated checks (hits vo-driver's /audit endpoint)
+bun audit.ts
 
 # 4. Agent interacts via agent-browser
 agent-browser --cdp 9222 click @e3        # open modal
 
 # 5. Agent audits the modal
-bun audit.ts --cdp 9222 ".modal-dialog"
+bun audit.ts ".modal-dialog"
 
 # 6. Agent verifies with VoiceOver
 bun vo-driver.ts enter                   # re-enter web content
@@ -166,7 +166,7 @@ You have three tools:
 - audit.ts: your automated checker (axe-core + accessibility tree)
 - agent-browser: your hands on the page (interaction, screenshots)
 
-Connect agent-browser and audit.ts to vo-driver's browser via --cdp 9222.
+Connect agent-browser to vo-driver's browser via --cdp 9222. audit.ts talks to vo-driver's HTTP endpoint (defaults to the same port).
 
 Workflow:
 1. Start vo-driver (launches browser + VoiceOver)
