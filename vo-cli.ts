@@ -55,7 +55,13 @@ interface VoData {
   spoken?: string;
   name?: string;
   role?: string;
-  [key: string]: unknown;
+  status?: string;
+  voiceoverActive?: boolean;
+  currentUrl?: string;
+  cdpPort?: number;
+  entries?: Array<{ index: number; role: string; name: string; spoken: string }>;
+  commands?: string[];
+  cleared?: number;
 }
 
 async function post(base: string, path: string, body?: Record<string, unknown>): Promise<VoData> {
@@ -197,8 +203,7 @@ export async function cli(args: string[], port: number, cdpPort: number) {
         if (jsonFlag) {
           console.log(JSON.stringify(d));
         } else {
-          const entries = d.entries as Array<{ index: number; role: string; name: string; spoken: string }>;
-          entries.forEach((e) => console.log(`[${e.index}] ${e.role ? `(${e.role}) ` : ""}${e.name || e.spoken}`));
+          d.entries?.forEach((e) => console.log(`[${e.index}] ${e.role ? `(${e.role}) ` : ""}${e.name || e.spoken}`));
         }
       }
       break;
@@ -210,8 +215,7 @@ export async function cli(args: string[], port: number, cdpPort: number) {
       if (jsonFlag) {
         console.log(JSON.stringify(d));
       } else {
-        const cmds = d.commands as string[];
-        cmds.forEach((c) => console.log(c));
+        d.commands?.forEach((c) => console.log(c));
       }
       break;
     }

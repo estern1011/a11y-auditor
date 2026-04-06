@@ -10,10 +10,9 @@ import { writeFileSync } from "fs";
 import {
   state, log, voNext, voPrevious, voAct, voPerform, voPress, voEnter,
   navigate, initialize, cleanup, getTranscript, clearTranscript,
-  parseVoResponse, removePidFile, COMMANDS,
+  getItemText, removePidFile, COMMANDS,
   LOG_FILE, PID_FILE, MAX_REQUEST_BODY,
 } from "./vo-core.ts";
-import { voiceOver } from "@guidepup/guidepup";
 import { runAxeAudit } from "./audit.ts";
 
 // ---------------------------------------------------------------------------
@@ -35,6 +34,7 @@ function readBody(req: IncomingMessage): Promise<string> {
       b += c;
     });
     req.on("end", () => resolve(b));
+    req.on("error", reject);
   });
 }
 
@@ -82,7 +82,9 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
     if (path === "/press" && method === "POST") {
       const body = parseBody(await readBody(req));
       if (!body || !body.key) return json(res, 400, { error: "key required" });
-      return json(res, 200, await voPress(body.key as string, body.modifiers as string[] | undefined));
+      const mods = Array.isArray(body.modifiers) ? body.modifiers as string[]
+        : body.modifiers ? [body.modifiers as string] : [];
+      return json(res, 200, await voPress(body.key as string, mods));
     }
 
     if (path === "/enter" && method === "POST")
@@ -95,8 +97,7 @@ export async function handle(req: IncomingMessage, res: ServerResponse) {
     }
 
     if (path === "/item-text" && method === "GET") {
-      const itemText = await voiceOver.itemText();
-      return json(res, 200, parseVoResponse("", itemText));
+      return json(res, 200, await getItemText());
     }
 
     if (path === "/transcript" && method === "GET") {

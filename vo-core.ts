@@ -342,24 +342,12 @@ export async function voEnter(): Promise<VoResult> {
       log(`voEnter check ${exit}: ${errorMsg(e)}`);
     }
 
-    // Only exit on iterations 1+ (first iteration just checks current position)
-    if (exit > 0) {
-      try {
-        await voAppleScript('tell commander to perform command "stop interacting with item"');
-        await sleep(VO_QUICK_SETTLE_MS);
-      } catch (e) {
-        log(`voEnter exit ${exit}: ${errorMsg(e)}`);
-        break;
-      }
-    } else {
-      // On first iteration, try exiting once to start climbing up
-      try {
-        await voAppleScript('tell commander to perform command "stop interacting with item"');
-        await sleep(VO_QUICK_SETTLE_MS);
-      } catch (e) {
-        log(`voEnter initial exit: ${errorMsg(e)}`);
-        break;
-      }
+    try {
+      await voAppleScript('tell commander to perform command "stop interacting with item"');
+      await sleep(VO_QUICK_SETTLE_MS);
+    } catch (e) {
+      log(`voEnter exit ${exit}: ${errorMsg(e)}`);
+      break;
     }
   }
 
