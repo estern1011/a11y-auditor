@@ -1,7 +1,7 @@
 {
-  "name": "vo-driver",
+  "name": "a11y-auditor",
   "version": "1.0.0",
-  "description": "Interactive VoiceOver driver for browser automation with AI agents",
+  "description": "Accessibility auditor: VoiceOver screen reader testing (vo-driver) + axe-core automated checks",
   "type": "module",
   "main": "vo-driver.ts",
   "scripts": {
