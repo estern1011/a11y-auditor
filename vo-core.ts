@@ -312,24 +312,59 @@ export async function voPerform(commandName: string): Promise<VoResult> {
 // ---------------------------------------------------------------------------
 
 export async function voEnter(): Promise<VoResult> {
-  // Check if already inside web content by looking at the current item,
-  // not the spoken phrase (which may be stale from VoiceOver startup)
-  try {
-    const itemText = await voAppleScript("return text under cursor of vo cursor");
-    const spoken = await voAppleScript("return content of last phrase");
-    // Only consider us "already in" if the spoken phrase explicitly says so
-    // AND the item under cursor is not browser chrome
-    if (spoken.toLowerCase().includes("inside of web content") &&
-        !itemText.toLowerCase().includes("toolbar")) {
-      const result = parseVoResponse(spoken, itemText);
-      log(`Already in web content: ${itemText}`);
-      return recordTranscript(result);
+  // Strategy: exit web content one level at a time until we land on the
+  // "web content" container, then re-enter. If that doesn't work, go to
+  // the browser window top and walk forward to find it.
+
+  // Step 1: Try exiting up to find the "web content" container.
+  // STOP_INTERACTING moves up one containment level each time.
+  for (let exit = 0; exit < 5; exit++) {
+    try {
+      const itemText = await voAppleScript("return text under cursor of vo cursor");
+      if (itemText.toLowerCase().includes("web content")) {
+        // We're on the web content container — enter it
+        await voAppleScript('tell commander to perform command "start interacting with item"');
+        await sleep(VO_SETTLE_MS);
+        const spoken = await voAppleScript("return content of last phrase").catch(() => "");
+        const finalItem = await voAppleScript("return text under cursor of vo cursor").catch(() => "");
+        const result = parseVoResponse(spoken, finalItem);
+        log(`Entered web content (via exit/re-enter): ${finalItem}`);
+        return recordTranscript(result);
+      }
+      // Check spoken phrase — if it mentions "inside of web content" we're already in
+      const spoken = await voAppleScript("return content of last phrase");
+      if (spoken.toLowerCase().includes("inside of web content")) {
+        const result = parseVoResponse(spoken, itemText);
+        log(`Already in web content: ${itemText}`);
+        return recordTranscript(result);
+      }
+    } catch (e) {
+      log(`voEnter check ${exit}: ${errorMsg(e)}`);
     }
-  } catch (e) {
-    log(`voEnter check: ${errorMsg(e)}`);
+
+    // Only exit on iterations 1+ (first iteration just checks current position)
+    if (exit > 0) {
+      try {
+        await voAppleScript('tell commander to perform command "stop interacting with item"');
+        await sleep(VO_QUICK_SETTLE_MS);
+      } catch (e) {
+        log(`voEnter exit ${exit}: ${errorMsg(e)}`);
+        break;
+      }
+    } else {
+      // On first iteration, try exiting once to start climbing up
+      try {
+        await voAppleScript('tell commander to perform command "stop interacting with item"');
+        await sleep(VO_QUICK_SETTLE_MS);
+      } catch (e) {
+        log(`voEnter initial exit: ${errorMsg(e)}`);
+        break;
+      }
+    }
   }
 
-  // Go to beginning
+  // Step 2: Climb didn't find it. Go to the very beginning of the window
+  // and walk forward. We may need to START_INTERACTING into the window group.
   try {
     await voAppleScript('tell commander to perform command "go to beginning"');
     await sleep(VO_SETTLE_MS);
@@ -337,8 +372,18 @@ export async function voEnter(): Promise<VoResult> {
     log(`voEnter go to beginning: ${errorMsg(e)}`, true);
   }
 
-  // Walk forward until we find "web content"
-  for (let i = 0; i < 10; i++) {
+  // If GO_TO_BEGINNING landed on the window group, enter it
+  try {
+    const itemText = await voAppleScript("return text under cursor of vo cursor");
+    if (itemText.toLowerCase().includes("group") || itemText.toLowerCase().includes("chrome")) {
+      await voAppleScript('tell commander to perform command "start interacting with item"');
+      await sleep(VO_QUICK_SETTLE_MS);
+    }
+  } catch (e) {
+    log(`voEnter interact-window: ${errorMsg(e)}`);
+  }
+
+  for (let i = 0; i < 15; i++) {
     let itemText = "";
     try {
       itemText = await voAppleScript("return text under cursor of vo cursor", 3000);
