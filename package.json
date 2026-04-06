@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "description": "Interactive VoiceOver driver for browser automation with AI agents",
   "type": "module",
-  "main": "vo-driver.mjs",
+  "main": "vo-driver.ts",
   "scripts": {
-    "start": "bun vo-driver.mjs serve",
-    "dev": "bun --watch vo-driver.mjs serve"
+    "start": "bun vo-driver.ts serve",
+    "dev": "bun --watch vo-driver.ts serve",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": ["voiceover", "accessibility", "automation", "playwright"],
   "author": "",
@@ -18,5 +20,9 @@
   "engines": {
     "bun": ">=1.0.0",
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "@types/node": "^25.5.2"
   }
 }
