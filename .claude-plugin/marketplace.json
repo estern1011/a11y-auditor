@@ -1,0 +1,22 @@
+{
+  "name": "a11y-auditor",
+  "version": "1.0.0",
+  "description": "WCAG 2.2 AA accessibility auditing with VoiceOver screen reader automation and axe-core automated checks",
+  "plugins": [
+    {
+      "name": "a11y-auditor",
+      "source": "./",
+      "description": "Accessibility auditor: VoiceOver screen reader testing + axe-core automated checks + agent-browser page interaction",
+      "keywords": [
+        "accessibility",
+        "a11y",
+        "voiceover",
+        "screen-reader",
+        "wcag",
+        "axe-core",
+        "audit"
+      ],
+      "skills": ["./skills/vo-driver", "./skills/auditor"]
+    }
+  ]
+}
