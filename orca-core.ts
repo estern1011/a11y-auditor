@@ -49,6 +49,11 @@ const ORCA_INIT_SETTLE_MS = 2000;
 // Path to our AT-SPI2 helper
 const ATSPI_HELPER = new URL("./orca-atspi.py", import.meta.url).pathname;
 
+// Tracks child processes we started (for cleanup)
+let xvfbProc: ReturnType<typeof spawn> | null = null;
+let atSpiProc: ReturnType<typeof spawn> | null = null;
+let atSpiRegistryProc: ReturnType<typeof spawn> | null = null;
+
 // ---------------------------------------------------------------------------
 // Operation lock — serializes all Orca operations
 // ---------------------------------------------------------------------------
@@ -254,6 +259,103 @@ function resolveModifiers(mods: string[]): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Headless environment bootstrap — start xvfb + dbus + AT-SPI2 if needed
+//
+// In remote environments (Codespaces, Docker, CI), there's no display or
+// accessibility bus. We detect this and start them automatically.
+// ---------------------------------------------------------------------------
+
+function ensureDisplay(): void {
+  if (process.env.DISPLAY) {
+    log(`Using existing display: ${process.env.DISPLAY}`);
+    return;
+  }
+
+  // Check for Xvfb
+  try { execSync("which Xvfb", { stdio: "pipe" }); } catch {
+    throw new Error(
+      "No DISPLAY set and Xvfb not found. " +
+      "Run: sudo bash orca-setup.sh (or: sudo apt install xvfb)"
+    );
+  }
+
+  // Start Xvfb on :99
+  const display = `:${99 + Math.floor(Math.random() * 100)}`;
+  log(`Starting Xvfb on ${display}...`);
+  xvfbProc = spawn("Xvfb", [display, "-screen", "0", "1280x1024x24", "-ac"], {
+    stdio: "ignore",
+    detached: true,
+  });
+  xvfbProc.unref();
+  process.env.DISPLAY = display;
+  log(`Xvfb started on ${display} (PID: ${xvfbProc.pid})`);
+}
+
+function ensureDbus(): void {
+  if (process.env.DBUS_SESSION_BUS_ADDRESS) {
+    log(`Using existing D-Bus: ${process.env.DBUS_SESSION_BUS_ADDRESS}`);
+    return;
+  }
+
+  try {
+    const result = execSync("dbus-launch --sh-syntax", { encoding: "utf-8" });
+    // Parse: DBUS_SESSION_BUS_ADDRESS='unix:abstract=/tmp/...,guid=...';
+    const match = result.match(/DBUS_SESSION_BUS_ADDRESS='([^']+)'/);
+    if (match) {
+      process.env.DBUS_SESSION_BUS_ADDRESS = match[1];
+      log(`D-Bus started: ${match[1]}`);
+    } else {
+      throw new Error("dbus-launch output not parseable");
+    }
+  } catch (e) {
+    throw new Error(
+      `Failed to start D-Bus session bus: ${errorMsg(e)}. ` +
+      "Run: sudo apt install dbus-x11"
+    );
+  }
+}
+
+function ensureAtSpi2(): void {
+  // Try to start the AT-SPI2 bus launcher and registryd.
+  // These may already be running (desktop environment) — that's fine.
+  try {
+    const launcher = spawnSync("which", ["/usr/libexec/at-spi-bus-launcher"], { stdio: "pipe" });
+    const launcherPath = launcher.status === 0
+      ? "/usr/libexec/at-spi-bus-launcher"
+      : "/usr/lib/at-spi2-core/at-spi-bus-launcher"; // alternate path on some distros
+
+    atSpiProc = spawn(launcherPath, [], { stdio: "ignore", detached: true, env: process.env });
+    atSpiProc.unref();
+    log("AT-SPI2 bus launcher started");
+  } catch (e) {
+    log(`AT-SPI2 bus launcher: ${errorMsg(e)} (may already be running)`, false);
+  }
+
+  try {
+    const registryd = spawnSync("which", ["/usr/libexec/at-spi2-registryd"], { stdio: "pipe" });
+    const registrydPath = registryd.status === 0
+      ? "/usr/libexec/at-spi2-registryd"
+      : "/usr/lib/at-spi2-core/at-spi2-registryd";
+
+    atSpiRegistryProc = spawn(registrydPath, [], { stdio: "ignore", detached: true, env: process.env });
+    atSpiRegistryProc.unref();
+    log("AT-SPI2 registryd started");
+  } catch (e) {
+    log(`AT-SPI2 registryd: ${errorMsg(e)} (may already be running)`, false);
+  }
+}
+
+/**
+ * Bootstrap the full headless environment if needed.
+ * Called automatically by initialize() before launching the browser.
+ */
+function ensureHeadlessEnv(): void {
+  ensureDisplay();
+  ensureDbus();
+  ensureAtSpi2();
+}
+
+// ---------------------------------------------------------------------------
 // Orca process management
 // ---------------------------------------------------------------------------
 
@@ -392,14 +494,21 @@ async function focusBrowser() {
 export async function initialize(url: string | null, cdpPort: number) {
   state.cdpPort = cdpPort;
 
-  // Check prerequisites
+  // Bootstrap xvfb + dbus + AT-SPI2 if running in a headless environment
+  ensureHeadlessEnv();
+
+  // Check prerequisites (after ensureDisplay so DISPLAY is set for xdotool)
   if (!detectKeyTool()) {
     throw new Error("xdotool or ydotool required. Install: sudo apt install xdotool");
   }
 
   state.browser = await chromium.launch({
     headless: false,
-    args: [`--remote-debugging-port=${cdpPort}`],
+    args: [
+      `--remote-debugging-port=${cdpPort}`,
+      // Enable accessibility in headless-like environments
+      "--force-renderer-accessibility",
+    ],
   });
   const ctx = await state.browser.newContext();
   state.page = await ctx.newPage();
@@ -476,6 +585,16 @@ export async function cleanup() {
   state.orcaActive = false;
   state.page = null;
   state.currentUrl = null;
+
+  // Clean up headless environment processes we started
+  for (const proc of [atSpiRegistryProc, atSpiProc, xvfbProc]) {
+    if (proc?.pid) {
+      try { process.kill(proc.pid); } catch {}
+    }
+  }
+  atSpiRegistryProc = null;
+  atSpiProc = null;
+  xvfbProc = null;
 }
 
 /** Read the current focused item via AT-SPI2. */

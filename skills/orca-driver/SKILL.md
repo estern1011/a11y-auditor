@@ -12,8 +12,18 @@ All commands run from the `a11y-auditor` project directory.
 
 ## Prerequisites
 
-Linux only (GNOME/GTK desktop with AT-SPI2). Before first use:
+Linux (desktop or headless — Codespaces, Docker, CI all work). Before first use:
 
+### Quick setup (headless/remote — Codespaces, Docker, CI)
+```bash
+sudo bash orca-setup.sh              # install all system deps
+bash orca-setup.sh check             # verify everything is ready
+bun install && bunx playwright install chromium
+```
+
+The driver auto-detects headless environments and starts Xvfb + D-Bus + AT-SPI2 automatically — no manual setup needed after installing packages.
+
+### Manual setup (desktop)
 1. Install Orca: `sudo apt install orca`
 2. Install AT-SPI2 Python bindings: `sudo apt install python3-gi gir1.2-atspi-2.0`
 3. Install keyboard tool: `sudo apt install xdotool` (X11) or `sudo apt install ydotool` (Wayland)
@@ -206,6 +216,21 @@ The driver starts Orca, launches a Chromium browser via Playwright, then uses xd
 | Default HTTP port | 7483 | 7484 |
 | Default CDP port | 9222 | 9223 |
 
+## Headless / Remote Environments
+
+The driver auto-bootstraps in headless environments (Codespaces, Docker, CI):
+
+1. **No DISPLAY?** → Starts Xvfb (virtual X11 framebuffer) automatically
+2. **No D-Bus?** → Runs `dbus-launch` automatically
+3. **No AT-SPI2?** → Starts `at-spi-bus-launcher` + `at-spi2-registryd` automatically
+
+Just install the packages (`sudo bash orca-setup.sh`) and run normally:
+```bash
+bun orca-driver.ts start https://example.com   # works in Codespaces
+```
+
+All child processes (Xvfb, D-Bus, AT-SPI2) are cleaned up on `stop` or `kill`.
+
 ## Troubleshooting
 
 - **Orca won't start**: Check `orca` is installed: `which orca`
@@ -213,5 +238,6 @@ The driver starts Orca, launches a Chromium browser via Playwright, then uses xd
 - **No focused element**: Run `enter` to re-focus the browser
 - **xdotool not working**: On Wayland, install `ydotool` instead
 - **Daemon won't stop**: Use `kill` to force-terminate
+- **Headless check**: Run `bash orca-setup.sh check` to verify all prerequisites
 - **Logs**: `/tmp/orca-driver.log`
 - **Help**: `bun orca-driver.ts --help`
