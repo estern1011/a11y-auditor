@@ -345,14 +345,44 @@ function ensureAtSpi2(): void {
   }
 }
 
+function ensureAudioSink(): void {
+  // Orca talks to speech-dispatcher which needs an audio backend.
+  // In containers there's no sound hardware — start PulseAudio with a null sink,
+  // or tell speech-dispatcher to use a dummy output so Orca doesn't hang.
+  try { execSync("which pulseaudio", { stdio: "pipe" }); } catch {
+    // No PulseAudio — set env to prevent hangs
+    process.env.PULSE_SERVER = "none";
+    log("No PulseAudio, set PULSE_SERVER=none");
+    return;
+  }
+
+  try {
+    // Start PulseAudio in the background with a null sink (no actual audio)
+    execSync("pulseaudio --check 2>/dev/null || pulseaudio --start --exit-idle-time=-1", { stdio: "pipe" });
+    execSync("pactl load-module module-null-sink sink_name=dummy 2>/dev/null || true", { stdio: "pipe" });
+    log("PulseAudio started with null sink");
+  } catch (e) {
+    process.env.PULSE_SERVER = "none";
+    log(`PulseAudio setup failed (${errorMsg(e)}), set PULSE_SERVER=none`);
+  }
+}
+
 /**
  * Bootstrap the full headless environment if needed.
  * Called automatically by initialize() before launching the browser.
  */
 function ensureHeadlessEnv(): void {
+  // Many Docker images set NO_AT_BRIDGE=1 to suppress a11y warnings.
+  // This disables the ATK-to-AT-SPI2 bridge entirely — must be unset.
+  if (process.env.NO_AT_BRIDGE) {
+    delete process.env.NO_AT_BRIDGE;
+    log("Unset NO_AT_BRIDGE (was blocking AT-SPI2 bridge)");
+  }
+
   ensureDisplay();
   ensureDbus();
   ensureAtSpi2();
+  ensureAudioSink();
 }
 
 // ---------------------------------------------------------------------------
@@ -496,6 +526,9 @@ export async function initialize(url: string | null, cdpPort: number) {
 
   // Bootstrap xvfb + dbus + AT-SPI2 if running in a headless environment
   ensureHeadlessEnv();
+
+  // AT-SPI2 bus starts asynchronously via D-Bus activation — give it time
+  await sleep(1000);
 
   // Check prerequisites (after ensureDisplay so DISPLAY is set for xdotool)
   if (!detectKeyTool()) {

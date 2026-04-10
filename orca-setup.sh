@@ -31,6 +31,9 @@ install_packages() {
     python3-gi \
     gir1.2-atspi-2.0 \
     libatk-adaptor \
+    espeak-ng \
+    speech-dispatcher \
+    pulseaudio \
     > /dev/null
 
   echo "==> Packages installed."
@@ -41,6 +44,12 @@ install_packages() {
 # ---------------------------------------------------------------------------
 
 start_env() {
+  # Unset NO_AT_BRIDGE — many Docker images set this, which disables AT-SPI2
+  if [ -n "${NO_AT_BRIDGE:-}" ]; then
+    echo "==> Unsetting NO_AT_BRIDGE (was blocking AT-SPI2 bridge)"
+    unset NO_AT_BRIDGE
+  fi
+
   # Start D-Bus session bus if not already running
   if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
     echo "==> Starting D-Bus session bus..."
@@ -63,12 +72,19 @@ start_env() {
     echo "==> Display already available: $DISPLAY"
   fi
 
+  # Start PulseAudio with null sink (Orca/speech-dispatcher needs an audio backend)
+  echo "==> Starting PulseAudio (null sink)..."
+  pulseaudio --check 2>/dev/null || pulseaudio --start --exit-idle-time=-1 2>/dev/null
+  pactl load-module module-null-sink sink_name=dummy 2>/dev/null || true
+  echo "    PulseAudio ready."
+
   # Start AT-SPI2 registry daemon
+  # AT-SPI2 uses its own separate bus, launched via at-spi-bus-launcher
   echo "==> Starting AT-SPI2 bus..."
   /usr/libexec/at-spi-bus-launcher &>/dev/null &
-  sleep 0.5
+  sleep 1
   /usr/libexec/at-spi2-registryd &>/dev/null &
-  sleep 0.5
+  sleep 1
   echo "    AT-SPI2 bus started."
 
   # Export for child processes
