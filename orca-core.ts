@@ -3,7 +3,8 @@
  *
  * This is the Linux counterpart to vo-core.ts. It uses:
  * - Orca screen reader (GNOME's built-in AT)
- * - AT-SPI2 via a Python helper (orca-atspi.py) to read the a11y tree
+ * - Speech capture via speech-dispatcher sd_generic module (orca-speech.ts)
+ * - AT-SPI2 via D-Bus for accessibility tree queries (orca-atspi.ts)
  * - xdotool for keyboard simulation
  * - Playwright for browser management (same as VoiceOver driver)
  *
@@ -17,12 +18,14 @@ import type { Page, Browser } from "playwright";
 import { translateError, type ErrorContext } from "./orca-errors.ts";
 import {
   type VoResponse, type VoError, type VoResult, type TranscriptEntry,
-  isVoError, parseOrcaResponse, ORCA_COMMANDS,
+  isVoError, ORCA_COMMANDS,
 } from "./orca-types.ts";
+import * as speech from "./orca-speech.ts";
+import * as atspi from "./orca-atspi.ts";
 
 // Re-export orca-types surface so consumers can import from orca-core alone
 export type { VoResponse, VoError, VoResult, TranscriptEntry } from "./vo-types.ts";
-export { isVoError, parseOrcaResponse, ORCA_COMMANDS } from "./orca-types.ts";
+export { isVoError, ORCA_COMMANDS } from "./orca-types.ts";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -41,29 +44,10 @@ export const MAX_TRANSCRIPT_ENTRIES = 10_000;
 export const MAX_REQUEST_BODY = 1_000_000;
 
 // Delays for Orca to settle after actions (ms)
-const ORCA_SETTLE_MS = 400;
-const ORCA_QUICK_SETTLE_MS = 250;
-const ORCA_PRESS_SETTLE_MS = 500;
-const ORCA_INIT_SETTLE_MS = 2000;
-
-// Path to our AT-SPI2 helper
-const ATSPI_HELPER = new URL("./orca-atspi.py", import.meta.url).pathname;
-
-// Find system python3 with GI bindings (bundled runtimes like Bun's may lack them)
-function findSystemPython(): string {
-  for (const p of ["/usr/bin/python3", "python3"]) {
-    try {
-      execSync(`${p} -c "import gi"`, { stdio: "pipe", timeout: 3000 });
-      return p;
-    } catch { /* try next */ }
-  }
-  throw new Error("python3 with PyGObject (gi) not found. Install: sudo apt install python3-gi");
-}
-let _systemPython: string | null = null;
-function systemPython(): string {
-  if (!_systemPython) _systemPython = findSystemPython();
-  return _systemPython;
-}
+const ORCA_SETTLE_MS = 1000;
+const ORCA_QUICK_SETTLE_MS = 400;
+const ORCA_PRESS_SETTLE_MS = 1000;
+const ORCA_INIT_SETTLE_MS = 3000;
 
 // Tracks child processes we started (for cleanup)
 let xvfbProc: ReturnType<typeof spawn> | null = null;
@@ -172,36 +156,39 @@ export function clearTranscript(): TranscriptEntry[] {
 }
 
 // ---------------------------------------------------------------------------
-// AT-SPI2 helpers — query the a11y tree via our Python helper
+// Speech + AT-SPI2 combined element reading
 // ---------------------------------------------------------------------------
 
-function runAtspiHelper(args: string[], timeout = 10_000): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(systemPython(), [ATSPI_HELPER, ...args]);
-    let out = "", err = "";
-    let settled = false;
-    proc.stdout.on("data", (d: Buffer) => (out += d));
-    proc.stderr.on("data", (d: Buffer) => (err += d));
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      proc.kill("SIGKILL");
-      reject(new Error("AT-SPI2 query timeout"));
-    }, timeout);
-    proc.on("close", (code: number) => {
-      clearTimeout(timer);
-      if (settled) return;
-      settled = true;
-      code === 0 ? resolve(out.trim()) : reject(new Error(err.trim() || `orca-atspi.py exit ${code}`));
-    });
-  });
-}
+/**
+ * After a keystroke, capture what Orca said and what AT-SPI2 reports
+ * as the focused element. Returns a VoResponse combining both.
+ */
+async function readCurrentElement(speechMarker: number): Promise<VoResponse> {
+  // Flush speech buffer to get any new entries
+  speech.flush();
+  const spoken = speech.spokenSince(speechMarker);
 
-async function getFocusedElement(): Promise<VoResponse> {
-  const raw = await runAtspiHelper(["focused"]);
-  const data = JSON.parse(raw);
-  if (data.error) throw new Error(data.error);
-  return parseOrcaResponse(data.spoken || "", data.name || "", data.role || "", data.state || []);
+  // Get structured element info from AT-SPI2
+  let name = "", role = "", elementState: string[] = [];
+  try {
+    const element = await atspi.getItemInfo();
+    if (element) {
+      name = element.name;
+      role = element.role;
+      elementState = element.state.filter(s =>
+        // Only include interesting states
+        ["focused", "checked", "expanded", "collapsed", "selected",
+         "required", "visited", "pressed", "has-popup"].includes(s)
+      );
+    }
+  } catch (e) {
+    log(`AT-SPI2 query: ${errorMsg(e)}`, true);
+  }
+
+  // If speech capture is empty, use AT-SPI2 name as fallback
+  const spokenText = spoken || [name, role].filter(Boolean).join(", ");
+
+  return { spoken: spokenText, name, role, state: elementState };
 }
 
 // ---------------------------------------------------------------------------
@@ -221,11 +208,9 @@ function sendKey(key: string, modifiers: string[] = []) {
   if (!keyTool) throw new Error("No keyboard tool found. Install xdotool (X11) or ydotool (Wayland).");
 
   if (keyTool === "xdotool") {
-    // xdotool uses "key" for key presses. Modifiers are joined with "+"
     const combo = [...modifiers, key].join("+");
     spawnSync("xdotool", ["key", "--clearmodifiers", combo]);
   } else {
-    // ydotool syntax
     const combo = [...modifiers, key].join("+");
     spawnSync("ydotool", ["key", combo]);
   }
@@ -244,22 +229,16 @@ const KEY_MAP: Record<string, string> = {
 };
 
 const MODIFIER_MAP: Record<string, string> = {
-  control: "ctrl",
-  ctrl: "ctrl",
-  shift: "shift",
-  alt: "alt",
-  option: "alt",  // macOS compat
-  super: "super",
-  meta: "super",
+  control: "ctrl", ctrl: "ctrl",
+  shift: "shift", alt: "alt",
+  option: "alt",    // macOS compat
+  super: "super", meta: "super",
   command: "super", // macOS compat
 };
 
 export const VALID_MODIFIERS: Record<string, string> = {
-  control: "ctrl",
-  ctrl: "ctrl",
-  shift: "shift",
-  alt: "alt",
-  super: "super",
+  control: "ctrl", ctrl: "ctrl",
+  shift: "shift", alt: "alt", super: "super",
 };
 
 function resolveKey(key: string): string {
@@ -275,10 +254,7 @@ function resolveModifiers(mods: string[]): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Headless environment bootstrap — start xvfb + dbus + AT-SPI2 if needed
-//
-// In remote environments (Codespaces, Docker, CI), there's no display or
-// accessibility bus. We detect this and start them automatically.
+// Headless environment bootstrap
 // ---------------------------------------------------------------------------
 
 function ensureDisplay(): void {
@@ -287,36 +263,27 @@ function ensureDisplay(): void {
     return;
   }
 
-  // Check for Xvfb
   try { execSync("which Xvfb", { stdio: "pipe" }); } catch {
-    throw new Error(
-      "No DISPLAY set and Xvfb not found. " +
-      "Run: sudo bash orca-setup.sh (or: sudo apt install xvfb)"
-    );
+    throw new Error("No DISPLAY set and Xvfb not found. Run: sudo bash orca-setup.sh");
   }
 
-  // Check if Xvfb is already running on :99 (e.g. from orca-setup.sh start-env)
+  // Check if Xvfb is already running on :99
   try {
     execSync("xdotool getdisplaygeometry", { stdio: "pipe", timeout: 3000, env: { ...process.env, DISPLAY: ":99" } });
     process.env.DISPLAY = ":99";
     log("Using existing Xvfb on :99");
     return;
-  } catch {
-    // :99 not available, start a new one
-  }
+  } catch {}
 
-  // Start Xvfb on :99 (deterministic, avoids orphaned displays)
-  // Remove stale lock files first
+  // Start Xvfb on :99
   try { execSync("rm -f /tmp/.X99-lock", { stdio: "pipe" }); } catch {}
 
   log("Starting Xvfb on :99...");
   xvfbProc = spawn("Xvfb", [":99", "-screen", "0", "1280x1024x24", "-ac"], {
-    stdio: "pipe",
-    detached: true,
+    stdio: "pipe", detached: true,
   });
   xvfbProc.unref();
 
-  // Verify it started — wait up to 3 seconds
   const start = Date.now();
   let displayReady = false;
   while (Date.now() - start < 3000) {
@@ -332,30 +299,21 @@ function ensureDisplay(): void {
     }
   }
 
-  if (!displayReady) {
-    throw new Error("Xvfb failed to start on :99. Check for stale /tmp/.X99-lock");
-  }
-
+  if (!displayReady) throw new Error("Xvfb failed to start on :99");
   process.env.DISPLAY = ":99";
   log(`Xvfb started on :99 (PID: ${xvfbProc.pid})`);
 }
 
 function ensureWindowManager(): void {
-  // A lightweight window manager is required in headless environments so that
-  // X11 focus works correctly. Without a WM, xdotool windowfocus fails and
-  // AT-SPI2 focus state is never set on Chrome's elements.
   try {
-    const result = spawnSync("pgrep", ["-x", "openbox"], { stdio: "pipe" });
-    if (result.status === 0) {
+    if (spawnSync("pgrep", ["-x", "openbox"], { stdio: "pipe" }).status === 0) {
       log("Window manager (openbox) already running");
       return;
     }
   } catch {}
 
-  try {
-    execSync("which openbox", { stdio: "pipe" });
-  } catch {
-    log("openbox not found — window focus may not work. Install: sudo apt install openbox", true);
+  try { execSync("which openbox", { stdio: "pipe" }); } catch {
+    log("openbox not found — window focus may not work", true);
     return;
   }
 
@@ -373,7 +331,6 @@ function ensureDbus(): void {
 
   try {
     const result = execSync("dbus-launch --sh-syntax", { encoding: "utf-8" });
-    // Parse: DBUS_SESSION_BUS_ADDRESS='unix:abstract=/tmp/...,guid=...';
     const match = result.match(/DBUS_SESSION_BUS_ADDRESS='([^']+)'/);
     if (match) {
       process.env.DBUS_SESSION_BUS_ADDRESS = match[1];
@@ -382,56 +339,42 @@ function ensureDbus(): void {
       throw new Error("dbus-launch output not parseable");
     }
   } catch (e) {
-    throw new Error(
-      `Failed to start D-Bus session bus: ${errorMsg(e)}. ` +
-      "Run: sudo apt install dbus-x11"
-    );
+    throw new Error(`Failed to start D-Bus: ${errorMsg(e)}. Run: sudo apt install dbus-x11`);
   }
 }
 
 function ensureAtSpi2(): void {
-  // Try to start the AT-SPI2 bus launcher and registryd.
-  // These may already be running (desktop environment) — that's fine.
   try {
-    const launcher = spawnSync("which", ["/usr/libexec/at-spi-bus-launcher"], { stdio: "pipe" });
-    const launcherPath = launcher.status === 0
+    const launcherPath = spawnSync("which", ["/usr/libexec/at-spi-bus-launcher"], { stdio: "pipe" }).status === 0
       ? "/usr/libexec/at-spi-bus-launcher"
-      : "/usr/lib/at-spi2-core/at-spi-bus-launcher"; // alternate path on some distros
-
+      : "/usr/lib/at-spi2-core/at-spi-bus-launcher";
     atSpiProc = spawn(launcherPath, [], { stdio: "ignore", detached: true, env: process.env });
     atSpiProc.unref();
     log("AT-SPI2 bus launcher started");
   } catch (e) {
-    log(`AT-SPI2 bus launcher: ${errorMsg(e)} (may already be running)`, false);
+    log(`AT-SPI2 bus launcher: ${errorMsg(e)} (may already be running)`);
   }
 
   try {
-    const registryd = spawnSync("which", ["/usr/libexec/at-spi2-registryd"], { stdio: "pipe" });
-    const registrydPath = registryd.status === 0
+    const registrydPath = spawnSync("which", ["/usr/libexec/at-spi2-registryd"], { stdio: "pipe" }).status === 0
       ? "/usr/libexec/at-spi2-registryd"
       : "/usr/lib/at-spi2-core/at-spi2-registryd";
-
     atSpiRegistryProc = spawn(registrydPath, [], { stdio: "ignore", detached: true, env: process.env });
     atSpiRegistryProc.unref();
     log("AT-SPI2 registryd started");
   } catch (e) {
-    log(`AT-SPI2 registryd: ${errorMsg(e)} (may already be running)`, false);
+    log(`AT-SPI2 registryd: ${errorMsg(e)} (may already be running)`);
   }
 }
 
 function ensureAudioSink(): void {
-  // Orca talks to speech-dispatcher which needs an audio backend.
-  // In containers there's no sound hardware — start PulseAudio with a null sink,
-  // or tell speech-dispatcher to use a dummy output so Orca doesn't hang.
   try { execSync("which pulseaudio", { stdio: "pipe" }); } catch {
-    // No PulseAudio — set env to prevent hangs
     process.env.PULSE_SERVER = "none";
     log("No PulseAudio, set PULSE_SERVER=none");
     return;
   }
 
   try {
-    // Start PulseAudio in the background with a null sink (no actual audio)
     execSync("pulseaudio --check 2>/dev/null || pulseaudio --start --exit-idle-time=-1", { stdio: "pipe" });
     execSync("pactl load-module module-null-sink sink_name=dummy 2>/dev/null || true", { stdio: "pipe" });
     log("PulseAudio started with null sink");
@@ -441,20 +384,12 @@ function ensureAudioSink(): void {
   }
 }
 
-/**
- * Bootstrap the full headless environment if needed.
- * Called automatically by initialize() before launching the browser.
- */
 function ensureHeadlessEnv(): void {
-  // Many Docker images set NO_AT_BRIDGE=1 to suppress a11y warnings.
-  // This disables the ATK-to-AT-SPI2 bridge entirely — must be unset.
   if (process.env.NO_AT_BRIDGE) {
     delete process.env.NO_AT_BRIDGE;
     log("Unset NO_AT_BRIDGE (was blocking AT-SPI2 bridge)");
   }
 
-  // Ensure the ATK-to-AT-SPI2 bridge is loaded by GTK applications (Chrome).
-  // Without this, Chrome won't register with AT-SPI2 and Orca can't see it.
   if (!process.env.GTK_MODULES?.includes("atk-bridge")) {
     process.env.GTK_MODULES = process.env.GTK_MODULES
       ? `${process.env.GTK_MODULES}:gail:atk-bridge`
@@ -474,23 +409,16 @@ function ensureHeadlessEnv(): void {
 // ---------------------------------------------------------------------------
 
 function isOrcaRunning(): boolean {
-  try {
-    const result = spawnSync("pgrep", ["-x", "orca"]);
-    return result.status === 0;
-  } catch {
-    return false;
-  }
+  try { return spawnSync("pgrep", ["-x", "orca"]).status === 0; } catch { return false; }
 }
 
 function startOrca(): boolean {
   if (isOrcaRunning()) {
     log("Orca already running");
-    return false; // we didn't start it
+    return false;
   }
-  // Start Orca in the background
   const child = spawn("orca", [], {
-    detached: true,
-    stdio: "ignore",
+    detached: true, stdio: "ignore",
     env: { ...process.env },
   });
   child.unref();
@@ -499,22 +427,19 @@ function startOrca(): boolean {
 }
 
 function stopOrca() {
-  try {
-    spawnSync("pkill", ["-x", "orca"]);
-    log("Stopped Orca");
-  } catch (e) {
-    log(`Failed to stop Orca: ${errorMsg(e)}`, true);
-  }
+  try { spawnSync("pkill", ["-x", "orca"]); log("Stopped Orca"); }
+  catch (e) { log(`Failed to stop Orca: ${errorMsg(e)}`, true); }
 }
 
 // ---------------------------------------------------------------------------
-// Orca operations — send keys then read AT-SPI2
+// Orca operations — send keys, capture speech, read AT-SPI2
 // ---------------------------------------------------------------------------
 
 async function orcaAction(keyName: string, modifiers: string[] = []): Promise<TranscriptEntry> {
+  const marker = speech.mark();
   sendKey(resolveKey(keyName), resolveModifiers(modifiers));
   await sleep(ORCA_SETTLE_MS);
-  const element = await getFocusedElement();
+  const element = await readCurrentElement(marker);
   return recordTranscript(element);
 }
 
@@ -525,38 +450,22 @@ function lockedOrcaAction(keyName: string, modifiers: string[] = []): Promise<Vo
   });
 }
 
-/**
- * Move to next item. In Orca browse mode, Down arrow moves to the next element.
- */
 export function orcaNext(): Promise<VoResult> { return lockedOrcaAction("Down"); }
-
-/**
- * Move to previous item. In Orca browse mode, Up arrow moves to the previous element.
- */
 export function orcaPrevious(): Promise<VoResult> { return lockedOrcaAction("Up"); }
-
-/**
- * Activate current item (press Enter).
- */
 export function orcaAct(): Promise<VoResult> { return lockedOrcaAction("Return"); }
 
-/**
- * Execute an Orca browse-mode command by name.
- * Maps command names to keyboard shortcuts.
- */
 export async function orcaPerform(commandName: string): Promise<VoResult> {
   return withLock(async () => {
     const entry = ORCA_COMMANDS[commandName];
     const ctx: ErrorContext = { command: commandName };
 
-    if (!entry) {
-      return translateError(`Unknown command: ${commandName}`, ctx);
-    }
+    if (!entry) return translateError(`Unknown command: ${commandName}`, ctx);
 
     try {
+      const marker = speech.mark();
       sendKey(resolveKey(entry.key), resolveModifiers(entry.modifiers || []));
       await sleep(entry.settle || ORCA_SETTLE_MS);
-      const element = await getFocusedElement();
+      const element = await readCurrentElement(marker);
       return recordTranscript(element);
     } catch (e) {
       return translateError(e, ctx);
@@ -564,9 +473,6 @@ export async function orcaPerform(commandName: string): Promise<VoResult> {
   });
 }
 
-/**
- * Send a raw keystroke.
- */
 export async function orcaPress(key: string, modifiers: string[] = []): Promise<VoResult> {
   return withLock(async () => {
     const unknown = modifiers.filter((m) => !MODIFIER_MAP[m.toLowerCase()]);
@@ -575,9 +481,10 @@ export async function orcaPress(key: string, modifiers: string[] = []): Promise<
     }
 
     try {
+      const marker = speech.mark();
       sendKey(resolveKey(key), resolveModifiers(modifiers));
       await sleep(ORCA_PRESS_SETTLE_MS);
-      const element = await getFocusedElement();
+      const element = await readCurrentElement(marker);
       return recordTranscript(element);
     } catch (e) {
       return translateError(e, { key });
@@ -591,9 +498,6 @@ export async function orcaPress(key: string, modifiers: string[] = []): Promise<
 
 async function focusBrowser() {
   try {
-    // Use xdotool to find and focus the browser window.
-    // Use windowfocus (direct X11 focus) rather than windowactivate (needs a WM).
-    // Search broadly — Playwright names the window "Google Chrome for Testing" or "Chromium".
     const searchArgs = state.browserPid
       ? ["search", "--pid", state.browserPid.toString()]
       : ["search", "--name", "Chrome"];
@@ -601,7 +505,6 @@ async function focusBrowser() {
     const windowId = (result.stdout || "").trim().split("\n")[0];
     if (windowId) {
       spawnSync("xdotool", ["windowfocus", "--sync", windowId], { timeout: 5000 });
-      // Also send a Tab keypress to push focus into the page content
       await sleep(ORCA_QUICK_SETTLE_MS);
       spawnSync("xdotool", ["key", "Tab"], { timeout: 3000 });
     }
@@ -616,13 +519,16 @@ async function focusBrowser() {
 export async function initialize(url: string | null, cdpPort: number) {
   state.cdpPort = cdpPort;
 
-  // Bootstrap xvfb + dbus + AT-SPI2 if running in a headless environment
+  // Bootstrap headless environment
   ensureHeadlessEnv();
 
-  // AT-SPI2 bus starts asynchronously via D-Bus activation — give it time
+  // Configure speech capture BEFORE Orca starts
+  // (Orca auto-starts speech-dispatcher which will pick up our config)
+  speech.ensureSpeechCapture(log);
+
+  // AT-SPI2 bus starts asynchronously — give it time
   await sleep(1000);
 
-  // Check prerequisites (after ensureDisplay so DISPLAY is set for xdotool)
   if (!detectKeyTool()) {
     throw new Error("xdotool or ydotool required. Install: sudo apt install xdotool");
   }
@@ -631,14 +537,12 @@ export async function initialize(url: string | null, cdpPort: number) {
     headless: false,
     args: [
       `--remote-debugging-port=${cdpPort}`,
-      // Enable accessibility in headless-like environments
       "--force-renderer-accessibility",
     ],
   });
   const ctx = await state.browser.newContext();
   state.page = await ctx.newPage();
 
-  // Track browser PID for window focusing
   try {
     const proc = (state.browser as any)?.process?.();
     if (proc?.pid) state.browserPid = proc.pid;
@@ -649,12 +553,11 @@ export async function initialize(url: string | null, cdpPort: number) {
     state.currentUrl = url;
   }
 
-  // Start Orca
+  // Start Orca (after speech-dispatcher config is in place)
   state.weStartedOrca = startOrca();
   state.orcaActive = isOrcaRunning();
 
   if (!state.orcaActive) {
-    // Give it a moment and check again
     await sleep(1000);
     state.orcaActive = isOrcaRunning();
   }
@@ -668,11 +571,8 @@ export async function initialize(url: string | null, cdpPort: number) {
 
   log("Orca active");
 
-  // Persist state for kill command
   try {
-    writeFileSync(ORCA_STATE_FILE, JSON.stringify({
-      weStartedOrca: state.weStartedOrca,
-    }));
+    writeFileSync(ORCA_STATE_FILE, JSON.stringify({ weStartedOrca: state.weStartedOrca }));
   } catch {}
 
   await sleep(ORCA_INIT_SETTLE_MS);
@@ -684,11 +584,12 @@ export async function navigate(url: string): Promise<VoResult> {
   return withLock(async () => {
     try {
       if (!state.page) return translateError("No page");
+      const marker = speech.mark();
       await state.page.goto(url, { waitUntil: "load" });
       state.currentUrl = url;
       await focusBrowser();
       await sleep(ORCA_SETTLE_MS);
-      const element = await getFocusedElement();
+      const element = await readCurrentElement(marker);
       return recordTranscript(element);
     } catch (e) {
       return translateError(e, { url });
@@ -700,52 +601,51 @@ export async function cleanup() {
   shuttingDown = true;
   await operationLock;
 
+  // Stop speech capture
+  speech.stopWatching();
+
+  // Disconnect AT-SPI2 D-Bus
+  atspi.disconnect();
+
   try {
     if (state.browser) { await state.browser.close(); state.browser = null; }
   } catch (e) { log(`browser close: ${errorMsg(e)}`, true); }
 
-  if (state.orcaActive && state.weStartedOrca) {
-    stopOrca();
-  }
+  if (state.orcaActive && state.weStartedOrca) stopOrca();
   state.orcaActive = false;
   state.page = null;
   state.currentUrl = null;
 
-  // Clean up headless environment processes we started
   for (const proc of [atSpiRegistryProc, atSpiProc, xvfbProc]) {
-    if (proc?.pid) {
-      try { process.kill(proc.pid); } catch {}
-    }
+    if (proc?.pid) { try { process.kill(proc.pid); } catch {} }
   }
   atSpiRegistryProc = null;
   atSpiProc = null;
   xvfbProc = null;
 }
 
-/** Read the current focused item via AT-SPI2. */
 export async function getItemText(): Promise<VoResult> {
   return withLock(async () => {
     try {
-      return await getFocusedElement();
+      const marker = speech.mark();
+      const element = await readCurrentElement(marker);
+      return element;
     } catch (e) {
       return translateError(e);
     }
   });
 }
 
-/**
- * Enter web content — focus the browser and click into the page.
- * On Linux, Orca auto-enters browse mode when a web page is focused.
- */
 export async function orcaEnter(): Promise<VoResult> {
   return withLock(async () => {
     try {
+      const marker = speech.mark();
       await focusBrowser();
       if (state.page) {
         await state.page.click("body", { force: true });
         await sleep(ORCA_SETTLE_MS);
       }
-      const element = await getFocusedElement();
+      const element = await readCurrentElement(marker);
       return recordTranscript(element);
     } catch (e) {
       return translateError(e);

@@ -28,8 +28,6 @@ install_packages() {
     xdotool \
     at-spi2-core \
     dbus-x11 \
-    python3-gi \
-    gir1.2-atspi-2.0 \
     libatk-adaptor \
     espeak-ng \
     speech-dispatcher \
@@ -110,7 +108,7 @@ check() {
   echo ""
 
   # Check commands
-  for cmd in orca xvfb-run xdotool python3 dbus-launch; do
+  for cmd in orca xvfb-run xdotool openbox dbus-launch; do
     if command -v "$cmd" &>/dev/null; then
       echo "  [OK] $cmd: $(command -v "$cmd")"
     else
@@ -118,14 +116,6 @@ check() {
       ok=false
     fi
   done
-
-  # Check Python AT-SPI2 bindings
-  if python3 -c "import gi; gi.require_version('Atspi', '2.0'); from gi.repository import Atspi" 2>/dev/null; then
-    echo "  [OK] python3-gi + Atspi bindings"
-  else
-    echo "  [MISSING] python3-gi or gir1.2-atspi-2.0"
-    ok=false
-  fi
 
   # Check D-Bus
   if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
