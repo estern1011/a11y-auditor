@@ -129,6 +129,80 @@ export function disconnect(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Keyboard event injection via AT-SPI2
+// ---------------------------------------------------------------------------
+
+// AT-SPI2 KeySynthType enum
+const KEY_PRESSRELEASE = 0;
+const KEY_SYM = 2;
+
+// X11 keysym values for common keys
+const KEYSYM_MAP: Record<string, number> = {
+  Return: 0xff0d, Enter: 0xff0d,
+  space: 0x0020, Escape: 0xff1b, Tab: 0xff09,
+  Left: 0xff51, Right: 0xff53, Down: 0xff54, Up: 0xff52,
+  Delete: 0xffff, BackSpace: 0xff08,
+  Home: 0xff50, End: 0xff57,
+  Prior: 0xff55, Next: 0xff56, // PageUp, PageDown
+  F1: 0xffbe, F2: 0xffbf, F3: 0xffc0, F4: 0xffc1,
+  F5: 0xffc2, F6: 0xffc3, F7: 0xffc4, F8: 0xffc5,
+  F9: 0xffc6, F10: 0xffc7, F11: 0xffc8, F12: 0xffc9,
+  shift: 0xffe1, ctrl: 0xffe3, alt: 0xffe9, super: 0xffeb,
+};
+
+/**
+ * Send a keyboard event through AT-SPI2's DeviceEventController.
+ * Unlike xdotool (which uses XTEST), this goes through the AT-SPI2
+ * D-Bus pipeline, so Orca actually sees and responds to the keystroke.
+ */
+export async function generateKeyboardEvent(key: string, modifiers: string[] = []): Promise<void> {
+  const bus = await getConnection();
+  const REGISTRY = "org.a11y.atspi.Registry";
+  const DEC_PATH = "/org/a11y/atspi/registry/deviceeventcontroller";
+
+  // Actual D-Bus signature: GenerateKeyboardEvent(keycode: int, keystring: string, type: uint)
+  // type: 0=KEY_PRESS, 1=KEY_RELEASE, 2=KEY_PRESSRELEASE, 3=KEY_SYM
+
+  // For single printable characters (like 'h' for heading quick-nav),
+  // use the character's Unicode code point as the keysym
+  let keysym = KEYSYM_MAP[key];
+  if (keysym === undefined && key.length === 1) {
+    keysym = key.charCodeAt(0);
+  }
+  if (keysym === undefined) {
+    throw new Error(`Unknown key: ${key}. Not in keysym map.`);
+  }
+
+  // Press modifiers first (KEY_PRESS = 0)
+  for (const mod of modifiers) {
+    const modSym = KEYSYM_MAP[mod];
+    if (modSym) {
+      await callMethod(bus, REGISTRY, DEC_PATH,
+        "org.a11y.atspi.DeviceEventController", "GenerateKeyboardEvent",
+        "isu", [modSym, "", 0]
+      ).catch(() => {});
+    }
+  }
+
+  // Send the key press+release (KEY_PRESSRELEASE = 2)
+  await callMethod(bus, REGISTRY, DEC_PATH,
+    "org.a11y.atspi.DeviceEventController", "GenerateKeyboardEvent",
+    "isu", [keysym, "", 2]
+  );
+
+  // Release modifiers in reverse (KEY_RELEASE = 1)
+  for (const mod of [...modifiers].reverse()) {
+    const modSym = KEYSYM_MAP[mod];
+    if (modSym) {
+      await callMethod(bus, REGISTRY, DEC_PATH,
+        "org.a11y.atspi.DeviceEventController", "GenerateKeyboardEvent",
+        "isu", [modSym, "", 1]
+      ).catch(() => {});
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // D-Bus helpers
 // ---------------------------------------------------------------------------
 

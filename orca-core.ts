@@ -191,29 +191,23 @@ async function readCurrentElement(speechMarker: number): Promise<VoResponse> {
   return { spoken: spokenText, name, role, state: elementState };
 }
 
-// ---------------------------------------------------------------------------
-// Keyboard simulation via xdotool
-// ---------------------------------------------------------------------------
-
 function detectKeyTool(): "xdotool" | "ydotool" | null {
   try { execSync("which xdotool", { stdio: "pipe" }); return "xdotool"; } catch {}
   try { execSync("which ydotool", { stdio: "pipe" }); return "ydotool"; } catch {}
   return null;
 }
 
-let keyTool: "xdotool" | "ydotool" | null = null;
+// ---------------------------------------------------------------------------
+// Keyboard simulation via AT-SPI2 D-Bus
+//
+// We inject keys through AT-SPI2's DeviceEventController, NOT through
+// xdotool/XTEST. This is critical because Orca registers its keyboard
+// listener via AT-SPI2 D-Bus — XTEST events bypass that pipeline entirely,
+// so Orca never sees xdotool keystrokes.
+// ---------------------------------------------------------------------------
 
-function sendKey(key: string, modifiers: string[] = []) {
-  if (!keyTool) keyTool = detectKeyTool();
-  if (!keyTool) throw new Error("No keyboard tool found. Install xdotool (X11) or ydotool (Wayland).");
-
-  if (keyTool === "xdotool") {
-    const combo = [...modifiers, key].join("+");
-    spawnSync("xdotool", ["key", "--clearmodifiers", combo]);
-  } else {
-    const combo = [...modifiers, key].join("+");
-    spawnSync("ydotool", ["key", combo]);
-  }
+async function sendKey(key: string, modifiers: string[] = []) {
+  await atspi.generateKeyboardEvent(key, modifiers);
 }
 
 // xdotool key name mapping
@@ -437,7 +431,7 @@ function stopOrca() {
 
 async function orcaAction(keyName: string, modifiers: string[] = []): Promise<TranscriptEntry> {
   const marker = speech.mark();
-  sendKey(resolveKey(keyName), resolveModifiers(modifiers));
+  await sendKey(resolveKey(keyName), resolveModifiers(modifiers));
   await sleep(ORCA_SETTLE_MS);
   const element = await readCurrentElement(marker);
   return recordTranscript(element);
@@ -463,7 +457,7 @@ export async function orcaPerform(commandName: string): Promise<VoResult> {
 
     try {
       const marker = speech.mark();
-      sendKey(resolveKey(entry.key), resolveModifiers(entry.modifiers || []));
+      await sendKey(resolveKey(entry.key), resolveModifiers(entry.modifiers || []));
       await sleep(entry.settle || ORCA_SETTLE_MS);
       const element = await readCurrentElement(marker);
       return recordTranscript(element);
@@ -482,7 +476,7 @@ export async function orcaPress(key: string, modifiers: string[] = []): Promise<
 
     try {
       const marker = speech.mark();
-      sendKey(resolveKey(key), resolveModifiers(modifiers));
+      await sendKey(resolveKey(key), resolveModifiers(modifiers));
       await sleep(ORCA_PRESS_SETTLE_MS);
       const element = await readCurrentElement(marker);
       return recordTranscript(element);
@@ -529,8 +523,9 @@ export async function initialize(url: string | null, cdpPort: number) {
   // AT-SPI2 bus starts asynchronously — give it time
   await sleep(1000);
 
+  // xdotool is still used for window focus management (focusBrowser)
   if (!detectKeyTool()) {
-    throw new Error("xdotool or ydotool required. Install: sudo apt install xdotool");
+    log("xdotool not found — window focusing may not work. Install: sudo apt install xdotool", true);
   }
 
   state.browser = await chromium.launch({
