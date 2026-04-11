@@ -12,23 +12,15 @@ All commands run from the `a11y-auditor` project directory.
 
 ## Prerequisites
 
-Linux (desktop or headless — Codespaces, Docker, CI all work). Before first use:
+Ubuntu/Debian Linux (desktop or virtual — Codespaces, Docker, sprites.dev all work). Before first use:
 
-### Quick setup (headless/remote — Codespaces, Docker, CI)
 ```bash
 sudo bash orca-setup.sh              # install all system deps
 bash orca-setup.sh check             # verify everything is ready
 bun install && bunx playwright install chromium
 ```
 
-The driver auto-detects headless environments and starts Xvfb + D-Bus + AT-SPI2 automatically — no manual setup needed after installing packages.
-
-### Manual setup (desktop)
-1. Install Orca: `sudo apt install orca`
-2. Install AT-SPI2 Python bindings: `sudo apt install python3-gi gir1.2-atspi-2.0`
-3. Install keyboard tool: `sudo apt install xdotool` (X11) or `sudo apt install ydotool` (Wayland)
-4. Ensure AT-SPI2 bus is running: `systemctl --user start at-spi-dbus-bus`
-5. Install deps: `bun install && bunx playwright install chromium`
+The driver auto-detects virtual desktop environments and starts Xvfb + openbox + D-Bus + AT-SPI2 automatically.
 
 ## Session Lifecycle
 
@@ -41,7 +33,7 @@ bun orca-driver.ts stop                  # graceful shutdown
 bun orca-driver.ts kill                  # force kill (use if stop hangs)
 ```
 
-`start` automatically focuses the browser for Orca. If Orca loses focus, use `enter` to re-focus:
+`start` automatically focuses the browser and enters browse mode. If Orca loses focus, use `enter` to re-focus:
 
 ```bash
 bun orca-driver.ts enter                 # re-focus browser for Orca
@@ -129,11 +121,6 @@ bun orca-driver.ts perform GO_TO_BEGINNING             # Ctrl+Home
 bun orca-driver.ts perform GO_TO_END                   # Ctrl+End
 ```
 
-### Mode Switching
-```bash
-bun orca-driver.ts perform TOGGLE_BROWSE_MODE          # Insert+A
-```
-
 ### Full command list
 ```bash
 bun orca-driver.ts commands              # list all
@@ -143,7 +130,7 @@ bun orca-driver.ts commands heading      # filter
 ## Querying State
 
 ```bash
-bun orca-driver.ts item-text                      # current focused item (via AT-SPI2)
+bun orca-driver.ts item-text                      # current focused item
 bun orca-driver.ts transcript                     # full session transcript
 bun orca-driver.ts transcript --since 42          # entries after index 42
 bun orca-driver.ts transcript --clear             # clear and return
@@ -155,16 +142,18 @@ Add `--json` to any command for structured output:
 
 ```bash
 bun orca-driver.ts next --json
-# {"spoken":"Example Domain, heading","name":"Example Domain","role":"heading","state":[],"index":0}
+# {"spoken":"Introduction heading 2","name":"Introduction","role":"heading","state":["focused"],"index":5}
 ```
 
 ## Response Format
 
 Every navigation command returns:
-- **spoken** — the text Orca would announce (constructed from AT-SPI2 properties)
-- **name** — the element's accessible name
-- **role** — the element's role (heading, link, button, etc.)
-- **state** — array of states (checked, expanded, etc.)
+- **spoken** — what Orca announced (raw screen reader output)
+- **name** — the element's accessible name (from AT-SPI2)
+- **role** — the element's role (from AT-SPI2)
+- **state** — interesting states (focused, checked, expanded, etc.)
+
+The `spoken` field is Orca's actual speech output — it reflects what a real screen reader user would hear. The agent should interpret this directly rather than relying only on the structured fields.
 
 ## WCAG 2.2 AA Audit Methodology
 
@@ -197,13 +186,12 @@ Every navigation command returns:
 
 ## Architecture
 
-This driver uses three Linux components:
+The driver runs Orca on a virtual Linux desktop (Xvfb + openbox) and captures its output:
 
-1. **Orca** — GNOME's screen reader, manages browse mode and speech
-2. **AT-SPI2** — Linux accessibility API, queried via `orca-atspi.py` Python helper
-3. **xdotool/ydotool** — Keyboard simulation (X11/Wayland)
-
-The driver starts Orca, launches a Chromium browser via Playwright, then uses xdotool to send keystrokes (which Orca intercepts in browse mode) and AT-SPI2 to read what element is focused after each action.
+1. **Orca** — GNOME's screen reader. Manages browse mode, structural navigation, speech.
+2. **AT-SPI2 D-Bus** — Queries the accessibility tree and injects keyboard events through the `DeviceEventController`. Keys go through the same AT-SPI2 pipeline that physical keyboard events use, so Orca intercepts them properly (xdotool/XTEST bypasses this pipeline and doesn't work).
+3. **Speech capture** — `orca-customizations.py` hook that monkey-patches `SpeechServer._speak` to log all speech to a file. This captures what Orca would say aloud.
+4. **Playwright** — Browser lifecycle and axe-core audit execution.
 
 ## Differences from VoiceOver Driver
 
@@ -211,33 +199,33 @@ The driver starts Orca, launches a Chromium browser via Playwright, then uses xd
 |---------|------------------|-------------------|
 | Screen reader | VoiceOver | Orca |
 | A11y API | macOS Accessibility | AT-SPI2 via D-Bus |
-| Key simulation | AppleScript | xdotool / ydotool |
-| Browse mode | VoiceOver Quick Nav | Orca browse mode |
+| Key injection | AppleScript | AT-SPI2 GenerateKeyboardEvent |
+| Speech capture | guidepup spokenPhraseLog | orca-customizations.py hook |
+| Browse mode | VoiceOver Quick Nav | Orca structural navigation |
 | Default HTTP port | 7483 | 7484 |
 | Default CDP port | 9222 | 9223 |
 
-## Headless / Remote Environments
+## Virtual Desktop Environments
 
-The driver auto-bootstraps in headless environments (Codespaces, Docker, CI):
+The driver auto-bootstraps everything in virtual environments:
 
-1. **No DISPLAY?** → Starts Xvfb (virtual X11 framebuffer) automatically
-2. **No D-Bus?** → Runs `dbus-launch` automatically
-3. **No AT-SPI2?** → Starts `at-spi-bus-launcher` + `at-spi2-registryd` automatically
+1. **No DISPLAY?** → Starts Xvfb on :99
+2. **No window manager?** → Starts openbox (required for X11 focus)
+3. **No D-Bus?** → Runs `dbus-launch`
+4. **No AT-SPI2?** → Starts `at-spi-bus-launcher` + `at-spi2-registryd`
+5. **No audio?** → Starts PulseAudio with null sink
+6. **Chrome window?** → Launched maximized (`--start-maximized`)
 
-Just install the packages (`sudo bash orca-setup.sh`) and run normally:
 ```bash
-bun orca-driver.ts start https://example.com   # works in Codespaces
+bun orca-driver.ts start https://example.com   # works in Codespaces / sprites.dev
 ```
-
-All child processes (Xvfb, D-Bus, AT-SPI2) are cleaned up on `stop` or `kill`.
 
 ## Troubleshooting
 
 - **Orca won't start**: Check `orca` is installed: `which orca`
-- **AT-SPI2 errors**: Ensure bus is running: `systemctl --user status at-spi-dbus-bus`
+- **No speech output**: Ensure `~/.local/share/orca/orca-customizations.py` exists
 - **No focused element**: Run `enter` to re-focus the browser
-- **xdotool not working**: On Wayland, install `ydotool` instead
+- **Keys not working**: Keys are injected via AT-SPI2 D-Bus, not xdotool
 - **Daemon won't stop**: Use `kill` to force-terminate
-- **Headless check**: Run `bash orca-setup.sh check` to verify all prerequisites
+- **Setup check**: Run `bash orca-setup.sh check`
 - **Logs**: `/tmp/orca-driver.log`
-- **Help**: `bun orca-driver.ts --help`

@@ -85,8 +85,6 @@ function readNew(): void {
   try {
     const stat = statSync(SPEECH_LOG);
     if (stat.size <= filePos) return;
-
-
     const content = readFileSync(SPEECH_LOG, "utf-8");
     const newContent = content.slice(filePos);
     filePos = content.length;
@@ -163,11 +161,9 @@ def _capturing_server_speak(self, text, acss=None, **kwargs):
 sdf.SpeechServer._speak = _capturing_server_speak
 `;
 
-const ORCA_CUSTOMIZATIONS_PATH = "~/.local/share/orca/orca-customizations.py";
-
 /**
- * Set up speech-dispatcher to capture speech via our custom sd_generic module.
- * This must be called before Orca starts (Orca auto-starts speech-dispatcher).
+ * Install the Orca customization hook and start watching the speech log.
+ * Must be called before Orca starts.
  */
 export function ensureSpeechCapture(log: (msg: string) => void): void {
   // Install Orca customization that hooks into speech.speak() to capture
