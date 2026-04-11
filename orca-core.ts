@@ -16,17 +16,17 @@ import { spawn, spawnSync, execSync } from "child_process";
 import { writeFileSync, existsSync, unlinkSync } from "fs";
 import { chromium } from "playwright";
 import type { Page, Browser } from "playwright";
-import { translateError, type ErrorContext } from "./orca-errors.ts";
+import { translateError, type ErrorContext } from "./errors.ts";
 import {
   type VoResponse, type VoError, type VoResult, type TranscriptEntry,
   isVoError, ORCA_COMMANDS,
-} from "./orca-types.ts";
+} from "./types.ts";
 import * as speech from "./orca-speech.ts";
 import * as atspi from "./orca-atspi.ts";
 
-// Re-export orca-types surface so consumers can import from orca-core alone
-export type { VoResponse, VoError, VoResult, TranscriptEntry } from "./vo-types.ts";
-export { isVoError, ORCA_COMMANDS } from "./orca-types.ts";
+// Re-export types surface so consumers can import from orca-core alone
+export type { VoResponse, VoError, VoResult, TranscriptEntry } from "./types.ts";
+export { isVoError, ORCA_COMMANDS } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // Config

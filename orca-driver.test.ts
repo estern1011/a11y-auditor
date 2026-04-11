@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
-import { parseOrcaResponse, ORCA_COMMANDS } from "./orca-types.ts";
-import { translateError, type ErrorContext } from "./orca-errors.ts";
+import { parseOrcaResponse, ORCA_COMMANDS } from "./types.ts";
+import { translateError, type ErrorContext } from "./errors.ts";
 import { getFlag } from "./orca-driver.ts";
 
 // ---------------------------------------------------------------------------
@@ -130,9 +130,9 @@ describe("ORCA_COMMANDS", () => {
 
 describe("translateError", () => {
   test("translates AT-SPI2 not found", () => {
-    const r = translateError(new Error("AT-SPI2 GObject bindings not found"));
+    const r = translateError(new Error("AT-SPI2 GObject bindings not found"), {}, "linux");
     expect(r.error).toContain("AT-SPI2");
-    expect(r.suggestion).toContain("apt install");
+    expect(r.suggestion).toContain("at-spi2-core");
   });
 
   test("translates AT-SPI2 bus connection failure", () => {
@@ -154,7 +154,7 @@ describe("translateError", () => {
   });
 
   test("translates missing keyboard tool", () => {
-    const r = translateError(new Error("No keyboard tool found. Install xdotool"));
+    const r = translateError(new Error("No keyboard tool found. Install xdotool"), {}, "linux");
     expect(r.error).toContain("keyboard");
     expect(r.suggestion).toContain("xdotool");
   });

@@ -1,53 +1,37 @@
 #!/usr/bin/env bun
 /**
- * Orca screen reader driver entry point for Linux.
- *
- * Parses flags and dispatches to either the daemon (serve) or the CLI client.
- * This is the Linux counterpart to vo-driver.ts.
+ * Orca driver — backward compatibility shim.
+ * Delegates to the unified driver with Orca forced.
  */
 
-import { DEFAULT_PORT, DEFAULT_CDP_PORT, errorMsg } from "./orca-core.ts";
-import { startServer } from "./orca-server.ts";
-import { cli, USAGE } from "./orca-cli.ts";
+import { createOrcaDriver } from "./platform/orca.ts";
+import { startServer } from "./server.ts";
+import { cli, USAGE_ORCA } from "./cli.ts";
 
-// ---------------------------------------------------------------------------
-// Flag parsing
-// ---------------------------------------------------------------------------
-
-export function getFlag(args: string[], name: string, fallback: number): number {
+function getFlag(args: string[], name: string, fallback: number): number {
   const i = args.indexOf(`--${name}`);
   if (i === -1 || !args[i + 1]) return fallback;
   const val = parseInt(args[i + 1], 10);
-  if (Number.isNaN(val)) {
-    console.error(`Invalid --${name} value: ${args[i + 1]} (expected integer)`);
-    process.exit(1);
-  }
+  if (Number.isNaN(val)) { console.error(`Invalid --${name} value`); process.exit(1); }
   return val;
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
+export { getFlag };
 
 if (import.meta.main) {
+  const driver = await createOrcaDriver();
   const args = process.argv.slice(2);
-  const port = getFlag(args, "port", DEFAULT_PORT);
-  const cdpPort = getFlag(args, "cdp-port", DEFAULT_CDP_PORT);
+  const port = getFlag(args, "port", driver.defaultPort);
+  const cdpPort = getFlag(args, "cdp-port", driver.defaultCdpPort);
 
   if (args[0] === "serve") {
     const positional = args.slice(1).filter((a, i, arr) =>
       !a.startsWith("--") && !(i > 0 && arr[i - 1]?.startsWith("--"))
     );
-    startServer(port, cdpPort, positional[0] || null).catch((e) => {
-      console.error(errorMsg(e));
-      process.exit(1);
-    });
+    await startServer(driver, port, cdpPort, positional[0] || null);
   } else if (args.length === 0) {
-    console.log(USAGE);
+    console.log(USAGE_ORCA);
   } else {
-    cli(args, port, cdpPort).catch((e) => {
-      console.error(errorMsg(e));
-      process.exit(1);
-    });
+    await cli(args, driver, USAGE_ORCA);
   }
 }

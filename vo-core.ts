@@ -12,18 +12,22 @@ import { voiceOver, VoiceOverCommanderCommands } from "@guidepup/guidepup";
 import type { MacOSKeyboardCommand } from "@guidepup/guidepup";
 import { chromium } from "playwright";
 import type { Page, Browser } from "playwright";
-import { translateError, type ErrorContext } from "./vo-errors.ts";
+import { translateError, type ErrorContext } from "./errors.ts";
 import {
   type VoResponse, type VoError, type VoResult, type TranscriptEntry,
-  isVoError, parseVoResponse, COMMANDS, KEY_CODES, VALID_MODIFIERS,
-} from "./vo-types.ts";
+  isVoError, parseVoResponse, VOICEOVER_COMMANDS, KEY_CODES, VOICEOVER_MODIFIERS,
+} from "./types.ts";
 
-// Re-export vo-types.ts surface so consumers can import from vo-core alone
-export type { VoResponse, VoError, VoResult, TranscriptEntry } from "./vo-types.ts";
+// Re-export types surface so consumers can import from vo-core alone
+export type { VoResponse, VoError, VoResult, TranscriptEntry } from "./types.ts";
 export {
   isVoError, parseVoResponse, STATE_KEYWORDS, ROLE_PATTERN,
-  COMMANDS, KEY_CODES, VALID_MODIFIERS,
-} from "./vo-types.ts";
+  VOICEOVER_COMMANDS, KEY_CODES, VOICEOVER_MODIFIERS,
+} from "./types.ts";
+
+// Backward compat aliases
+export const COMMANDS = VOICEOVER_COMMANDS;
+export const VALID_MODIFIERS = VOICEOVER_MODIFIERS;
 
 // ---------------------------------------------------------------------------
 // Config
