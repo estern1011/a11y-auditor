@@ -95,23 +95,19 @@ def find_focused(node, depth=0):
         return None
     try:
         state_set = node.get_state_set()
-        focused_child = None
 
+        # Check children first (depth-first) — the focused element may be
+        # deeply nested and intermediate ancestors won't have FOCUSED state.
         count = node.get_child_count()
         for i in range(count):
             child = node.get_child_at_index(i)
             if child is None:
                 continue
-            child_states = child.get_state_set()
-            if child_states.contains(Atspi.StateType.FOCUSED):
-                # Keep searching deeper for the most specific focused element
-                deeper = find_focused(child, depth + 1)
-                focused_child = deeper if deeper else child
+            result = find_focused(child, depth + 1)
+            if result is not None:
+                return result
 
-        if focused_child:
-            return focused_child
-
-        # If this node is focused and no child is, return this node
+        # If no child is focused, check this node itself
         if state_set.contains(Atspi.StateType.FOCUSED):
             return node
 
@@ -120,12 +116,35 @@ def find_focused(node, depth=0):
         return None
 
 
+def find_active_frame(node, depth=0):
+    """Find the first ACTIVE or SHOWING frame/document (fallback for headless envs without WM)."""
+    if depth > 20 or node is None:
+        return None
+    try:
+        role = node.get_role()
+        state_set = node.get_state_set()
+        # Look for a document-web role (the page content) or an active frame
+        if role == Atspi.Role.DOCUMENT_WEB or role == Atspi.Role.DOCUMENT_FRAME:
+            return node
+        if role == Atspi.Role.FRAME and state_set.contains(Atspi.StateType.ACTIVE):
+            return node
+        count = node.get_child_count()
+        for i in range(count):
+            result = find_active_frame(node.get_child_at_index(i), depth + 1)
+            if result:
+                return result
+    except Exception:
+        pass
+    return None
+
+
 def get_focused():
     """Get the currently focused accessible element across all apps."""
     desktop = Atspi.get_desktop(0)
     if desktop is None:
         return {"error": "Cannot connect to AT-SPI2 bus. Is at-spi2-core running?"}
 
+    # First pass: look for explicitly FOCUSED element
     for i in range(desktop.get_child_count()):
         app = desktop.get_child_at_index(i)
         if app is None:
@@ -134,6 +153,19 @@ def get_focused():
         if focused is not None:
             result = format_element(focused)
             result["app"] = app.get_name() or ""
+            return result
+
+    # Fallback: in headless environments without a WM, FOCUSED state may not be set.
+    # Find the active frame or document-web element instead.
+    for i in range(desktop.get_child_count()):
+        app = desktop.get_child_at_index(i)
+        if app is None:
+            continue
+        active = find_active_frame(app)
+        if active is not None:
+            result = format_element(active)
+            result["app"] = app.get_name() or ""
+            result["fallback"] = "active_frame"
             return result
 
     return {"error": "No focused element found. Is a window focused?"}

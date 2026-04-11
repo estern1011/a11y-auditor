@@ -34,6 +34,9 @@ install_packages() {
     espeak-ng \
     speech-dispatcher \
     pulseaudio \
+    libnspr4 \
+    libnss3 \
+    openbox \
     > /dev/null
 
   echo "==> Packages installed."

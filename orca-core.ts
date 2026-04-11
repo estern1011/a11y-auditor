@@ -49,6 +49,22 @@ const ORCA_INIT_SETTLE_MS = 2000;
 // Path to our AT-SPI2 helper
 const ATSPI_HELPER = new URL("./orca-atspi.py", import.meta.url).pathname;
 
+// Find system python3 with GI bindings (bundled runtimes like Bun's may lack them)
+function findSystemPython(): string {
+  for (const p of ["/usr/bin/python3", "python3"]) {
+    try {
+      execSync(`${p} -c "import gi"`, { stdio: "pipe", timeout: 3000 });
+      return p;
+    } catch { /* try next */ }
+  }
+  throw new Error("python3 with PyGObject (gi) not found. Install: sudo apt install python3-gi");
+}
+let _systemPython: string | null = null;
+function systemPython(): string {
+  if (!_systemPython) _systemPython = findSystemPython();
+  return _systemPython;
+}
+
 // Tracks child processes we started (for cleanup)
 let xvfbProc: ReturnType<typeof spawn> | null = null;
 let atSpiProc: ReturnType<typeof spawn> | null = null;
@@ -161,7 +177,7 @@ export function clearTranscript(): TranscriptEntry[] {
 
 function runAtspiHelper(args: string[], timeout = 10_000): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("python3", [ATSPI_HELPER, ...args]);
+    const proc = spawn(systemPython(), [ATSPI_HELPER, ...args]);
     let out = "", err = "";
     let settled = false;
     proc.stdout.on("data", (d: Buffer) => (out += d));
@@ -279,16 +295,74 @@ function ensureDisplay(): void {
     );
   }
 
-  // Start Xvfb on :99
-  const display = `:${99 + Math.floor(Math.random() * 100)}`;
-  log(`Starting Xvfb on ${display}...`);
-  xvfbProc = spawn("Xvfb", [display, "-screen", "0", "1280x1024x24", "-ac"], {
-    stdio: "ignore",
+  // Check if Xvfb is already running on :99 (e.g. from orca-setup.sh start-env)
+  try {
+    execSync("xdotool getdisplaygeometry", { stdio: "pipe", timeout: 3000, env: { ...process.env, DISPLAY: ":99" } });
+    process.env.DISPLAY = ":99";
+    log("Using existing Xvfb on :99");
+    return;
+  } catch {
+    // :99 not available, start a new one
+  }
+
+  // Start Xvfb on :99 (deterministic, avoids orphaned displays)
+  // Remove stale lock files first
+  try { execSync("rm -f /tmp/.X99-lock", { stdio: "pipe" }); } catch {}
+
+  log("Starting Xvfb on :99...");
+  xvfbProc = spawn("Xvfb", [":99", "-screen", "0", "1280x1024x24", "-ac"], {
+    stdio: "pipe",
     detached: true,
   });
   xvfbProc.unref();
-  process.env.DISPLAY = display;
-  log(`Xvfb started on ${display} (PID: ${xvfbProc.pid})`);
+
+  // Verify it started — wait up to 3 seconds
+  const start = Date.now();
+  let displayReady = false;
+  while (Date.now() - start < 3000) {
+    try {
+      execSync("xdotool getdisplaygeometry", {
+        stdio: "pipe", timeout: 1000,
+        env: { ...process.env, DISPLAY: ":99" },
+      });
+      displayReady = true;
+      break;
+    } catch {
+      spawnSync("sleep", ["0.3"]);
+    }
+  }
+
+  if (!displayReady) {
+    throw new Error("Xvfb failed to start on :99. Check for stale /tmp/.X99-lock");
+  }
+
+  process.env.DISPLAY = ":99";
+  log(`Xvfb started on :99 (PID: ${xvfbProc.pid})`);
+}
+
+function ensureWindowManager(): void {
+  // A lightweight window manager is required in headless environments so that
+  // X11 focus works correctly. Without a WM, xdotool windowfocus fails and
+  // AT-SPI2 focus state is never set on Chrome's elements.
+  try {
+    const result = spawnSync("pgrep", ["-x", "openbox"], { stdio: "pipe" });
+    if (result.status === 0) {
+      log("Window manager (openbox) already running");
+      return;
+    }
+  } catch {}
+
+  try {
+    execSync("which openbox", { stdio: "pipe" });
+  } catch {
+    log("openbox not found — window focus may not work. Install: sudo apt install openbox", true);
+    return;
+  }
+
+  const wm = spawn("openbox", [], { stdio: "ignore", detached: true, env: process.env });
+  wm.unref();
+  spawnSync("sleep", ["0.5"]);
+  log("Started openbox window manager");
 }
 
 function ensureDbus(): void {
@@ -379,7 +453,17 @@ function ensureHeadlessEnv(): void {
     log("Unset NO_AT_BRIDGE (was blocking AT-SPI2 bridge)");
   }
 
+  // Ensure the ATK-to-AT-SPI2 bridge is loaded by GTK applications (Chrome).
+  // Without this, Chrome won't register with AT-SPI2 and Orca can't see it.
+  if (!process.env.GTK_MODULES?.includes("atk-bridge")) {
+    process.env.GTK_MODULES = process.env.GTK_MODULES
+      ? `${process.env.GTK_MODULES}:gail:atk-bridge`
+      : "gail:atk-bridge";
+    log("Set GTK_MODULES=gail:atk-bridge (required for AT-SPI2 bridge)");
+  }
+
   ensureDisplay();
+  ensureWindowManager();
   ensureDbus();
   ensureAtSpi2();
   ensureAudioSink();
@@ -507,11 +591,19 @@ export async function orcaPress(key: string, modifiers: string[] = []): Promise<
 
 async function focusBrowser() {
   try {
-    // Use xdotool to find and focus the browser window
-    if (state.browserPid) {
-      spawnSync("xdotool", ["search", "--pid", state.browserPid.toString(), "--name", "Chromium", "windowactivate"]);
-    } else {
-      spawnSync("xdotool", ["search", "--name", "Chromium", "windowactivate", "--sync"]);
+    // Use xdotool to find and focus the browser window.
+    // Use windowfocus (direct X11 focus) rather than windowactivate (needs a WM).
+    // Search broadly — Playwright names the window "Google Chrome for Testing" or "Chromium".
+    const searchArgs = state.browserPid
+      ? ["search", "--pid", state.browserPid.toString()]
+      : ["search", "--name", "Chrome"];
+    const result = spawnSync("xdotool", searchArgs, { encoding: "utf-8", timeout: 5000 });
+    const windowId = (result.stdout || "").trim().split("\n")[0];
+    if (windowId) {
+      spawnSync("xdotool", ["windowfocus", "--sync", windowId], { timeout: 5000 });
+      // Also send a Tab keypress to push focus into the page content
+      await sleep(ORCA_QUICK_SETTLE_MS);
+      spawnSync("xdotool", ["key", "Tab"], { timeout: 3000 });
     }
     await sleep(ORCA_QUICK_SETTLE_MS);
     if (state.page) {
