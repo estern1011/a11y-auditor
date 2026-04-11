@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 /**
- * VoiceOver driver — backward compatibility shim.
- * Delegates to the unified driver with VoiceOver forced.
+ * Orca driver — backward compatibility shim.
+ * Delegates to the unified driver with Orca forced.
  */
 
-import { createVoiceOverDriver } from "./platform/voiceover.ts";
+import { createOrcaDriver } from "./platform/orca.ts";
 import { startServer } from "./server.ts";
-import { cli, USAGE_VO } from "./cli.ts";
+import { cli, USAGE_ORCA } from "./cli.ts";
 
 function getFlag(args: string[], name: string, fallback: number): number {
   const i = args.indexOf(`--${name}`);
@@ -19,7 +19,7 @@ function getFlag(args: string[], name: string, fallback: number): number {
 export { getFlag };
 
 if (import.meta.main) {
-  const driver = await createVoiceOverDriver();
+  const driver = await createOrcaDriver();
   const args = process.argv.slice(2);
   const port = getFlag(args, "port", driver.defaultPort);
   const cdpPort = getFlag(args, "cdp-port", driver.defaultCdpPort);
@@ -30,8 +30,8 @@ if (import.meta.main) {
     );
     await startServer(driver, port, cdpPort, positional[0] || null);
   } else if (args.length === 0) {
-    console.log(USAGE_VO);
+    console.log(USAGE_ORCA);
   } else {
-    await cli(args, driver, USAGE_VO);
+    await cli(args, driver, USAGE_ORCA);
   }
 }

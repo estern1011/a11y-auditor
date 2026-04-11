@@ -16,6 +16,7 @@
   "dependencies": {
     "@axe-core/playwright": "^4.11.1",
     "@guidepup/guidepup": "^0.24.0",
+    "dbus-native": "^0.4.0",
     "playwright": "^1.40.0"
   },
   "engines": {
