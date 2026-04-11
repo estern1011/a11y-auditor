@@ -495,18 +495,23 @@ async function focusBrowser() {
     const searchArgs = state.browserPid
       ? ["search", "--pid", state.browserPid.toString()]
       : ["search", "--name", "Chrome"];
-    const result = spawnSync("xdotool", searchArgs, { encoding: "utf-8", timeout: 5000 });
+    const result = spawnSync("xdotool", searchArgs, { encoding: "utf-8", timeout: 5000, env: process.env });
     const windowId = (result.stdout || "").trim().split("\n")[0];
+    log(`xdotool search: args=${JSON.stringify(searchArgs)} windowId=${windowId} stderr=${result.stderr?.trim()}`);
     if (windowId) {
-      spawnSync("xdotool", ["windowfocus", "--sync", windowId], { timeout: 5000 });
-      await sleep(ORCA_QUICK_SETTLE_MS);
-      spawnSync("xdotool", ["key", "Tab"], { timeout: 3000 });
-    }
-    await sleep(ORCA_QUICK_SETTLE_MS);
-    if (state.page) {
-      await state.page.bringToFront();
+      spawnSync("xdotool", ["windowfocus", "--sync", windowId], { timeout: 5000, env: process.env });
       await sleep(ORCA_QUICK_SETTLE_MS);
     }
+
+    // Click in the center of the screen (the Chrome window should be maximized).
+    // xdotool click at screen coordinates triggers a real X11 click that Chrome
+    // processes as a focus event, causing Orca to detect the web document and
+    // enter browse mode. Screen is 1280x1024, click at center-bottom content area.
+    spawnSync("xdotool", ["mousemove", "640", "600", "click", "1"], { timeout: 5000, env: process.env });
+    await sleep(ORCA_SETTLE_MS);
+
+    // Clear the speech buffer so startup noise doesn't leak into navigation
+    speech.clear();
   } catch (e) { log(`focus warning: ${errorMsg(e)}`); }
 }
 
@@ -533,9 +538,11 @@ export async function initialize(url: string | null, cdpPort: number) {
     args: [
       `--remote-debugging-port=${cdpPort}`,
       "--force-renderer-accessibility",
+      "--start-maximized",
     ],
   });
-  const ctx = await state.browser.newContext();
+  // Use viewport: null to respect the window size (maximized)
+  const ctx = await state.browser.newContext({ viewport: null });
   state.page = await ctx.newPage();
 
   try {
@@ -570,8 +577,11 @@ export async function initialize(url: string | null, cdpPort: number) {
     writeFileSync(ORCA_STATE_FILE, JSON.stringify({ weStartedOrca: state.weStartedOrca }));
   } catch {}
 
-  await sleep(ORCA_INIT_SETTLE_MS);
+  // Wait for Orca to fully initialize and process the page load.
+  // Orca auto-enters browse mode when it detects a web document has focus.
+  await sleep(5000);
   await focusBrowser();
+  await sleep(ORCA_SETTLE_MS);
   log("Browser focused");
 }
 
@@ -636,10 +646,7 @@ export async function orcaEnter(): Promise<VoResult> {
     try {
       const marker = speech.mark();
       await focusBrowser();
-      if (state.page) {
-        await state.page.click("body", { force: true });
-        await sleep(ORCA_SETTLE_MS);
-      }
+      await sleep(ORCA_SETTLE_MS);
       const element = await readCurrentElement(marker);
       return recordTranscript(element);
     } catch (e) {

@@ -128,6 +128,32 @@ export function disconnect(): void {
   }
 }
 
+/**
+ * Tell Orca to enable sticky browse mode via its D-Bus service.
+ * Browse mode enables structural navigation (h=heading, k=link, etc.)
+ * and element-by-element reading with arrow keys.
+ *
+ * Must be called AFTER focus is inside a web document, otherwise
+ * Orca responds with "Not in a document."
+ */
+export async function enableBrowseMode(): Promise<void> {
+  // Orca's D-Bus service is at org.gnome.Orca.Service (not org.gnome.Orca)
+  const sessionBus = dbus.sessionBus();
+  await new Promise<void>((resolve, reject) => {
+    sessionBus.invoke({
+      destination: "org.gnome.Orca.Service",
+      path: "/org/gnome/Orca",
+      interface: "org.gnome.Orca.Service",
+      member: "ExecuteCommand",
+      signature: "sb",
+      body: ["EnableStickyBrowseMode", true],
+    }, (err: Error | null) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Keyboard event injection via AT-SPI2
 // ---------------------------------------------------------------------------
@@ -173,30 +199,35 @@ export async function generateKeyboardEvent(key: string, modifiers: string[] = [
     throw new Error(`Unknown key: ${key}. Not in keysym map.`);
   }
 
-  // Press modifiers first (KEY_PRESS = 0)
+  // For KEY_SYM (type=3): keycode=keysym_value, keystring="", type=3
+  // Based on pyatspi: generateKeyboardEvent(keysym, "", KEY_SYM)
+  // The AT-SPI2 registry internally calls XTestFakeKeyEvent with the
+  // keycode looked up from the keysym.
+
+  // Press modifiers first
   for (const mod of modifiers) {
     const modSym = KEYSYM_MAP[mod];
     if (modSym) {
       await callMethod(bus, REGISTRY, DEC_PATH,
         "org.a11y.atspi.DeviceEventController", "GenerateKeyboardEvent",
-        "isu", [modSym, "", 0]
+        "isu", [modSym, "", 0]  // KEY_PRESS
       ).catch(() => {});
     }
   }
 
-  // Send the key press+release (KEY_PRESSRELEASE = 2)
+  // Send the key via KEY_SYM
   await callMethod(bus, REGISTRY, DEC_PATH,
     "org.a11y.atspi.DeviceEventController", "GenerateKeyboardEvent",
-    "isu", [keysym, "", 2]
+    "isu", [keysym, "", 3]  // KEY_SYM: first arg is the keysym value
   );
 
-  // Release modifiers in reverse (KEY_RELEASE = 1)
+  // Release modifiers in reverse
   for (const mod of [...modifiers].reverse()) {
     const modSym = KEYSYM_MAP[mod];
     if (modSym) {
       await callMethod(bus, REGISTRY, DEC_PATH,
         "org.a11y.atspi.DeviceEventController", "GenerateKeyboardEvent",
-        "isu", [modSym, "", 1]
+        "isu", [modSym, "", 1]  // KEY_RELEASE
       ).catch(() => {});
     }
   }
