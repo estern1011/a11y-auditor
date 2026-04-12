@@ -477,7 +477,7 @@ export async function initialize(url: string | null, cdpPort: number) {
       "--start-maximized",
     ],
   });
-  const ctx = await state.browser.newContext({ viewport: null });
+  const ctx = await state.browser.newContext({ viewport: { width: 1280, height: 1024 } });
   state.page = await ctx.newPage();
 
   try {
