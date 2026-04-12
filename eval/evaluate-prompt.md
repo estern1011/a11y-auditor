@@ -8,15 +8,15 @@ results against ground truth.
 
 ### Setting up a sprite
 
-Before running any audits, create and bootstrap a sprite. Name it
-using the pattern `<run-name>-<n>`, where `<run-name>` is a short
-slug describing this eval run and `<n>` is a sequence number
-(e.g., `act-baseline-1`, `contrast-fix-1`, `v2-retest-1`). If the
-user provides a run name, use it; otherwise derive one from the
-branch name or task (e.g., branch `fix/heading-nav` → `heading-nav-1`).
+Before running any audits, create and bootstrap a sprite. The user
+must provide a **run name** — a short unique slug for this eval run
+(e.g., `baseline`, `contrast-fix`, `v2`). If they haven't provided
+one, ask for it before proceeding.
 
-The sequence number lets you spin up parallel sprites for the same
-run (`heading-nav-1`, `heading-nav-2`, etc.).
+Name sprites using the pattern `<run-name>-<n>`, where `<n>` is a
+sequence number starting at 1. This avoids collisions when multiple
+eval runs happen in parallel, and lets a single run use multiple
+sprites (`baseline-1`, `baseline-2`, etc.).
 
 Determine which branch to evaluate. If no specific branch is
 requested, use `main`.
