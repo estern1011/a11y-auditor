@@ -143,22 +143,40 @@ export function flush(): void {
 // capturing text before it goes to speech-dispatcher.
 const ORCA_CUSTOMIZATIONS = `
 import orca.speechdispatcherfactory as sdf
+import orca.speech as speech_mod
 
-# Hook SpeechServer._speak — the method that actually sends text to
-# speech-dispatcher. This is the lowest level before SSIP, capturing
-# ALL spoken text from Orca regardless of the speech path used.
-_original_server_speak = sdf.SpeechServer._speak
+# Hook both module-level speech._speak AND SpeechServer._speak.
+# Orca's structural navigation (h=heading, k=link) goes through
+# speech_mod._speak, while Tab/focus changes go through
+# SpeechServer._speak. We need both to capture all speech.
 
-def _capturing_server_speak(self, text, acss=None, **kwargs):
-    try:
-        if text and isinstance(text, str) and text.strip():
-            with open("${SPEECH_LOG}", "a") as f:
-                f.write(text.strip() + "\\n")
-    except:
-        pass
-    return _original_server_speak(self, text, acss, **kwargs)
+_log_path = "${SPEECH_LOG}"
+_seen = set()  # deduplicate within same call
 
-sdf.SpeechServer._speak = _capturing_server_speak
+def _log(text):
+    if text and isinstance(text, str) and text.strip():
+        t = text.strip()
+        if t not in _seen:
+            _seen.add(t)
+            with open(_log_path, "a") as f:
+                f.write(t + "\\n")
+
+# Hook 1: module-level _speak (catches structural navigation speech)
+_orig_mod = speech_mod._speak
+def _hook_mod(text, acss=None, interrupt=True):
+    try: _log(text)
+    except: pass
+    if interrupt: _seen.clear()
+    return _orig_mod(text, acss, interrupt)
+speech_mod._speak = _hook_mod
+
+# Hook 2: SpeechServer._speak (catches focus-change speech)
+_orig_srv = sdf.SpeechServer._speak
+def _hook_srv(self, text, acss=None, **kw):
+    try: _log(text)
+    except: pass
+    return _orig_srv(self, text, acss, **kw)
+sdf.SpeechServer._speak = _hook_srv
 `;
 
 /**
