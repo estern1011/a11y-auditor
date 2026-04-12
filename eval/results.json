@@ -3,9 +3,9 @@
   "run": "smoke-v1",
   "commit": "e755995ce85f8b9fb041892f230e1a58f9563836",
   "summary": {
-    "total": 10,
-    "truePositive": 5,
-    "trueNegative": 5,
+    "total": 26,
+    "truePositive": 13,
+    "trueNegative": 13,
     "falsePositive": 0,
     "falseNegative": 0,
     "notEvaluated": 0,
@@ -21,7 +21,15 @@
       "precision": 1.0,
       "recall": 1.0
     },
-    "1.3.3": {
+    "3.3.1": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "1.4.2": {
       "tp": 1,
       "tn": 1,
       "fp": 0,
@@ -30,6 +38,38 @@
       "recall": 1.0
     },
     "2.4.1": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "2.4.2": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "2.4.6": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "2.4.4": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "2.1.4": {
       "tp": 1,
       "tn": 1,
       "fp": 0,
@@ -52,24 +92,48 @@
       "fn": 0,
       "precision": 1.0,
       "recall": 1.0
+    },
+    "1.4.5": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "1.3.3": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "1.3.4": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
     }
   },
   "byTool": {
     "axe": {
-      "tp": 2,
-      "tn": 2,
+      "tp": 1,
+      "tn": 6,
       "fp": 0,
-      "fn": 0
+      "fn": 5
     },
     "sr": {
-      "tp": 3,
-      "tn": 3,
+      "tp": 8,
+      "tn": 9,
       "fp": 0,
-      "fn": 0
+      "fn": 1
     },
     "screenshot": {
-      "tp": 3,
-      "tn": 3,
+      "tp": 5,
+      "tn": 5,
       "fp": 0,
       "fn": 0
     }
@@ -84,7 +148,7 @@
       "actual": "pass",
       "correct": true,
       "toolsUsed": ["sr"],
-      "remarks": "Focus moved from Link 1 to Button1 to browser chrome — no keyboard trap. Tab order correct, Escape available."
+      "remarks": "Focus moved from Link 1 to Button1 to browser chrome — no keyboard trap. Tab order correct, focus escapes freely."
     },
     {
       "ruleId": "80af7b",
@@ -94,27 +158,47 @@
       "actual": "fail",
       "correct": true,
       "toolsUsed": ["sr"],
-      "remarks": "Keyboard trap detected: Tab cycles between Link 2 and Button1 indefinitely. Focus never escapes to browser chrome. Escape key also trapped."
+      "remarks": "Keyboard trap detected: Tab cycles between Link 2 and Button1 indefinitely. Focus never escapes to browser chrome."
     },
     {
-      "ruleId": "9bd38c",
-      "criterion": "1.3.3",
-      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/6edd8b8ec9bb14d8f35763e549f01cc21b3ef161.html",
+      "ruleId": "36b590",
+      "criterion": "3.3.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/36b590/e2cc934a42be5a597106214fa0fbcefd6ceac599.html",
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["screenshot"],
-      "remarks": "Instruction 'Click the button labelled howdy, on the right' uses visual location but also provides the button label — not relying solely on sensory characteristics."
+      "toolsUsed": ["sr"],
+      "remarks": "SR announced 'Age (years) spin button 0. Invalid value for age. Age must be at least 1.' — error message properly associated via aria-describedby and describes the invalid value."
     },
     {
-      "ruleId": "9bd38c",
-      "criterion": "1.3.3",
-      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/e25c4256ff639ea16f196a9b9fedcdabba540125.html",
+      "ruleId": "36b590",
+      "criterion": "3.3.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/36b590/3bb6b76d2dd823e02cace7c6be2a7ebe535d1d97.html",
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["screenshot"],
-      "remarks": "Instruction 'Find the menu on the right, to navigate' relies solely on visual location with no non-sensory alternative for identifying the navigation."
+      "toolsUsed": ["sr"],
+      "remarks": "SR announced 'Age (years) spin button 0' with no error description. Error message exists on page but is not programmatically associated with the input field."
+    },
+    {
+      "ruleId": "80f0bf",
+      "criterion": "1.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80f0bf/0d2dcde8931a9083e590034768ae2e0af747491c.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["sr"],
+      "remarks": "Audio element present with play button (not auto-playing), volume slider, mute button, and time scrubber. User has full control."
+    },
+    {
+      "ruleId": "80f0bf",
+      "criterion": "1.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80f0bf/968b12b14eb008b424f050ab74277426b2ea81bf.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["sr"],
+      "remarks": "Audio element has autoplay attribute with no controls. Audio plays automatically on page load with no mechanism to pause, stop, or control volume."
     },
     {
       "ruleId": "cf77f2",
@@ -124,7 +208,7 @@
       "actual": "pass",
       "correct": true,
       "toolsUsed": ["axe", "sr"],
-      "remarks": "axe returned bypass as incomplete, but SR confirmed navigation landmark exists — valid bypass mechanism. Landmark navigation allows skipping repeated content."
+      "remarks": "axe returned bypass as incomplete, but SR confirmed navigation landmark exists — valid bypass mechanism. FIND_NEXT_LANDMARK announced 'navigation' with list of chapters."
     },
     {
       "ruleId": "cf77f2",
@@ -135,6 +219,86 @@
       "correct": true,
       "toolsUsed": ["axe", "sr"],
       "remarks": "axe returned bypass as incomplete. SR confirmed: no skip link, no headings, no main landmark. Only a complementary landmark exists which does not serve as bypass for main content."
+    },
+    {
+      "ruleId": "c4a8a4",
+      "criterion": "2.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/c4a8a4/c19c231ab5175fb62b6a74b998aec0dd965c25c5.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["axe", "sr"],
+      "remarks": "axe found no document-title violation. SR announced 'Clementine harvesting season' — title accurately describes page content about clementine harvesting."
+    },
+    {
+      "ruleId": "c4a8a4",
+      "criterion": "2.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/c4a8a4/2c1397032aad720fe43dee2be0d326be56957320.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["axe", "sr"],
+      "remarks": "axe found no document-title violation (title exists). But SR + content comparison reveals mismatch: title says 'Apple harvesting season' while content is about clementines. Title does not identify page purpose."
+    },
+    {
+      "ruleId": "b49b2e",
+      "criterion": "2.4.6",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/25cb1d68473c174a3f3e464704de6826b7aabdd4.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["axe", "sr"],
+      "remarks": "axe found no empty-heading violation. SR announced 'Opening Hours heading 1' — heading accurately describes the section content about opening hours."
+    },
+    {
+      "ruleId": "b49b2e",
+      "criterion": "2.4.6",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/79cce8d89309bea03e122d2917d340a525db4de0.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["axe", "sr"],
+      "remarks": "axe found no empty-heading violation (heading exists). But SR + content comparison: heading says 'Weather' while content is 'We are open Monday through Friday from 10 to 16.' Heading does not describe the section."
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/c7661d61606728f898297f6e69f68af3d5b6c6d0.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["axe", "sr"],
+      "remarks": "axe found no link-name violation. SR announced 'See the description of this product. link' — link text clearly identifies its purpose."
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/b2a671d96ac510ccc6e34dd58a141d13bb196508.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["axe", "sr"],
+      "remarks": "axe found no link-name violation (link text exists). But SR announced 'More link' — ambiguous link text that does not identify the link purpose in context."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/42e3322c82511e8b5df7ced0de580da73d48cee3.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["axe", "sr"],
+      "remarks": "Single-character shortcut '+' exists, but page provides a checkbox to remap it with Ctrl modifier. SR confirmed checkbox is labeled and accessible: 'Use ctrl key together with the + key'."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/5824a1b3c92824e9ac93f1ca91e743deb6ca795e.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["axe", "sr"],
+      "remarks": "Single-character shortcut '+' is active with no mechanism to remap, disable, or restrict to focused component. Page only has a text input and label — no settings to modify the shortcut."
     },
     {
       "ruleId": "oj04fd",
@@ -154,7 +318,7 @@
       "actual": "fail",
       "correct": true,
       "toolsUsed": ["sr", "screenshot"],
-      "remarks": "SR confirmed focus on 'ACT rules' link, but screenshot shows no visible focus indicator — no outline, ring, or visual change on the focused element."
+      "remarks": "SR confirmed focus on 'ACT rules' link, but screenshot shows no visible focus indicator — no outline, border, or visual change on the focused element. CSS likely has outline:none."
     },
     {
       "ruleId": "afw4f7",
@@ -164,7 +328,7 @@
       "actual": "pass",
       "correct": true,
       "toolsUsed": ["axe", "screenshot"],
-      "remarks": "axe found no color-contrast violations. Text is #333 on #FFF (~12.6:1 ratio). Screenshot confirms dark, readable text on white background."
+      "remarks": "axe found no color-contrast violations. Text is #333 on #FFF (~12.6:1 ratio), well above 4.5:1 minimum."
     },
     {
       "ruleId": "afw4f7",
@@ -174,7 +338,67 @@
       "actual": "fail",
       "correct": true,
       "toolsUsed": ["axe", "screenshot"],
-      "remarks": "axe flagged color-contrast violation: ratio 2.32:1 (#AAA on #FFF, 16px normal weight). Needs 4.5:1 minimum. Screenshot confirms faint, hard-to-read light gray text."
+      "remarks": "axe flagged color-contrast violation: ratio 2.32:1 (#AAA on #FFF, 16px normal weight). Required minimum is 4.5:1."
+    },
+    {
+      "ruleId": "0va7u6",
+      "criterion": "1.4.5",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/6e6a506352542f40f4fe08a805ce736e89b46b06.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["screenshot"],
+      "remarks": "Screenshot shows a photograph (fireworks at Eiffel Tower) — not an image of text. Image contains no rendered text."
+    },
+    {
+      "ruleId": "0va7u6",
+      "criterion": "1.4.5",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/80ff3d6a9f2de0b2b9f179a13d91d47ce8c9ab26.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["screenshot"],
+      "remarks": "Screenshot shows text rendered as a JPG image ('The Accessibility Conformance Testing (ACT) Rules Format 1.0...'). Text should be rendered as actual HTML text, not an image."
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/6edd8b8ec9bb14d8f35763e549f01cc21b3ef161.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["screenshot"],
+      "remarks": "Instruction 'Click the button labelled howdy, on the right' uses visual location but also provides the button label — non-sensory alternative present."
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/e25c4256ff639ea16f196a9b9fedcdabba540125.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["screenshot"],
+      "remarks": "Instruction 'Find the menu on the right, to navigate' relies solely on visual location with no non-sensory alternative for identifying the navigation."
+    },
+    {
+      "ruleId": "b33eff",
+      "criterion": "1.3.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/0b392e6774d063a24241c3629113909e98c98607.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["screenshot"],
+      "remarks": "CSS has @media (orientation: portrait) with rotateZ(1turn) — a 360-degree rotation that results in no visual change. Orientation is not restricted."
+    },
+    {
+      "ruleId": "b33eff",
+      "criterion": "1.3.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/3b2f386c66ccb9c1a9a848017dab9b074afbf858.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["screenshot"],
+      "remarks": "CSS has @media (orientation: portrait) with rotate(1.5708rad) (~90 degrees), forcing landscape layout in portrait mode. Orientation is restricted via CSS transform."
     }
   ]
 }

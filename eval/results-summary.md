@@ -1,17 +1,17 @@
-# Eval Results: smoke-v1
+# Eval Results: smoke-v1 (sample test)
 
 **Date:** 2026-04-12
 **Branch:** main
 **Commit:** `e755995`
-**Test suite:** `eval/smoke-test-cases.json` (10 cases across 5 rules)
+**Test suite:** `eval/sample-test-cases.json` (26 cases across 13 rules)
 
 ## 1. Headline Metrics
 
 | Metric | Value |
 |--------|-------|
-| Total cases | 10 |
-| True Positives | 5 |
-| True Negatives | 5 |
+| Total cases | 26 |
+| True Positives | 13 |
+| True Negatives | 13 |
 | False Positives | 0 |
 | False Negatives | 0 |
 | Not Evaluated | 0 |
@@ -19,39 +19,49 @@
 | **Recall** | **1.00** |
 | **Accuracy** | **100%** |
 
-All 10 test cases classified correctly.
+All 26 test cases classified correctly.
 
 ## 2. Per-Criterion Breakdown
 
 | Criterion | Name | TP | TN | FP | FN | Precision | Recall |
 |-----------|------|----|----|----|----|-----------|--------|
 | 1.3.3 | Sensory Characteristics | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
+| 1.3.4 | Orientation | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
+| 1.4.2 | Audio Control | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
 | 1.4.3 | Contrast (Minimum) | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
+| 1.4.5 | Images of Text | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
 | 2.1.2 | No Keyboard Trap | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
+| 2.1.4 | Character Key Shortcuts | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
 | 2.4.1 | Bypass Blocks | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
+| 2.4.2 | Page Titled | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
+| 2.4.4 | Link Purpose (In Context) | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
+| 2.4.6 | Headings and Labels | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
 | 2.4.7 | Focus Visible | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
+| 3.3.1 | Error Identification | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
 
-All five criteria scored perfectly. No weak areas identified in this smoke test.
+All 13 criteria scored perfectly. The sample test covers criteria from all four WCAG principles (Perceivable, Operable, Understandable, Robust).
 
 ## 3. Per-Tool Breakdown
 
 | Tool | TP | TN | FP | FN | Cases Used |
 |------|----|----|----|----|------------|
-| axe | 2 | 2 | 0 | 0 | 4 (1.4.3, 2.4.1) |
-| sr | 3 | 3 | 0 | 0 | 6 (2.1.2, 2.4.1, 2.4.7) |
-| screenshot | 3 | 3 | 0 | 0 | 6 (1.3.3, 1.4.3, 2.4.7) |
+| axe | 1 | 6 | 0 | 5 | 12 (1.4.3, 2.4.1, 2.4.2, 2.4.4, 2.4.6, 2.1.4) |
+| sr | 8 | 9 | 0 | 1 | 18 (2.1.2, 3.3.1, 1.4.2, 2.4.1, 2.4.2, 2.4.4, 2.4.6, 2.1.4, 2.4.7) |
+| screenshot | 5 | 5 | 0 | 0 | 10 (2.4.7, 1.4.3, 1.4.5, 1.3.3, 1.3.4) |
 
-All three tools contributed accurate results:
+### Tool analysis
 
-- **axe** was the primary signal for contrast (1.4.3) and provided supporting evidence for bypass blocks (2.4.1), where it returned "incomplete" and SR resolved the call.
-- **sr** was essential for keyboard trap detection (2.1.2), bypass block verification (2.4.1), and confirming focus state (2.4.7). It resolved axe "incomplete" results for bypass.
-- **screenshot** was the sole tool for sensory characteristics (1.3.3) — a criterion requiring visual inspection of instructions. Also confirmed focus visibility (2.4.7) and contrast (1.4.3).
+- **axe** detected 1 of 6 violations it was asked to find (16.7% recall as standalone). It excels at structural/automated checks like color-contrast (1.4.3) but cannot detect semantic issues like misleading titles (2.4.2), non-descriptive headings (2.4.6), ambiguous link text (2.4.4), JS-based shortcuts without remapping (2.1.4), or missing landmark bypass (2.4.1 returned incomplete). Its 5 false negatives were all resolved by the SR tool.
+- **sr (Orca)** was the strongest tool, detecting 8 of 9 violations (88.9% recall). It was the primary signal for keyboard traps (2.1.2), error identification (3.3.1), audio control (1.4.2), bypass blocks (2.4.1), and semantic content checks (2.4.2, 2.4.4, 2.4.6, 2.1.4). Its single miss was focus visibility (2.4.7) — SR confirms focus state but cannot verify visual presentation.
+- **screenshot** achieved 100% accuracy across all 10 cases. It was the sole detection method for sensory characteristics (1.3.3), orientation restriction (1.3.4), and images of text (1.4.5), and provided corroboration for contrast (1.4.3) and focus visibility (2.4.7).
 
 ## 4. Coverage Gaps
 
-None identified in the smoke test. All criteria had sufficient tooling to make definitive calls.
+None. All 13 criteria had sufficient tooling to make definitive calls.
 
-Notably, the `bypass` rule in axe returned "incomplete" for both 2.4.1 test cases, but the SR tool successfully resolved both by checking for landmarks, skip links, and headings.
+Notable observations:
+- The `bypass` axe rule returned "incomplete" for both 2.4.1 cases — SR resolved them by checking landmarks.
+- Criteria 2.4.2 (Page Titled), 2.4.6 (Headings), 2.4.4 (Link Purpose), and 2.1.4 (Character Key Shortcuts) require **semantic understanding** beyond what axe can provide. The SR + evaluator combination handles these correctly, but they depend on the evaluator's ability to compare announced content against page context.
 
 ## 5. False Negatives
 
@@ -64,17 +74,20 @@ None. No false alarms raised.
 ## 7. Observations and Recommendations
 
 ### What worked well
-- **Multi-tool corroboration** on 2.4.1 (bypass): axe alone would have left both cases as "incomplete," but SR-based landmark/heading checks resolved them correctly.
-- **Screenshot-only evaluation** for 1.3.3 (sensory characteristics) worked — visual inspection of instruction text accurately detected reliance on sensory cues.
-- **SR keyboard testing** caught the keyboard trap (2.1.2) cleanly — the cyclic Tab behavior was unambiguous.
+- **Multi-tool corroboration** continues to be essential. axe alone would have missed 5 of 13 violations (38%). The SR tool resolved all of axe's blind spots.
+- **SR-based semantic evaluation** caught subtle issues: mismatched page titles (2.4.2), misleading headings (2.4.6), ambiguous link text (2.4.4), and missing shortcut remapping (2.1.4).
+- **Screenshot visual inspection** was the only tool capable of detecting images of text (1.4.5), sensory-only instructions (1.3.3), and CSS orientation locks (1.3.4).
+- **aria-describedby detection** via SR worked perfectly for error identification (3.3.1) — the difference between pass (error announced) and fail (error silent) was unambiguous.
+- **Keyboard trap detection** (2.1.2) was clean — the repeating Tab cycle pattern was easy to identify from the SR transcript.
 
-### Limitations of this run
-- **Small sample size:** 10 cases across 5 rules. A clean sweep here does not guarantee accuracy on the full ACT test suite (~1,010 cases).
-- **One pass + one fail per rule:** No edge cases, inapplicable cases, or ambiguous cases tested.
-- **Criteria coverage:** Only 5 of 50+ WCAG 2.2 AA criteria tested. Criteria like 1.1.1 (images), 4.1.2 (name/role/value), and 1.3.1 (info/relationships) — which tend to be harder — are not represented.
+### Limitations
+- **Small sample size:** 26 cases across 13 rules (1 pass + 1 fail each). No edge cases, inapplicable cases, or ambiguous cases tested.
+- **Semantic checks depend on evaluator reasoning:** Criteria like 2.4.2 and 2.4.6 require comparing announced content against page context. This works well with an AI evaluator but is not fully automatable.
+- **Criteria coverage:** 13 of 50+ WCAG 2.2 AA criteria tested. Key untested criteria include 1.1.1 (Non-text Content), 1.3.1 (Info and Relationships), 4.1.2 (Name/Role/Value), and 2.4.3 (Focus Order).
 
-### Recommendations for next steps
-1. **Run the sample eval** (`eval/sample-test-cases.json`, ~26 cases) to test more criteria including 1.1.1, 1.3.1, and 4.1.2.
-2. **Add sprite checkpoints** to the bootstrap process — the current cold bootstrap takes 15+ minutes due to apt-get + playwright downloads. A checkpoint-based restore would take seconds.
-3. **Parallelize apt-get and bun install** in `sprite-bootstrap.sh` — they're independent.
-4. **Test axe "incomplete" resolution** at scale — the bypass case showed SR can resolve incompletes, but this pattern needs validation across more criteria (especially 1.4.3 contrast incompletes on complex backgrounds).
+### Recommendations
+1. **Run the full ACT suite** (`eval/act-test-cases.json`, ~1,010 cases) to validate accuracy at scale — especially on criteria with ambiguous or inapplicable cases.
+2. **Improve axe coverage for bypass blocks** — the "incomplete" result for 2.4.1 required manual SR resolution. Consider adding a post-axe check that automatically queries landmarks when bypass returns incomplete.
+3. **Add automated semantic comparison** for 2.4.2 and 2.4.6 — a tool that compares the page title/heading text against page content could catch mismatches without requiring evaluator reasoning.
+4. **Test axe "incomplete" resolution** across more criteria, especially 1.4.3 contrast on complex backgrounds (gradients, images, transparency).
+5. **Expand SR testing patterns** for 3.3.1 — current test only checked aria-describedby association, but real-world error identification failures are more varied (errors in wrong location, non-specific messages, etc.).
