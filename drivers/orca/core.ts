@@ -16,17 +16,17 @@ import { spawn, spawnSync, execSync } from "child_process";
 import { writeFileSync, existsSync, unlinkSync } from "fs";
 import { chromium } from "playwright";
 import type { Page, Browser } from "playwright";
-import { translateError, type ErrorContext } from "./errors.ts";
+import { translateError, type ErrorContext } from "../errors.ts";
 import {
   type VoResponse, type VoError, type VoResult, type TranscriptEntry,
   isVoError, ORCA_COMMANDS,
-} from "./types.ts";
-import * as speech from "./orca-speech.ts";
-import * as atspi from "./orca-atspi.ts";
+} from "../types.ts";
+import * as speech from "./speech.ts";
+import * as atspi from "./atspi.ts";
 
 // Re-export types surface so consumers can import from orca-core alone
-export type { VoResponse, VoError, VoResult, TranscriptEntry } from "./types.ts";
-export { isVoError, ORCA_COMMANDS } from "./types.ts";
+export type { VoResponse, VoError, VoResult, TranscriptEntry } from "../types.ts";
+export { isVoError, ORCA_COMMANDS } from "../types.ts";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -250,7 +250,7 @@ function ensureDisplay(): void {
   }
 
   try { execSync("which Xvfb", { stdio: "pipe" }); } catch {
-    throw new Error("No DISPLAY set and Xvfb not found. Run: sudo bash orca-setup.sh");
+    throw new Error("No DISPLAY set and Xvfb not found. Run: sudo bash drivers/orca/setup.sh");
   }
 
   try {

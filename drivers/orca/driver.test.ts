@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
-import { parseOrcaResponse, ORCA_COMMANDS } from "./types.ts";
-import { translateError, type ErrorContext } from "./errors.ts";
-import { getFlag } from "./orca-driver.ts";
+import { parseOrcaResponse, ORCA_COMMANDS } from "../types.ts";
+import { translateError, type ErrorContext } from "../errors.ts";
+import { getFlag } from "./driver.ts";
 
 // ---------------------------------------------------------------------------
 // parseOrcaResponse

@@ -5,7 +5,7 @@
  * Can be overridden with SCREEN_READER_FORCE env var.
  */
 
-import type { ScreenReaderDriver } from "../driver-interface.ts";
+import type { ScreenReaderDriver } from "../drivers/interface.ts";
 
 export async function createDriver(): Promise<ScreenReaderDriver> {
   const forced = process.env.SCREEN_READER_FORCE?.toLowerCase();

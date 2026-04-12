@@ -37,7 +37,7 @@ The agent explores with agent-browser. When it encounters new states, it runs au
 
 ```bash
 # 1. Agent starts vo-driver (browser + VoiceOver + CDP)
-bun vo-driver.ts start https://app.com
+bun drivers/voiceover/driver.ts start https://app.com
 
 # 2. Agent connects agent-browser to same browser
 agent-browser --cdp 9222 snapshot -i
@@ -52,55 +52,55 @@ agent-browser --cdp 9222 click @e3        # open modal
 bun audit.ts ".modal-dialog"
 
 # 6. Agent verifies with VoiceOver
-bun vo-driver.ts enter                   # re-enter web content
-bun vo-driver.ts perform FIND_NEXT_HEADING
-bun vo-driver.ts press Tab               # test keyboard nav
-bun vo-driver.ts transcript --since 12   # what did VO say?
+bun drivers/voiceover/driver.ts enter                   # re-enter web content
+bun drivers/voiceover/driver.ts perform FIND_NEXT_HEADING
+bun drivers/voiceover/driver.ts press Tab               # test keyboard nav
+bun drivers/voiceover/driver.ts transcript --since 12   # what did VO say?
 
 # 7. Agent closes modal via agent-browser, checks focus return
 agent-browser --cdp 9222 press Escape
-bun vo-driver.ts item-text               # where did focus land?
+bun drivers/voiceover/driver.ts item-text               # where did focus land?
 ```
 
 ## vo-driver Command Surface
 
 ### Session
 ```bash
-bun vo-driver.ts start <url>           # launch browser + VoiceOver + CDP
-bun vo-driver.ts start <url> --cdp-port 9333  # custom CDP port
-bun vo-driver.ts stop                  # graceful shutdown
-bun vo-driver.ts kill                  # force kill
-bun vo-driver.ts status               # check state
-bun vo-driver.ts enter                # navigate into web content (auto on start/navigate)
-bun vo-driver.ts navigate <url>       # go to new URL + re-enter web content
+bun drivers/voiceover/driver.ts start <url>           # launch browser + VoiceOver + CDP
+bun drivers/voiceover/driver.ts start <url> --cdp-port 9333  # custom CDP port
+bun drivers/voiceover/driver.ts stop                  # graceful shutdown
+bun drivers/voiceover/driver.ts kill                  # force kill
+bun drivers/voiceover/driver.ts status               # check state
+bun drivers/voiceover/driver.ts enter                # navigate into web content (auto on start/navigate)
+bun drivers/voiceover/driver.ts navigate <url>       # go to new URL + re-enter web content
 ```
 
 ### Movement
 ```bash
-bun vo-driver.ts next                 # VO+Right
-bun vo-driver.ts previous             # VO+Left
+bun drivers/voiceover/driver.ts next                 # VO+Right
+bun drivers/voiceover/driver.ts previous             # VO+Left
 ```
 
 ### Interaction
 ```bash
-bun vo-driver.ts act                  # VO+Space (activate current item)
-bun vo-driver.ts press <key> [mods]   # raw keystroke (Tab, Return, Escape, arrows, etc.)
+bun drivers/voiceover/driver.ts act                  # VO+Space (activate current item)
+bun drivers/voiceover/driver.ts press <key> [mods]   # raw keystroke (Tab, Return, Escape, arrows, etc.)
 ```
 
 ### VoiceOver Commands
 ```bash
-bun vo-driver.ts perform <COMMAND>    # any VoiceOver command
+bun drivers/voiceover/driver.ts perform <COMMAND>    # any VoiceOver command
 ```
 
 Uses VoiceOver-standard command names (FIND_NEXT_HEADING, START_INTERACTING, etc.) so agents with existing VoiceOver knowledge feel at home.
 
 ### Queries
 ```bash
-bun vo-driver.ts transcript                # full session transcript
-bun vo-driver.ts transcript --since 42     # entries after index 42
-bun vo-driver.ts transcript --clear        # clear and return
-bun vo-driver.ts item-text                 # current focused item
-bun vo-driver.ts commands [filter]         # list available perform commands
+bun drivers/voiceover/driver.ts transcript                # full session transcript
+bun drivers/voiceover/driver.ts transcript --since 42     # entries after index 42
+bun drivers/voiceover/driver.ts transcript --clear        # clear and return
+bun drivers/voiceover/driver.ts item-text                 # current focused item
+bun drivers/voiceover/driver.ts commands [filter]         # list available perform commands
 ```
 
 ### Flags
@@ -112,12 +112,12 @@ bun vo-driver.ts commands [filter]         # list available perform commands
 ### Response Format
 
 ```
-$ bun vo-driver.ts next
+$ bun drivers/voiceover/driver.ts next
 Spoken: "heading level 1 Example Domain"
 Name: "Example Domain"
 Role: "heading level 1"
 
-$ bun vo-driver.ts next --json
+$ bun drivers/voiceover/driver.ts next --json
 {"spoken":"heading level 1 Example Domain","name":"Example Domain","role":"heading level 1"}
 ```
 

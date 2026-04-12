@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "Accessibility auditor: VoiceOver screen reader testing (vo-driver) + axe-core automated checks",
   "type": "module",
-  "main": "vo-driver.ts",
+  "main": "drivers/voiceover/driver.ts",
   "scripts": {
-    "start": "bun vo-driver.ts serve",
-    "dev": "bun --watch vo-driver.ts serve",
+    "start": "bun drivers/voiceover/driver.ts serve",
+    "dev": "bun --watch drivers/voiceover/driver.ts serve",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

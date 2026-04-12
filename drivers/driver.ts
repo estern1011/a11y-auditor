@@ -6,18 +6,18 @@
  * dispatches to either the daemon server or the CLI client.
  *
  * Usage:
- *   bun driver.ts start <url>          # launch browser + screen reader
- *   bun driver.ts next                 # navigate forward
- *   bun driver.ts perform FIND_NEXT_HEADING
- *   bun driver.ts stop
+ *   bun drivers/driver.ts start <url>          # launch browser + screen reader
+ *   bun drivers/driver.ts next                 # navigate forward
+ *   bun drivers/driver.ts perform FIND_NEXT_HEADING
+ *   bun drivers/driver.ts stop
  *
  * Override platform detection:
- *   SCREEN_READER_FORCE=orca bun driver.ts start <url>
+ *   SCREEN_READER_FORCE=orca bun drivers/driver.ts start <url>
  */
 
-import { createDriver } from "./platform/detect.ts";
+import { createDriver } from "../platform/detect.ts";
 import { startServer } from "./server.ts";
-import { cli, USAGE_UNIFIED } from "./cli.ts";
+import { cli, USAGE_UNIFIED } from "../cli.ts";
 
 function getFlag(args: string[], name: string, fallback: number): number {
   const i = args.indexOf(`--${name}`);

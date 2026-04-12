@@ -8,8 +8,8 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import { writeFileSync } from "fs";
-import type { ScreenReaderDriver } from "./driver-interface.ts";
-import { runAxeAudit } from "./audit.ts";
+import type { ScreenReaderDriver } from "./interface.ts";
+import { runAxeAudit } from "../audit.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
-import { parseVoResponse, ROLE_PATTERN, STATE_KEYWORDS, VOICEOVER_COMMANDS, KEY_CODES, VOICEOVER_MODIFIERS } from "./types.ts";
-import { translateError, type ErrorContext } from "./errors.ts";
-import { getFlag } from "./vo-driver.ts";
+import { parseVoResponse, ROLE_PATTERN, STATE_KEYWORDS, VOICEOVER_COMMANDS, KEY_CODES, VOICEOVER_MODIFIERS } from "../types.ts";
+import { translateError, type ErrorContext } from "../errors.ts";
+import { getFlag } from "./driver.ts";
 
 // Aliases for backward compat in tests
 const COMMANDS = VOICEOVER_COMMANDS;

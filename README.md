@@ -93,15 +93,15 @@ Full WCAG 2.2 AA audit methodology. Tell Claude to audit a page and it will:
 VoiceOver screen reader automation. Use it standalone for targeted screen reader testing without running a full audit.
 
 ```bash
-bun vo-driver.ts start https://example.com    # launch browser + VoiceOver
-bun vo-driver.ts next                         # VO+Right
-bun vo-driver.ts previous                     # VO+Left
-bun vo-driver.ts act                          # VO+Space
-bun vo-driver.ts press Tab                    # raw keystroke
-bun vo-driver.ts perform FIND_NEXT_HEADING    # VoiceOver command
-bun vo-driver.ts transcript                   # what VoiceOver has said
-bun vo-driver.ts item-text                    # current focused item
-bun vo-driver.ts stop                         # shutdown
+bun drivers/voiceover/driver.ts start https://example.com    # launch browser + VoiceOver
+bun drivers/voiceover/driver.ts next                         # VO+Right
+bun drivers/voiceover/driver.ts previous                     # VO+Left
+bun drivers/voiceover/driver.ts act                          # VO+Space
+bun drivers/voiceover/driver.ts press Tab                    # raw keystroke
+bun drivers/voiceover/driver.ts perform FIND_NEXT_HEADING    # VoiceOver command
+bun drivers/voiceover/driver.ts transcript                   # what VoiceOver has said
+bun drivers/voiceover/driver.ts item-text                    # current focused item
+bun drivers/voiceover/driver.ts stop                         # shutdown
 ```
 
 ### `audit.ts`
@@ -119,7 +119,7 @@ bun audit.ts --no-tree                # skip accessibility tree
 
 ```bash
 # Terminal 1: start a session
-bun vo-driver.ts start https://example.com
+bun drivers/voiceover/driver.ts start https://example.com
 
 # Terminal 2: run automated checks
 bun audit.ts
@@ -129,9 +129,9 @@ agent-browser --cdp 9222 snapshot -i
 agent-browser --cdp 9222 screenshot
 
 # Terminal 2: test with screen reader
-bun vo-driver.ts perform FIND_NEXT_HEADING
-bun vo-driver.ts press Tab
-bun vo-driver.ts transcript
+bun drivers/voiceover/driver.ts perform FIND_NEXT_HEADING
+bun drivers/voiceover/driver.ts press Tab
+bun drivers/voiceover/driver.ts transcript
 ```
 
 Or just tell Claude:
@@ -162,10 +162,10 @@ The auditor skill prompt teaches Claude the methodology — which tool to use fo
 | Problem | Fix |
 |---------|-----|
 | VoiceOver won't start | Run `bunx @guidepup/setup` and restart terminal |
-| Stuck in browser chrome | `bun vo-driver.ts enter` |
-| Commands timing out | Wake the display, then `bun vo-driver.ts kill` + `start` |
-| Daemon won't stop | `bun vo-driver.ts kill` |
-| CDP connection refused | Check `bun vo-driver.ts status` for the port |
+| Stuck in browser chrome | `bun drivers/voiceover/driver.ts enter` |
+| Commands timing out | Wake the display, then `bun drivers/voiceover/driver.ts kill` + `start` |
+| Daemon won't stop | `bun drivers/voiceover/driver.ts kill` |
+| CDP connection refused | Check `bun drivers/voiceover/driver.ts status` for the port |
 | agent-browser can't connect | Make sure you're using `--cdp 9222` (or whatever port vo-driver reports) |
 
 Logs: `/tmp/vo-driver.log`

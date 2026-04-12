@@ -4,9 +4,9 @@
  * Delegates to the unified driver with Orca forced.
  */
 
-import { createOrcaDriver } from "./platform/orca.ts";
-import { startServer } from "./server.ts";
-import { cli, USAGE_ORCA } from "./cli.ts";
+import { createOrcaDriver } from "../../platform/orca.ts";
+import { startServer } from "../server.ts";
+import { cli, USAGE_ORCA } from "../../cli.ts";
 
 function getFlag(args: string[], name: string, fallback: number): number {
   const i = args.indexOf(`--${name}`);

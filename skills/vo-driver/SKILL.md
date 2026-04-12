@@ -21,18 +21,18 @@ macOS only. Before first use:
 ## Session Lifecycle
 
 ```bash
-bun vo-driver.ts start <url>           # launch browser + VoiceOver + CDP on :9222
-bun vo-driver.ts start <url> --cdp-port 9333  # custom CDP port
-bun vo-driver.ts navigate <url>        # go to new URL (auto-enters web content)
-bun vo-driver.ts status                # check daemon state + CDP port
-bun vo-driver.ts stop                  # graceful shutdown
-bun vo-driver.ts kill                  # force kill (use if stop hangs)
+bun drivers/voiceover/driver.ts start <url>           # launch browser + VoiceOver + CDP on :9222
+bun drivers/voiceover/driver.ts start <url> --cdp-port 9333  # custom CDP port
+bun drivers/voiceover/driver.ts navigate <url>        # go to new URL (auto-enters web content)
+bun drivers/voiceover/driver.ts status                # check daemon state + CDP port
+bun drivers/voiceover/driver.ts stop                  # graceful shutdown
+bun drivers/voiceover/driver.ts kill                  # force kill (use if stop hangs)
 ```
 
 `start` automatically enters web content. If VoiceOver pops back to browser chrome (after a page reload, SPA navigation, etc.), use `enter` to get back in:
 
 ```bash
-bun vo-driver.ts enter                 # re-enter web content
+bun drivers/voiceover/driver.ts enter                 # re-enter web content
 ```
 
 ## CDP — Sharing the Browser
@@ -40,7 +40,7 @@ bun vo-driver.ts enter                 # re-enter web content
 vo-driver exposes a Chrome DevTools Protocol port so other tools can connect to the same browser:
 
 ```bash
-bun vo-driver.ts start https://app.com
+bun drivers/voiceover/driver.ts start https://app.com
 # → Ready. CDP available on ws://127.0.0.1:9222
 
 agent-browser --cdp 9222 snapshot -i    # connect agent-browser to same browser
@@ -49,10 +49,10 @@ agent-browser --cdp 9222 snapshot -i    # connect agent-browser to same browser
 ## Core Navigation
 
 ```bash
-bun vo-driver.ts next              # VO+Right — next item
-bun vo-driver.ts previous          # VO+Left — previous item
-bun vo-driver.ts act               # VO+Space — click/press current item
-bun vo-driver.ts press <key> [modifiers...]  # raw keystroke
+bun drivers/voiceover/driver.ts next              # VO+Right — next item
+bun drivers/voiceover/driver.ts previous          # VO+Left — previous item
+bun drivers/voiceover/driver.ts act               # VO+Space — click/press current item
+bun drivers/voiceover/driver.ts press <key> [modifiers...]  # raw keystroke
 ```
 
 ### Raw Key Presses
@@ -60,15 +60,15 @@ bun vo-driver.ts press <key> [modifiers...]  # raw keystroke
 For modal interactions (rotor, dialogs, menus) and Tab-key navigation:
 
 ```bash
-bun vo-driver.ts press Tab                    # Tab key
-bun vo-driver.ts press Tab shift              # Shift+Tab
-bun vo-driver.ts press Return                 # Enter/Return
-bun vo-driver.ts press Space                  # Space bar
-bun vo-driver.ts press Escape                 # Escape
-bun vo-driver.ts press Left                   # Left arrow
-bun vo-driver.ts press Right                  # Right arrow
-bun vo-driver.ts press Up                     # Up arrow
-bun vo-driver.ts press Down                   # Down arrow
+bun drivers/voiceover/driver.ts press Tab                    # Tab key
+bun drivers/voiceover/driver.ts press Tab shift              # Shift+Tab
+bun drivers/voiceover/driver.ts press Return                 # Enter/Return
+bun drivers/voiceover/driver.ts press Space                  # Space bar
+bun drivers/voiceover/driver.ts press Escape                 # Escape
+bun drivers/voiceover/driver.ts press Left                   # Left arrow
+bun drivers/voiceover/driver.ts press Right                  # Right arrow
+bun drivers/voiceover/driver.ts press Up                     # Up arrow
+bun drivers/voiceover/driver.ts press Down                   # Down arrow
 ```
 
 Valid modifiers: `control`, `option`, `command`, `shift`
@@ -79,79 +79,79 @@ Use `perform` for any VoiceOver command. Names follow VoiceOver conventions.
 
 ### Element Navigation
 ```bash
-bun vo-driver.ts perform FIND_NEXT_HEADING
-bun vo-driver.ts perform FIND_PREVIOUS_HEADING
-bun vo-driver.ts perform FIND_NEXT_HEADING_SAME_LEVEL
-bun vo-driver.ts perform FIND_NEXT_LINK
-bun vo-driver.ts perform FIND_PREVIOUS_LINK
-bun vo-driver.ts perform FIND_NEXT_BUTTON
-bun vo-driver.ts perform FIND_PREVIOUS_BUTTON
-bun vo-driver.ts perform FIND_NEXT_CONTROL       # any form control (fields, checkboxes, radios)
-bun vo-driver.ts perform FIND_NEXT_LANDMARK
-bun vo-driver.ts perform FIND_PREVIOUS_LANDMARK
-bun vo-driver.ts perform FIND_NEXT_IMAGE
-bun vo-driver.ts perform FIND_NEXT_TABLE
-bun vo-driver.ts perform FIND_NEXT_LIST
-bun vo-driver.ts perform FIND_NEXT_FRAME
+bun drivers/voiceover/driver.ts perform FIND_NEXT_HEADING
+bun drivers/voiceover/driver.ts perform FIND_PREVIOUS_HEADING
+bun drivers/voiceover/driver.ts perform FIND_NEXT_HEADING_SAME_LEVEL
+bun drivers/voiceover/driver.ts perform FIND_NEXT_LINK
+bun drivers/voiceover/driver.ts perform FIND_PREVIOUS_LINK
+bun drivers/voiceover/driver.ts perform FIND_NEXT_BUTTON
+bun drivers/voiceover/driver.ts perform FIND_PREVIOUS_BUTTON
+bun drivers/voiceover/driver.ts perform FIND_NEXT_CONTROL       # any form control (fields, checkboxes, radios)
+bun drivers/voiceover/driver.ts perform FIND_NEXT_LANDMARK
+bun drivers/voiceover/driver.ts perform FIND_PREVIOUS_LANDMARK
+bun drivers/voiceover/driver.ts perform FIND_NEXT_IMAGE
+bun drivers/voiceover/driver.ts perform FIND_NEXT_TABLE
+bun drivers/voiceover/driver.ts perform FIND_NEXT_LIST
+bun drivers/voiceover/driver.ts perform FIND_NEXT_FRAME
 ```
 
 ### Position & Interaction
 ```bash
-bun vo-driver.ts perform GO_TO_BEGINNING
-bun vo-driver.ts perform GO_TO_END
-bun vo-driver.ts perform START_INTERACTING      # enter a group/web content
-bun vo-driver.ts perform STOP_INTERACTING       # exit a group
-bun vo-driver.ts perform ESCAPE
+bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
+bun drivers/voiceover/driver.ts perform GO_TO_END
+bun drivers/voiceover/driver.ts perform START_INTERACTING      # enter a group/web content
+bun drivers/voiceover/driver.ts perform STOP_INTERACTING       # exit a group
+bun drivers/voiceover/driver.ts perform ESCAPE
 ```
 
 ### Rotor
 ```bash
-bun vo-driver.ts perform OPEN_WEB_ROTOR         # VO+U
-bun vo-driver.ts press Left                      # switch category
-bun vo-driver.ts press Right                     # switch category
-bun vo-driver.ts press Down                      # move within category
-bun vo-driver.ts press Up                        # move within category
-bun vo-driver.ts press Return                    # jump to item
-bun vo-driver.ts press Escape                    # close rotor
+bun drivers/voiceover/driver.ts perform OPEN_WEB_ROTOR         # VO+U
+bun drivers/voiceover/driver.ts press Left                      # switch category
+bun drivers/voiceover/driver.ts press Right                     # switch category
+bun drivers/voiceover/driver.ts press Down                      # move within category
+bun drivers/voiceover/driver.ts press Up                        # move within category
+bun drivers/voiceover/driver.ts press Return                    # jump to item
+bun drivers/voiceover/driver.ts press Escape                    # close rotor
 ```
 
 ### Reading
 ```bash
-bun vo-driver.ts perform READ_CURRENT_ITEM
-bun vo-driver.ts perform READ_ALL
-bun vo-driver.ts perform READ_LINE
-bun vo-driver.ts perform READ_LINK_URL
-bun vo-driver.ts perform READ_PAGE_STATS
+bun drivers/voiceover/driver.ts perform READ_CURRENT_ITEM
+bun drivers/voiceover/driver.ts perform READ_ALL
+bun drivers/voiceover/driver.ts perform READ_LINE
+bun drivers/voiceover/driver.ts perform READ_LINK_URL
+bun drivers/voiceover/driver.ts perform READ_PAGE_STATS
 ```
 
 ### Table Reading
 ```bash
-bun vo-driver.ts perform READ_TABLE_ROW
-bun vo-driver.ts perform READ_TABLE_COLUMN
-bun vo-driver.ts perform READ_TABLE_HEADER
-bun vo-driver.ts perform READ_TABLE_POSITION
+bun drivers/voiceover/driver.ts perform READ_TABLE_ROW
+bun drivers/voiceover/driver.ts perform READ_TABLE_COLUMN
+bun drivers/voiceover/driver.ts perform READ_TABLE_HEADER
+bun drivers/voiceover/driver.ts perform READ_TABLE_POSITION
 ```
 
 ### Focus Management
 ```bash
-bun vo-driver.ts perform SYNC_CURSOR_TO_KEYBOARD
-bun vo-driver.ts perform SYNC_KEYBOARD_TO_CURSOR
-bun vo-driver.ts perform DESCRIBE_KEYBOARD_FOCUS
+bun drivers/voiceover/driver.ts perform SYNC_CURSOR_TO_KEYBOARD
+bun drivers/voiceover/driver.ts perform SYNC_KEYBOARD_TO_CURSOR
+bun drivers/voiceover/driver.ts perform DESCRIBE_KEYBOARD_FOCUS
 ```
 
 ### Full command list
 ```bash
-bun vo-driver.ts commands              # list all
-bun vo-driver.ts commands heading      # filter
+bun drivers/voiceover/driver.ts commands              # list all
+bun drivers/voiceover/driver.ts commands heading      # filter
 ```
 
 ## Querying State
 
 ```bash
-bun vo-driver.ts item-text                      # current focused item
-bun vo-driver.ts transcript                     # full session transcript
-bun vo-driver.ts transcript --since 42          # entries after index 42
-bun vo-driver.ts transcript --clear             # clear and return
+bun drivers/voiceover/driver.ts item-text                      # current focused item
+bun drivers/voiceover/driver.ts transcript                     # full session transcript
+bun drivers/voiceover/driver.ts transcript --since 42          # entries after index 42
+bun drivers/voiceover/driver.ts transcript --clear             # clear and return
 ```
 
 ## JSON Output
@@ -159,7 +159,7 @@ bun vo-driver.ts transcript --clear             # clear and return
 Add `--json` to any command for structured output:
 
 ```bash
-bun vo-driver.ts next --json
+bun drivers/voiceover/driver.ts next --json
 # {"spoken":"heading level 1 Example Domain","name":"Example Domain","role":"heading level 1","index":0}
 ```
 
@@ -208,4 +208,4 @@ Every navigation command returns:
 - **Commands timing out**: VoiceOver may need the display awake. If machine slept, wake it and restart
 - **Daemon won't stop**: Use `kill` to force-terminate
 - **Logs**: `/tmp/vo-driver.log`
-- **Help**: `bun vo-driver.ts --help`
+- **Help**: `bun drivers/voiceover/driver.ts --help`

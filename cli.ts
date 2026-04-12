@@ -7,8 +7,8 @@
 
 import { existsSync, readFileSync } from "fs";
 import { spawnSync } from "child_process";
-import type { ScreenReaderDriver } from "./driver-interface.ts";
-import { isVoError, type VoResult, type TranscriptEntry } from "./types.ts";
+import type { ScreenReaderDriver } from "./drivers/interface.ts";
+import { isVoError, type VoResult, type TranscriptEntry } from "./drivers/types.ts";
 
 // ---------------------------------------------------------------------------
 // Config from driver
@@ -108,9 +108,9 @@ function printTranscript(entries: TranscriptEntry[], jsonMode: boolean) {
 // CLI entrypoint
 // ---------------------------------------------------------------------------
 
-export const USAGE_VO = makeUsage("vo-driver.ts", "VoiceOver");
-export const USAGE_ORCA = makeUsage("orca-driver.ts", "Orca");
-export const USAGE_UNIFIED = makeUsage("driver.ts", "screen reader");
+export const USAGE_VO = makeUsage("drivers/voiceover/driver.ts", "VoiceOver");
+export const USAGE_ORCA = makeUsage("drivers/orca/driver.ts", "Orca");
+export const USAGE_UNIFIED = makeUsage("drivers/driver.ts", "screen reader");
 
 export async function cli(
   args: string[],

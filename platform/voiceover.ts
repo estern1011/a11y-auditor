@@ -6,16 +6,16 @@
  * rather than duplicating its logic.
  */
 
-import type { ScreenReaderDriver } from "../driver-interface.ts";
-import type { VoResult, TranscriptEntry } from "../types.ts";
-import { VOICEOVER_COMMANDS } from "../types.ts";
+import type { ScreenReaderDriver } from "../drivers/interface.ts";
+import type { VoResult, TranscriptEntry } from "../drivers/types.ts";
+import { VOICEOVER_COMMANDS } from "../drivers/types.ts";
 import type { Page } from "playwright";
 
 // Lazy-import vo-core to avoid loading guidepup on Linux
-let core: typeof import("../vo-core.ts") | null = null;
+let core: typeof import("../drivers/voiceover/core.ts") | null = null;
 
 async function getCore() {
-  if (!core) core = await import("../vo-core.ts");
+  if (!core) core = await import("../drivers/voiceover/core.ts");
   return core;
 }
 

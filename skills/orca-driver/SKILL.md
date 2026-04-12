@@ -15,8 +15,8 @@ All commands run from the `a11y-auditor` project directory.
 Ubuntu/Debian Linux (desktop or virtual — Codespaces, Docker, sprites.dev all work). Before first use:
 
 ```bash
-sudo bash orca-setup.sh              # install all system deps
-bash orca-setup.sh check             # verify everything is ready
+sudo bash drivers/orca/setup.sh              # install all system deps
+bash drivers/orca/setup.sh check             # verify everything is ready
 bun install && bunx playwright install chromium
 ```
 
@@ -25,18 +25,18 @@ The driver auto-detects virtual desktop environments and starts Xvfb + openbox +
 ## Session Lifecycle
 
 ```bash
-bun orca-driver.ts start <url>           # launch browser + Orca + CDP on :9223
-bun orca-driver.ts start <url> --cdp-port 9333  # custom CDP port
-bun orca-driver.ts navigate <url>        # go to new URL
-bun orca-driver.ts status                # check daemon state + CDP port
-bun orca-driver.ts stop                  # graceful shutdown
-bun orca-driver.ts kill                  # force kill (use if stop hangs)
+bun drivers/orca/driver.ts start <url>           # launch browser + Orca + CDP on :9223
+bun drivers/orca/driver.ts start <url> --cdp-port 9333  # custom CDP port
+bun drivers/orca/driver.ts navigate <url>        # go to new URL
+bun drivers/orca/driver.ts status                # check daemon state + CDP port
+bun drivers/orca/driver.ts stop                  # graceful shutdown
+bun drivers/orca/driver.ts kill                  # force kill (use if stop hangs)
 ```
 
 `start` automatically focuses the browser and enters browse mode. If Orca loses focus, use `enter` to re-focus:
 
 ```bash
-bun orca-driver.ts enter                 # re-focus browser for Orca
+bun drivers/orca/driver.ts enter                 # re-focus browser for Orca
 ```
 
 ## CDP — Sharing the Browser
@@ -44,7 +44,7 @@ bun orca-driver.ts enter                 # re-focus browser for Orca
 orca-driver exposes a Chrome DevTools Protocol port so other tools can connect to the same browser:
 
 ```bash
-bun orca-driver.ts start https://app.com
+bun drivers/orca/driver.ts start https://app.com
 # → Ready. CDP available on ws://127.0.0.1:9223
 
 agent-browser --cdp 9223 snapshot -i    # connect agent-browser to same browser
@@ -53,24 +53,24 @@ agent-browser --cdp 9223 snapshot -i    # connect agent-browser to same browser
 ## Core Navigation
 
 ```bash
-bun orca-driver.ts next              # Down — next item in browse mode
-bun orca-driver.ts previous          # Up — previous item in browse mode
-bun orca-driver.ts act               # Enter — activate current item
-bun orca-driver.ts press <key> [modifiers...]  # raw keystroke
+bun drivers/orca/driver.ts next              # Down — next item in browse mode
+bun drivers/orca/driver.ts previous          # Up — previous item in browse mode
+bun drivers/orca/driver.ts act               # Enter — activate current item
+bun drivers/orca/driver.ts press <key> [modifiers...]  # raw keystroke
 ```
 
 ### Raw Key Presses
 
 ```bash
-bun orca-driver.ts press Tab                    # Tab key
-bun orca-driver.ts press Tab shift              # Shift+Tab
-bun orca-driver.ts press Return                 # Enter/Return
-bun orca-driver.ts press Space                  # Space bar
-bun orca-driver.ts press Escape                 # Escape
-bun orca-driver.ts press Left                   # Left arrow
-bun orca-driver.ts press Right                  # Right arrow
-bun orca-driver.ts press Up                     # Up arrow
-bun orca-driver.ts press Down                   # Down arrow
+bun drivers/orca/driver.ts press Tab                    # Tab key
+bun drivers/orca/driver.ts press Tab shift              # Shift+Tab
+bun drivers/orca/driver.ts press Return                 # Enter/Return
+bun drivers/orca/driver.ts press Space                  # Space bar
+bun drivers/orca/driver.ts press Escape                 # Escape
+bun drivers/orca/driver.ts press Left                   # Left arrow
+bun drivers/orca/driver.ts press Right                  # Right arrow
+bun drivers/orca/driver.ts press Up                     # Up arrow
+bun drivers/orca/driver.ts press Down                   # Down arrow
 ```
 
 Valid modifiers: `control`, `shift`, `alt`, `super`
@@ -81,59 +81,59 @@ Orca uses single-key navigation in browse mode. Use `perform` with these command
 
 ### Heading Navigation
 ```bash
-bun orca-driver.ts perform FIND_NEXT_HEADING           # H
-bun orca-driver.ts perform FIND_PREVIOUS_HEADING       # Shift+H
-bun orca-driver.ts perform FIND_NEXT_HEADING_1         # 1
-bun orca-driver.ts perform FIND_NEXT_HEADING_2         # 2
-bun orca-driver.ts perform FIND_NEXT_HEADING_3         # 3
+bun drivers/orca/driver.ts perform FIND_NEXT_HEADING           # H
+bun drivers/orca/driver.ts perform FIND_PREVIOUS_HEADING       # Shift+H
+bun drivers/orca/driver.ts perform FIND_NEXT_HEADING_1         # 1
+bun drivers/orca/driver.ts perform FIND_NEXT_HEADING_2         # 2
+bun drivers/orca/driver.ts perform FIND_NEXT_HEADING_3         # 3
 # ... through FIND_NEXT_HEADING_6
 ```
 
 ### Link Navigation
 ```bash
-bun orca-driver.ts perform FIND_NEXT_LINK              # K
-bun orca-driver.ts perform FIND_PREVIOUS_LINK          # Shift+K
-bun orca-driver.ts perform FIND_NEXT_UNVISITED_LINK    # U
-bun orca-driver.ts perform FIND_NEXT_VISITED_LINK      # V
+bun drivers/orca/driver.ts perform FIND_NEXT_LINK              # K
+bun drivers/orca/driver.ts perform FIND_PREVIOUS_LINK          # Shift+K
+bun drivers/orca/driver.ts perform FIND_NEXT_UNVISITED_LINK    # U
+bun drivers/orca/driver.ts perform FIND_NEXT_VISITED_LINK      # V
 ```
 
 ### Element Navigation
 ```bash
-bun orca-driver.ts perform FIND_NEXT_BUTTON            # B
-bun orca-driver.ts perform FIND_PREVIOUS_BUTTON        # Shift+B
-bun orca-driver.ts perform FIND_NEXT_CONTROL           # F (form field)
-bun orca-driver.ts perform FIND_NEXT_ENTRY             # E (text entry)
-bun orca-driver.ts perform FIND_NEXT_CHECKBOX          # X
-bun orca-driver.ts perform FIND_NEXT_COMBO_BOX         # C
-bun orca-driver.ts perform FIND_NEXT_RADIO_BUTTON      # R
-bun orca-driver.ts perform FIND_NEXT_TABLE             # T
-bun orca-driver.ts perform FIND_NEXT_LIST              # L
-bun orca-driver.ts perform FIND_NEXT_LANDMARK          # M
-bun orca-driver.ts perform FIND_NEXT_IMAGE             # G
-bun orca-driver.ts perform FIND_NEXT_BLOCKQUOTE        # Q
-bun orca-driver.ts perform FIND_NEXT_PARAGRAPH         # P
-bun orca-driver.ts perform FIND_NEXT_SEPARATOR         # S
+bun drivers/orca/driver.ts perform FIND_NEXT_BUTTON            # B
+bun drivers/orca/driver.ts perform FIND_PREVIOUS_BUTTON        # Shift+B
+bun drivers/orca/driver.ts perform FIND_NEXT_CONTROL           # F (form field)
+bun drivers/orca/driver.ts perform FIND_NEXT_ENTRY             # E (text entry)
+bun drivers/orca/driver.ts perform FIND_NEXT_CHECKBOX          # X
+bun drivers/orca/driver.ts perform FIND_NEXT_COMBO_BOX         # C
+bun drivers/orca/driver.ts perform FIND_NEXT_RADIO_BUTTON      # R
+bun drivers/orca/driver.ts perform FIND_NEXT_TABLE             # T
+bun drivers/orca/driver.ts perform FIND_NEXT_LIST              # L
+bun drivers/orca/driver.ts perform FIND_NEXT_LANDMARK          # M
+bun drivers/orca/driver.ts perform FIND_NEXT_IMAGE             # G
+bun drivers/orca/driver.ts perform FIND_NEXT_BLOCKQUOTE        # Q
+bun drivers/orca/driver.ts perform FIND_NEXT_PARAGRAPH         # P
+bun drivers/orca/driver.ts perform FIND_NEXT_SEPARATOR         # S
 ```
 
 ### Position
 ```bash
-bun orca-driver.ts perform GO_TO_BEGINNING             # Ctrl+Home
-bun orca-driver.ts perform GO_TO_END                   # Ctrl+End
+bun drivers/orca/driver.ts perform GO_TO_BEGINNING             # Ctrl+Home
+bun drivers/orca/driver.ts perform GO_TO_END                   # Ctrl+End
 ```
 
 ### Full command list
 ```bash
-bun orca-driver.ts commands              # list all
-bun orca-driver.ts commands heading      # filter
+bun drivers/orca/driver.ts commands              # list all
+bun drivers/orca/driver.ts commands heading      # filter
 ```
 
 ## Querying State
 
 ```bash
-bun orca-driver.ts item-text                      # current focused item
-bun orca-driver.ts transcript                     # full session transcript
-bun orca-driver.ts transcript --since 42          # entries after index 42
-bun orca-driver.ts transcript --clear             # clear and return
+bun drivers/orca/driver.ts item-text                      # current focused item
+bun drivers/orca/driver.ts transcript                     # full session transcript
+bun drivers/orca/driver.ts transcript --since 42          # entries after index 42
+bun drivers/orca/driver.ts transcript --clear             # clear and return
 ```
 
 ## JSON Output
@@ -141,7 +141,7 @@ bun orca-driver.ts transcript --clear             # clear and return
 Add `--json` to any command for structured output:
 
 ```bash
-bun orca-driver.ts next --json
+bun drivers/orca/driver.ts next --json
 # {"spoken":"Introduction heading 2","name":"Introduction","role":"heading","state":["focused"],"index":5}
 ```
 
@@ -217,7 +217,7 @@ The driver auto-bootstraps everything in virtual environments:
 6. **Chrome window?** → Launched maximized (`--start-maximized`)
 
 ```bash
-bun orca-driver.ts start https://example.com   # works in Codespaces / sprites.dev
+bun drivers/orca/driver.ts start https://example.com   # works in Codespaces / sprites.dev
 ```
 
 ## Troubleshooting
@@ -227,5 +227,5 @@ bun orca-driver.ts start https://example.com   # works in Codespaces / sprites.d
 - **No focused element**: Run `enter` to re-focus the browser
 - **Keys not working**: Keys are injected via AT-SPI2 D-Bus, not xdotool
 - **Daemon won't stop**: Use `kill` to force-terminate
-- **Setup check**: Run `bash orca-setup.sh check`
+- **Setup check**: Run `bash drivers/orca/setup.sh check`
 - **Logs**: `/tmp/orca-driver.log`

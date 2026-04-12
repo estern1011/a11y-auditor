@@ -4,9 +4,9 @@
  * Delegates to the unified driver with VoiceOver forced.
  */
 
-import { createVoiceOverDriver } from "./platform/voiceover.ts";
-import { startServer } from "./server.ts";
-import { cli, USAGE_VO } from "./cli.ts";
+import { createVoiceOverDriver } from "../../platform/voiceover.ts";
+import { startServer } from "../server.ts";
+import { cli, USAGE_VO } from "../../cli.ts";
 
 function getFlag(args: string[], name: string, fallback: number): number {
   const i = args.indexOf(`--${name}`);

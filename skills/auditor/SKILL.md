@@ -18,17 +18,17 @@ All commands run from the `a11y-auditor` project directory.
 Owns the headed browser + VoiceOver. **Start this first** — it launches the browser that the other tools connect to.
 
 ```bash
-bun vo-driver.ts start <url>              # launch browser + VoiceOver + CDP
-bun vo-driver.ts navigate <url>           # go to new URL
-bun vo-driver.ts next                     # VO+Right — next item
-bun vo-driver.ts previous                 # VO+Left — previous item
-bun vo-driver.ts act                      # VO+Space — activate current item
-bun vo-driver.ts press <key> [modifiers]  # raw keystroke (Tab, Return, Escape, arrows)
-bun vo-driver.ts perform <COMMAND>        # VoiceOver command (FIND_NEXT_HEADING, etc.)
-bun vo-driver.ts enter                    # re-enter web content after page changes
-bun vo-driver.ts transcript [--since N]   # what VoiceOver has said
-bun vo-driver.ts item-text                # current focused item
-bun vo-driver.ts stop                     # shutdown
+bun drivers/voiceover/driver.ts start <url>              # launch browser + VoiceOver + CDP
+bun drivers/voiceover/driver.ts navigate <url>           # go to new URL
+bun drivers/voiceover/driver.ts next                     # VO+Right — next item
+bun drivers/voiceover/driver.ts previous                 # VO+Left — previous item
+bun drivers/voiceover/driver.ts act                      # VO+Space — activate current item
+bun drivers/voiceover/driver.ts press <key> [modifiers]  # raw keystroke (Tab, Return, Escape, arrows)
+bun drivers/voiceover/driver.ts perform <COMMAND>        # VoiceOver command (FIND_NEXT_HEADING, etc.)
+bun drivers/voiceover/driver.ts enter                    # re-enter web content after page changes
+bun drivers/voiceover/driver.ts transcript [--since N]   # what VoiceOver has said
+bun drivers/voiceover/driver.ts item-text                # current focused item
+bun drivers/voiceover/driver.ts stop                     # shutdown
 ```
 
 ### 2. audit.ts — Automated Checks (axe-core)
@@ -61,10 +61,10 @@ agent-browser --cdp 9222 press Escape     # press key
 
 ### For QA (quick check of a feature)
 
-1. `bun vo-driver.ts start <url>` — launch browser + VoiceOver
+1. `bun drivers/voiceover/driver.ts start <url>` — launch browser + VoiceOver
 2. `bun audit.ts` — full automated baseline (no tag filter)
 3. Address violations. For "incomplete" items, verify with vo-driver.
-4. Test keyboard: `bun vo-driver.ts press Tab` through interactive elements
+4. Test keyboard: `bun drivers/voiceover/driver.ts press Tab` through interactive elements
 5. Test screen reader on custom widgets: navigate, activate, check announcements
 6. Report findings with confidence levels
 
@@ -74,7 +74,7 @@ For each representative page/flow, work through ALL phases below. Do not skip ph
 
 #### Phase 1: Automated Baseline
 ```bash
-bun vo-driver.ts start <url>
+bun drivers/voiceover/driver.ts start <url>
 bun audit.ts                        # full check — no tag filter
 bun audit.ts --tags wcag2a,wcag2aa  # then WCAG-only for the focused report
 ```
@@ -83,34 +83,34 @@ Record all violations and incomplete items. The unfiltered run catches contrast 
 #### Phase 2: Document Structure (1.3.1, 1.3.2, 2.4.1, 2.4.2, 2.4.6, 2.4.10)
 ```bash
 # Page title
-bun vo-driver.ts item-text                    # check at top level before entering
+bun drivers/voiceover/driver.ts item-text                    # check at top level before entering
 
 # Heading hierarchy — loop until "not found"
-bun vo-driver.ts perform GO_TO_BEGINNING
-bun vo-driver.ts perform FIND_NEXT_HEADING    # repeat until exhausted
+bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
+bun drivers/voiceover/driver.ts perform FIND_NEXT_HEADING    # repeat until exhausted
 
 # Landmarks
-bun vo-driver.ts perform GO_TO_BEGINNING
-bun vo-driver.ts perform FIND_NEXT_LANDMARK   # repeat — check regions
+bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
+bun drivers/voiceover/driver.ts perform FIND_NEXT_LANDMARK   # repeat — check regions
 
 # Images and alt text
-bun vo-driver.ts perform GO_TO_BEGINNING
-bun vo-driver.ts perform FIND_NEXT_IMAGE      # repeat — check each image's name
+bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
+bun drivers/voiceover/driver.ts perform FIND_NEXT_IMAGE      # repeat — check each image's name
 
 # Page stats overview
-bun vo-driver.ts perform READ_PAGE_STATS
+bun drivers/voiceover/driver.ts perform READ_PAGE_STATS
 
 # Reading order (1.3.2) — walk the full page
-bun vo-driver.ts perform GO_TO_BEGINNING
-bun vo-driver.ts next                         # repeat through entire page
-bun vo-driver.ts transcript                   # review for logical sequence
+bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
+bun drivers/voiceover/driver.ts next                         # repeat through entire page
+bun drivers/voiceover/driver.ts transcript                   # review for logical sequence
 ```
 
 #### Phase 3: Keyboard Navigation (2.1.1, 2.1.2, 2.4.3, 2.4.7)
 ```bash
-bun vo-driver.ts perform GO_TO_BEGINNING
-bun vo-driver.ts press Tab                    # tab through entire page
-bun vo-driver.ts transcript                   # review tab order
+bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
+bun drivers/voiceover/driver.ts press Tab                    # tab through entire page
+bun drivers/voiceover/driver.ts transcript                   # review tab order
 ```
 Check:
 - All interactive elements reachable by Tab?
@@ -125,38 +125,38 @@ agent-browser --cdp 9222 screenshot           # capture focus state
 #### Phase 4: Forms (1.3.1, 3.3.1, 3.3.2, 3.3.3, 4.1.2)
 ```bash
 # Tab through form fields — check each label
-bun vo-driver.ts press Tab                    # for each field
-bun vo-driver.ts item-text                    # is label announced?
+bun drivers/voiceover/driver.ts press Tab                    # for each field
+bun drivers/voiceover/driver.ts item-text                    # is label announced?
 
 # Test error handling — submit empty/invalid form
 agent-browser --cdp 9222 click @e3             # click submit button by ref
-bun vo-driver.ts transcript --since N         # are errors announced?
+bun drivers/voiceover/driver.ts transcript --since N         # are errors announced?
 # Are error messages associated with fields?
-bun vo-driver.ts press Tab                    # tab to errored field
-bun vo-driver.ts item-text                    # does it mention the error?
+bun drivers/voiceover/driver.ts press Tab                    # tab to errored field
+bun drivers/voiceover/driver.ts item-text                    # does it mention the error?
 ```
 
 #### Phase 5: Interactive Components (4.1.2, 4.1.3)
 For each custom widget (accordions, tabs, modals, menus, dialogs):
 ```bash
 # Navigate to widget
-bun vo-driver.ts perform FIND_NEXT_BUTTON     # or appropriate element type
+bun drivers/voiceover/driver.ts perform FIND_NEXT_BUTTON     # or appropriate element type
 
 # Is role announced?
-bun vo-driver.ts item-text
+bun drivers/voiceover/driver.ts item-text
 
 # Operate with keyboard per ARIA pattern
-bun vo-driver.ts act                          # activate
-bun vo-driver.ts press Tab                    # navigate within
-bun vo-driver.ts press Escape                 # dismiss
+bun drivers/voiceover/driver.ts act                          # activate
+bun drivers/voiceover/driver.ts press Tab                    # navigate within
+bun drivers/voiceover/driver.ts press Escape                 # dismiss
 
 # Are state changes announced?
-bun vo-driver.ts transcript --since N
+bun drivers/voiceover/driver.ts transcript --since N
 
 # Focus management for modals:
-bun vo-driver.ts item-text                    # where did focus go on open?
-bun vo-driver.ts press Escape
-bun vo-driver.ts item-text                    # where did focus go on close?
+bun drivers/voiceover/driver.ts item-text                    # where did focus go on open?
+bun drivers/voiceover/driver.ts press Escape
+bun drivers/voiceover/driver.ts item-text                    # where did focus go on close?
 
 # Scoped audit on the widget
 bun audit.ts "#widget-selector"
@@ -196,9 +196,9 @@ Flag every mismatch. These are the bugs automated tools don't catch.
 
 Tab through each interactive element, taking a screenshot at each stop:
 ```bash
-bun vo-driver.ts press Tab
+bun drivers/voiceover/driver.ts press Tab
 agent-browser --cdp 9222 screenshot     # capture focus state
-bun vo-driver.ts item-text              # what does VO announce?
+bun drivers/voiceover/driver.ts item-text              # what does VO announce?
 # Repeat for each interactive element
 ```
 
@@ -343,12 +343,12 @@ SYNC_KEYBOARD_TO_CURSOR
 DESCRIBE_KEYBOARD_FOCUS
 ```
 
-Full list: `bun vo-driver.ts commands`
+Full list: `bun drivers/voiceover/driver.ts commands`
 
 ## Troubleshooting
 
-- **VoiceOver stuck in browser chrome**: `bun vo-driver.ts enter`
-- **Page changed, VO lost context**: `bun vo-driver.ts enter`
-- **VoiceOver not responding**: `bun vo-driver.ts kill` then `bun vo-driver.ts start <url>`
-- **Need to re-enter after agent-browser interaction**: `bun vo-driver.ts enter`
-- **Display went to sleep**: Wake the machine, then `bun vo-driver.ts kill` + `start`
+- **VoiceOver stuck in browser chrome**: `bun drivers/voiceover/driver.ts enter`
+- **Page changed, VO lost context**: `bun drivers/voiceover/driver.ts enter`
+- **VoiceOver not responding**: `bun drivers/voiceover/driver.ts kill` then `bun drivers/voiceover/driver.ts start <url>`
+- **Need to re-enter after agent-browser interaction**: `bun drivers/voiceover/driver.ts enter`
+- **Display went to sleep**: Wake the machine, then `bun drivers/voiceover/driver.ts kill` + `start`

@@ -17,7 +17,7 @@
 import type { Page } from "playwright";
 import type { Result } from "axe-core";
 import AxeBuilder from "@axe-core/playwright";
-import { DEFAULT_PORT, CLI_TIMEOUT_MS } from "./vo-core.ts";
+import { DEFAULT_PORT, CLI_TIMEOUT_MS } from "./drivers/voiceover/core.ts";
 
 // ---------------------------------------------------------------------------
 // Audit options

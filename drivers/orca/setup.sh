@@ -5,9 +5,9 @@
 #
 # Installs: xvfb, Orca, AT-SPI2, xdotool, Python GI bindings.
 # Usage:
-#   sudo bash orca-setup.sh          # install packages
-#   bash orca-setup.sh check         # verify everything works
-#   bash orca-setup.sh start-env     # start xvfb + dbus + at-spi2 (for containers without systemd)
+#   sudo bash drivers/orca/setup.sh          # install packages
+#   bash drivers/orca/setup.sh check         # verify everything works
+#   bash drivers/orca/setup.sh start-env     # start xvfb + dbus + at-spi2 (for containers without systemd)
 
 set -euo pipefail
 
@@ -94,7 +94,7 @@ start_env() {
   echo "  export DISPLAY=$DISPLAY"
   echo "  export DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"
   echo ""
-  echo "Then run: bun orca-driver.ts start <url>"
+  echo "Then run: bun drivers/orca/driver.ts start <url>"
 }
 
 # ---------------------------------------------------------------------------
@@ -143,7 +143,7 @@ check() {
   if $ok; then
     echo "All prerequisites met."
   else
-    echo "Some prerequisites missing. Run: sudo bash orca-setup.sh"
+    echo "Some prerequisites missing. Run: sudo bash drivers/orca/setup.sh"
   fi
 }
 

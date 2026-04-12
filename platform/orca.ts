@@ -5,15 +5,15 @@
  * This is a thin adapter — it delegates to the existing orca-core module.
  */
 
-import type { ScreenReaderDriver } from "../driver-interface.ts";
-import type { VoResult, TranscriptEntry } from "../types.ts";
-import { ORCA_COMMANDS } from "../types.ts";
+import type { ScreenReaderDriver } from "../drivers/interface.ts";
+import type { VoResult, TranscriptEntry } from "../drivers/types.ts";
+import { ORCA_COMMANDS } from "../drivers/types.ts";
 import type { Page } from "playwright";
 
-let core: typeof import("../orca-core.ts") | null = null;
+let core: typeof import("../drivers/orca/core.ts") | null = null;
 
 async function getCore() {
-  if (!core) core = await import("../orca-core.ts");
+  if (!core) core = await import("../drivers/orca/core.ts");
   return core;
 }
 
