@@ -1,0 +1,180 @@
+{
+  "date": "2026-04-12",
+  "run": "smoke-v1",
+  "commit": "e755995ce85f8b9fb041892f230e1a58f9563836",
+  "summary": {
+    "total": 10,
+    "truePositive": 5,
+    "trueNegative": 5,
+    "falsePositive": 0,
+    "falseNegative": 0,
+    "notEvaluated": 0,
+    "precision": 1.0,
+    "recall": 1.0
+  },
+  "byCriterion": {
+    "2.1.2": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "1.3.3": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "2.4.1": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "2.4.7": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "1.4.3": {
+      "tp": 1,
+      "tn": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1.0,
+      "recall": 1.0
+    }
+  },
+  "byTool": {
+    "axe": {
+      "tp": 2,
+      "tn": 2,
+      "fp": 0,
+      "fn": 0
+    },
+    "sr": {
+      "tp": 3,
+      "tn": 3,
+      "fp": 0,
+      "fn": 0
+    },
+    "screenshot": {
+      "tp": 3,
+      "tn": 3,
+      "fp": 0,
+      "fn": 0
+    }
+  },
+  "coverageGaps": [],
+  "cases": [
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/96eb4b26010e8c598cb659108dbc34ca0abd82f9.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["sr"],
+      "remarks": "Focus moved from Link 1 to Button1 to browser chrome — no keyboard trap. Tab order correct, Escape available."
+    },
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/f5ea9fd3b681971b2af4953fae9bb2d319a203c6.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["sr"],
+      "remarks": "Keyboard trap detected: Tab cycles between Link 2 and Button1 indefinitely. Focus never escapes to browser chrome. Escape key also trapped."
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/6edd8b8ec9bb14d8f35763e549f01cc21b3ef161.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["screenshot"],
+      "remarks": "Instruction 'Click the button labelled howdy, on the right' uses visual location but also provides the button label — not relying solely on sensory characteristics."
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/e25c4256ff639ea16f196a9b9fedcdabba540125.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["screenshot"],
+      "remarks": "Instruction 'Find the menu on the right, to navigate' relies solely on visual location with no non-sensory alternative for identifying the navigation."
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/fa30de1d9c2d3a313f7f18bc4e2cf6843ea10a89.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["axe", "sr"],
+      "remarks": "axe returned bypass as incomplete, but SR confirmed navigation landmark exists — valid bypass mechanism. Landmark navigation allows skipping repeated content."
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/55a6cc3efc35180844d75a9f207b456373b1435c.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["axe", "sr"],
+      "remarks": "axe returned bypass as incomplete. SR confirmed: no skip link, no headings, no main landmark. Only a complementary landmark exists which does not serve as bypass for main content."
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/52be6331dc0978990a8b806a9a4a84bf738a43e1.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["sr", "screenshot"],
+      "remarks": "SR confirmed focus on 'ACT rules' link. Screenshot shows clear visible focus indicator — dark rectangular outline around focused link."
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/f1c9efb4c8d1b5f7870c693bce2e6ca046dd768d.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["sr", "screenshot"],
+      "remarks": "SR confirmed focus on 'ACT rules' link, but screenshot shows no visible focus indicator — no outline, ring, or visual change on the focused element."
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/fd406bedf0bb3bdc4c2a718f49a3dd0f7aaa7556.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": ["axe", "screenshot"],
+      "remarks": "axe found no color-contrast violations. Text is #333 on #FFF (~12.6:1 ratio). Screenshot confirms dark, readable text on white background."
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/eaf0a926896f045a498073da42ea6263a4d6d36c.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": ["axe", "screenshot"],
+      "remarks": "axe flagged color-contrast violation: ratio 2.32:1 (#AAA on #FFF, 16px normal weight). Needs 4.5:1 minimum. Screenshot confirms faint, hard-to-read light gray text."
+    }
+  ]
+}
