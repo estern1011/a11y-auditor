@@ -1,7 +1,7 @@
 ---
 name: auditor
 description: |
-  Perform WCAG 2.2 AA accessibility audits using three tools: vo-driver (screen reader), audit.ts (axe-core automated checks), and agent-browser (page interaction + screenshots). Use this skill when the user asks to audit a website for accessibility, create an ACR/VPAT, QA a feature for a11y issues, or evaluate WCAG conformance. Also trigger when the user mentions accessibility audit, ACR, VPAT, WCAG compliance testing, or wants to systematically check a page or flow for accessibility.
+  Perform WCAG 2.2 AA accessibility audits using three tools: vo-driver (screen reader), audit.ts (axe-core automated checks), and agent-browser (page interaction + screenshots). Use this skill when the user asks to audit a website for accessibility, QA a feature for a11y issues, or evaluate WCAG conformance. Also trigger when the user mentions accessibility audit, WCAG compliance testing, or wants to systematically check a page or flow for accessibility. After the audit, use the /acr skill to generate a formal Accessibility Conformance Report (ACR/VPAT).
 ---
 
 # Accessibility Auditor
@@ -15,6 +15,7 @@ All commands run from the `a11y-auditor` project directory.
 ## Your Three Tools
 
 ### 1. vo-driver — Screen Reader (VoiceOver)
+
 Owns the headed browser + VoiceOver. **Start this first** — it launches the browser that the other tools connect to.
 
 ```bash
@@ -32,6 +33,7 @@ bun drivers/voiceover/driver.ts stop                     # shutdown
 ```
 
 ### 2. audit.ts — Automated Checks (axe-core)
+
 Runs axe-core against vo-driver's browser. Fast automated baseline.
 
 ```bash
@@ -47,6 +49,7 @@ Returns JSON with violations, incomplete items, pass count, and accessibility tr
 **Always run without tag filters first** to get the full picture (contrast, best-practice, etc.). Then run with `--tags wcag2a,wcag2aa` if you need to isolate WCAG-specific failures.
 
 ### 3. agent-browser — Page Interaction
+
 Connects to vo-driver's browser via CDP for clicking, typing, screenshots, and DOM snapshots.
 
 ```bash
@@ -73,14 +76,17 @@ agent-browser --cdp 9222 press Escape     # press key
 For each representative page/flow, work through ALL phases below. Do not skip phases.
 
 #### Phase 1: Automated Baseline
+
 ```bash
 bun drivers/voiceover/driver.ts start <url>
 bun audit.ts                        # full check — no tag filter
 bun audit.ts --tags wcag2a,wcag2aa  # then WCAG-only for the focused report
 ```
+
 Record all violations and incomplete items. The unfiltered run catches contrast (1.4.3), language (3.1.1), link purpose (2.4.4), and best-practice issues the filtered run misses.
 
 #### Phase 2: Document Structure (1.3.1, 1.3.2, 2.4.1, 2.4.2, 2.4.6, 2.4.10)
+
 ```bash
 # Page title
 bun drivers/voiceover/driver.ts item-text                    # check at top level before entering
@@ -107,12 +113,15 @@ bun drivers/voiceover/driver.ts transcript                   # review for logica
 ```
 
 #### Phase 3: Keyboard Navigation (2.1.1, 2.1.2, 2.4.3, 2.4.7)
+
 ```bash
 bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
 bun drivers/voiceover/driver.ts press Tab                    # tab through entire page
 bun drivers/voiceover/driver.ts transcript                   # review tab order
 ```
+
 Check:
+
 - All interactive elements reachable by Tab?
 - No keyboard traps (can always Tab away)?
 - Logical tab order?
@@ -123,6 +132,7 @@ agent-browser --cdp 9222 screenshot           # capture focus state
 ```
 
 #### Phase 4: Forms (1.3.1, 3.3.1, 3.3.2, 3.3.3, 4.1.2)
+
 ```bash
 # Tab through form fields — check each label
 bun drivers/voiceover/driver.ts press Tab                    # for each field
@@ -137,7 +147,9 @@ bun drivers/voiceover/driver.ts item-text                    # does it mention t
 ```
 
 #### Phase 5: Interactive Components (4.1.2, 4.1.3)
+
 For each custom widget (accordions, tabs, modals, menus, dialogs):
+
 ```bash
 # Navigate to widget
 bun drivers/voiceover/driver.ts perform FIND_NEXT_BUTTON     # or appropriate element type
@@ -167,6 +179,7 @@ bun audit.ts "#widget-selector"
 This phase is where you catch what automated tools miss. You systematically compare what's **visible** in screenshots against what's **exposed** in the a11y tree and automated findings, then reason about every element.
 
 ##### Step 1: Gather evidence
+
 ```bash
 # Full page screenshot
 agent-browser --cdp 9222 screenshot
@@ -195,6 +208,7 @@ Flag every mismatch. These are the bugs automated tools don't catch.
 ##### Step 4: Focus indicators (2.4.7, 2.4.11)
 
 Tab through each interactive element, taking a screenshot at each stop:
+
 ```bash
 bun drivers/voiceover/driver.ts press Tab
 agent-browser --cdp 9222 screenshot     # capture focus state
@@ -203,65 +217,77 @@ bun drivers/voiceover/driver.ts item-text              # what does VO announce?
 ```
 
 For each focused element, check:
+
 - Is there a **visible** focus indicator in the screenshot?
 - Is it distinguishable enough? (Not just a faint color change)
 - Does the VO announcement match what's visually focused?
 
 ##### Step 5: Reflow at 320px (1.4.10)
+
 ```bash
 # Resize viewport to 320px width
 agent-browser --cdp 9222 execute "window.innerWidth" # note current width
 agent-browser --cdp 9222 execute "document.documentElement.style.maxWidth='320px'"
 agent-browser --cdp 9222 screenshot
 ```
+
 Check: is there horizontal scrolling? Is content cut off or overlapping?
 
 ##### Step 6: Text spacing (1.4.12)
+
 ```bash
 # Inject WCAG text spacing overrides
 agent-browser --cdp 9222 execute "document.body.style.lineHeight='1.5'; document.body.style.letterSpacing='0.12em'; document.body.style.wordSpacing='0.16em'; document.querySelectorAll('p').forEach(p => p.style.marginBottom='2em')"
 agent-browser --cdp 9222 screenshot
 ```
+
 Check: is content still readable? No clipping, overlapping, or disappearing text?
 
 ##### Step 7: Content on hover/focus (1.4.13)
+
 For any tooltips, popovers, or hover-triggered content:
+
 ```bash
 agent-browser --cdp 9222 hover @ref    # hover over trigger element
 agent-browser --cdp 9222 screenshot     # capture hover state
 ```
+
 Check: can the hover content be dismissed (Escape)? Can you hover over the tooltip itself? Does it persist until dismissed?
 
 #### Phase 7: Remaining Criteria Checklist
 
 Check these explicitly — don't assume they pass just because axe didn't flag them:
 
-| Criterion | How to Check |
-|-----------|-------------|
-| 1.1.1 Non-text Content | `FIND_NEXT_IMAGE` loop — every image needs alt text or is decorative |
-| 1.4.3 Contrast | axe in Phase 1 (automated) |
-| 2.4.1 Bypass Blocks | Check for skip nav link at top of page |
-| 2.4.2 Page Titled | Check browser title is descriptive |
-| 2.4.4 Link Purpose | `FIND_NEXT_LINK` loop — each link text meaningful in context? |
-| 2.4.5 Multiple Ways | Is there more than one way to reach this page? (nav, search, sitemap) |
-| 3.1.1 Language of Page | axe in Phase 1 (automated) |
-| 3.2.1 On Focus | Tab through — does anything unexpected happen on focus alone? |
-| 3.2.2 On Input | Change form values — does anything unexpected happen? |
+| Criterion              | How to Check                                                          |
+| ---------------------- | --------------------------------------------------------------------- |
+| 1.1.1 Non-text Content | `FIND_NEXT_IMAGE` loop — every image needs alt text or is decorative  |
+| 1.4.3 Contrast         | axe in Phase 1 (automated)                                            |
+| 2.4.1 Bypass Blocks    | Check for skip nav link at top of page                                |
+| 2.4.2 Page Titled      | Check browser title is descriptive                                    |
+| 2.4.4 Link Purpose     | `FIND_NEXT_LINK` loop — each link text meaningful in context?         |
+| 2.4.5 Multiple Ways    | Is there more than one way to reach this page? (nav, search, sitemap) |
+| 3.1.1 Language of Page | axe in Phase 1 (automated)                                            |
+| 3.2.1 On Focus         | Tab through — does anything unexpected happen on focus alone?         |
+| 3.2.2 On Input         | Change form values — does anything unexpected happen?                 |
 
 ## Report Format
 
 Structure your report with these sections. **Every section is required.**
 
 ### 1. Summary
+
 Page URL, date, tools used, scope of testing.
 
 ### 2. Violations
+
 Table with: criterion, rule ID, impact, element, description, evidence (transcript index or screenshot).
 
 ### 3. Screen Reader Verification
+
 What you tested with VoiceOver and what you found. Include transcript references.
 
 ### 4. Passes
+
 Criteria you verified as passing, with brief evidence.
 
 ### 5. Confidence Levels
@@ -277,18 +303,21 @@ Criteria you verified as passing, with brief evidence.
 **This section is mandatory.** List everything the human reviewer needs to verify:
 
 **Could not test:**
+
 - Criteria that require visual judgment you can't make from screenshots alone
 - Multi-page flows you didn't navigate
 - States you couldn't trigger (specific error conditions, edge cases)
 - Cross-AT verification (you only tested VoiceOver + Chrome)
 
 **Tested but uncertain:**
+
 - axe "incomplete" items you couldn't conclusively verify
 - Visual checks where screenshot resolution limits your judgment
 - Reading order where you're unsure of the author's intended sequence
 - Custom widgets where you tested basic keyboard patterns but not all documented interactions
 
 **Out of scope:**
+
 - WCAG 2.2 criteria that require knowledge of the full application (3.2.6 Consistent Help, 3.3.7 Redundant Entry)
 - Criteria requiring user context (3.3.8 Accessible Authentication — is this a login flow?)
 - Mobile/touch testing (2.5.1 Pointer Gestures, 2.5.7 Dragging Movements)
@@ -307,6 +336,7 @@ Every report must include these disclaimers:
 ## VoiceOver Commands Reference
 
 ### Navigation
+
 ```
 FIND_NEXT_HEADING / FIND_PREVIOUS_HEADING
 FIND_NEXT_HEADING_SAME_LEVEL / FIND_PREVIOUS_HEADING_SAME_LEVEL
@@ -321,6 +351,7 @@ FIND_NEXT_FRAME
 ```
 
 ### Position & Interaction
+
 ```
 GO_TO_BEGINNING / GO_TO_END
 START_INTERACTING / STOP_INTERACTING
@@ -328,6 +359,7 @@ ESCAPE
 ```
 
 ### Reading
+
 ```
 READ_CURRENT_ITEM
 READ_ALL
@@ -337,6 +369,7 @@ READ_LINK_URL
 ```
 
 ### Focus
+
 ```
 SYNC_CURSOR_TO_KEYBOARD
 SYNC_KEYBOARD_TO_CURSOR
