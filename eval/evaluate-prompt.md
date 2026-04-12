@@ -46,9 +46,11 @@ Note: The `/auditor` skill references `{sr-driver}`. On the sprite,
 
 Read two files from the repo:
 
-1. **Test cases** — use `eval/sample-test-cases.json` for a quick run
-   (~26 cases), or `eval/act-test-cases.json` for the full suite
-   (~1,010 cases). Use the sample unless told otherwise.
+1. **Test cases** — use `eval/smoke-test-cases.json` for a smoke test
+   (~10 cases, ~15 min), `eval/sample-test-cases.json` for a quick run
+   (~26 cases, ~1 hr), or `eval/act-test-cases.json` for the full suite
+   (~1,010 cases, requires chunking). Use the smoke test unless told
+   otherwise.
 2. `skills/acr/criteria.json` — the WCAG 2.2 criteria with `testTools`
    arrays defining which tools to use per criterion
 
