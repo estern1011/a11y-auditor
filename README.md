@@ -170,6 +170,62 @@ The auditor skill prompt teaches Claude the methodology — which tool to use fo
 
 Logs: `/tmp/vo-driver.log`
 
+## Evaluation
+
+Measure the auditor's detection accuracy against W3C ACT Rules test cases — standalone HTML pages with known pass/fail outcomes.
+
+### Prerequisites
+
+- [Sprite CLI](https://sprites.dev) installed and authenticated (`sprite login`)
+- Changes pushed to GitHub (the sprite clones from the remote)
+
+### Step 1: Collect test cases (one-time)
+
+Run the collection prompt on claude.ai/code or Claude Code. It scrapes
+the [ACT Rules](https://www.w3.org/WAI/standards-guidelines/act/rules/)
+page and saves all Level A+AA test cases:
+
+```
+> Use the prompt in eval/collect-prompt.md
+```
+
+This produces `eval/act-test-cases.json`. Commit and push it.
+
+### Step 2: Run the evaluation
+
+```bash
+# Create a sprite and bootstrap it with your branch
+sprite create eval-1 --skip-console
+sprite exec -s eval-1 -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/estern1011/a11y-auditor/main/eval/sprite-bootstrap.sh)" -- main
+
+# Then give an agent the eval prompt:
+> Use the prompt in eval/evaluate-prompt.md
+```
+
+The agent will:
+1. Read `eval/act-test-cases.json` and `skills/acr/criteria.json`
+2. For each test case, run the right tools (`axe`, `sr`, `screenshot`) on the sprite
+3. Compare results against ground truth
+4. Produce `eval/results.json` with precision, recall, and per-criterion breakdown
+
+### Parallel evaluation
+
+Spin up multiple sprites to split work:
+
+```bash
+sprite create eval-1 --skip-console
+sprite create eval-2 --skip-console
+# Bootstrap both, give each agent a slice of criteria
+```
+
+### Evaluating a branch
+
+Pass the branch name to the bootstrap script:
+
+```bash
+sprite exec -s eval-1 -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/estern1011/a11y-auditor/main/eval/sprite-bootstrap.sh)" -- my-feature-branch
+```
+
 ## Development
 
 See [AGENTS.md](AGENTS.md) for detailed development guidance for AI agents.
