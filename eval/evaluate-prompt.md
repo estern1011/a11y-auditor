@@ -20,23 +20,57 @@ requested, use `main`.
 # 1. Create the sprite (named after the run)
 sprite create <run-name> --skip-console
 
-# 2. Bootstrap it (installs bun, orca deps, playwright, clones repo)
-sprite exec -s <run-name> -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/estern1011/a11y-auditor/main/eval/sprite-bootstrap.sh)" -- <branch>
+# 2. Bootstrap it — pipe the local script since the repo may be private
+cat eval/sprite-bootstrap.sh | sprite exec -s <run-name> -- bash -s -- <branch>
 ```
+
+> **Private repo?** The `curl` approach from GitHub will 404 for
+> private repos. Always prefer piping the local file as shown above.
 
 **Do this automatically at the start of the evaluation.** Do not ask
 the user to create the sprite — that is your job.
 
-All audit commands run on the sprite via `sprite exec`. Use
-`--dir /root/a11y-auditor` for commands that need the repo:
+#### Checkpoint optimization
+
+The cold bootstrap takes ~15 minutes (apt-get, bun install, playwright
+download). To skip this on subsequent runs, use sprite checkpoints:
 
 ```bash
-sprite exec -s <run-name> --dir /root/a11y-auditor -- <command>
+# After first successful bootstrap — save a checkpoint
+sprite checkpoint create --name eval-base -s <run-name>
+
+# On future runs — restore instead of bootstrapping
+sprite create <new-run-name> --skip-console
+sprite restore <checkpoint-id> -s <new-run-name>
+# Then just fetch the branch you want to evaluate:
+sprite exec -s <new-run-name> --dir $HOME/a11y-auditor -- git fetch origin && git checkout <branch>
+```
+
+Check for existing checkpoints with `sprite checkpoint list` before
+running a full bootstrap.
+
+#### Working directory and PATH
+
+The bootstrap installs the repo to `$HOME/a11y-auditor` on the sprite
+(typically `/home/sprite/a11y-auditor`). It also appends bun and
+node global bin directories to `~/.bashrc`.
+
+All audit commands run on the sprite via `sprite exec`. Use
+`--dir $HOME/a11y-auditor` for commands that need the repo:
+
+```bash
+sprite exec -s <run-name> --dir $HOME/a11y-auditor -- <command>
 ```
 
 All commands from the `/auditor` skill must be prefixed with:
 ```
-sprite exec -s <run-name> --dir /root/a11y-auditor --
+sprite exec -s <run-name> --dir $HOME/a11y-auditor --
+```
+
+If `bun` or `agent-browser` is not found, prepend this to your
+command:
+```bash
+export PATH="$HOME/.bun/bin:$(npm root -g)/../bin:$PATH"
 ```
 
 Note: The `/auditor` skill references `{sr-driver}`. On the sprite,
@@ -54,14 +88,18 @@ Read two files from the repo:
 2. `skills/acr/criteria.json` — the WCAG 2.2 criteria with `testTools`
    arrays defining which tools to use per criterion
 
+**Note on expected values:** The test case JSON uses `"passed"` /
+`"failed"` / `"inapplicable"`. Normalize these to `"pass"` / `"fail"`
+/ `"inapplicable"` when comparing against our verdicts.
+
 ### Step 2: Audit each test case
 
 For each test case, use `criteria.json` to determine the right tools:
 
 **Tool selection (from `testTools` for the criterion under test):**
 
-- `"axe"` — run `bun audit.ts --port 7484` for automated axe-core checks
-  (port 7484 is the Orca driver's default; VoiceOver uses 7483)
+- `"axe"` — run `bun audit.ts --port 7484` for automated axe-core
+  checks (port 7484 is the Orca driver's default; VoiceOver uses 7483)
 - `"sr"` — use the screen reader driver for keyboard navigation and
   announcement verification (includes keyboard interaction testing)
 - `"screenshot"` — use `agent-browser --cdp 9223 screenshot` plus
