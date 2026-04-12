@@ -80,6 +80,7 @@ Valid modifiers: `control`, `shift`, `alt`, `super`
 Orca uses single-key navigation in browse mode. Use `perform` with these command names.
 
 ### Heading Navigation
+
 ```bash
 bun drivers/orca/driver.ts perform FIND_NEXT_HEADING           # H
 bun drivers/orca/driver.ts perform FIND_PREVIOUS_HEADING       # Shift+H
@@ -90,6 +91,7 @@ bun drivers/orca/driver.ts perform FIND_NEXT_HEADING_3         # 3
 ```
 
 ### Link Navigation
+
 ```bash
 bun drivers/orca/driver.ts perform FIND_NEXT_LINK              # K
 bun drivers/orca/driver.ts perform FIND_PREVIOUS_LINK          # Shift+K
@@ -98,6 +100,7 @@ bun drivers/orca/driver.ts perform FIND_NEXT_VISITED_LINK      # V
 ```
 
 ### Element Navigation
+
 ```bash
 bun drivers/orca/driver.ts perform FIND_NEXT_BUTTON            # B
 bun drivers/orca/driver.ts perform FIND_PREVIOUS_BUTTON        # Shift+B
@@ -116,12 +119,14 @@ bun drivers/orca/driver.ts perform FIND_NEXT_SEPARATOR         # S
 ```
 
 ### Position
+
 ```bash
 bun drivers/orca/driver.ts perform GO_TO_BEGINNING             # Ctrl+Home
 bun drivers/orca/driver.ts perform GO_TO_END                   # Ctrl+End
 ```
 
 ### Full command list
+
 ```bash
 bun drivers/orca/driver.ts commands              # list all
 bun drivers/orca/driver.ts commands heading      # filter
@@ -148,6 +153,7 @@ bun drivers/orca/driver.ts next --json
 ## Response Format
 
 Every navigation command returns:
+
 - **spoken** — what Orca announced (raw screen reader output)
 - **name** — the element's accessible name (from AT-SPI2)
 - **role** — the element's role (from AT-SPI2)
@@ -158,29 +164,35 @@ The `spoken` field is Orca's actual speech output — it reflects what a real sc
 ## WCAG 2.2 AA Audit Methodology
 
 ### Phase 1: Orient
+
 1. `start <url>` — launches browser + Orca
 2. Walk headings with `perform FIND_NEXT_HEADING`
 
 ### Phase 2: Document Structure (1.3.1, 2.4.1, 2.4.6)
+
 - Loop headings with `perform FIND_NEXT_HEADING` — check hierarchy
 - Loop landmarks with `perform FIND_NEXT_LANDMARK` — check regions
 - Check images with `perform FIND_NEXT_IMAGE` — check alt text
 
 ### Phase 3: Forms (1.3.1, 3.3.1, 3.3.2, 4.1.2)
+
 - Tab through fields with `press Tab` — check labels announced
 - Use `item-text` to verify focus
 - Submit with errors — check error announcements
 
 ### Phase 4: Interactive Components (4.1.2, 4.1.3)
+
 - Navigate to custom widgets — is role announced?
 - Operate with keyboard (arrows, Enter, Escape)
 - Open/close modals — focus management correct?
 
 ### Phase 5: Keyboard (2.1.1, 2.1.2)
+
 - `press Tab` through entire page — all elements reachable?
 - Look for keyboard traps
 
 ### Phase 6: Reading Order (1.3.2)
+
 - Walk with `next` — logical sequence?
 - Use `transcript` to review the full reading order
 
@@ -195,15 +207,15 @@ The driver runs Orca on a virtual Linux desktop (Xvfb + openbox) and captures it
 
 ## Differences from VoiceOver Driver
 
-| Feature | vo-driver (macOS) | orca-driver (Linux) |
-|---------|------------------|-------------------|
-| Screen reader | VoiceOver | Orca |
-| A11y API | macOS Accessibility | AT-SPI2 via D-Bus |
-| Key injection | AppleScript | AT-SPI2 GenerateKeyboardEvent |
-| Speech capture | guidepup spokenPhraseLog | orca-customizations.py hook |
-| Browse mode | VoiceOver Quick Nav | Orca structural navigation |
-| Default HTTP port | 7483 | 7484 |
-| Default CDP port | 9222 | 9223 |
+| Feature           | vo-driver (macOS)        | orca-driver (Linux)           |
+| ----------------- | ------------------------ | ----------------------------- |
+| Screen reader     | VoiceOver                | Orca                          |
+| A11y API          | macOS Accessibility      | AT-SPI2 via D-Bus             |
+| Key injection     | AppleScript              | AT-SPI2 GenerateKeyboardEvent |
+| Speech capture    | guidepup spokenPhraseLog | orca-customizations.py hook   |
+| Browse mode       | VoiceOver Quick Nav      | Orca structural navigation    |
+| Default HTTP port | 7483                     | 7484                          |
+| Default CDP port  | 9222                     | 9223                          |
 
 ## Virtual Desktop Environments
 

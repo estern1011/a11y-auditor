@@ -18,8 +18,12 @@ import { chromium } from "playwright";
 import type { Page, Browser } from "playwright";
 import { translateError, type ErrorContext } from "../errors.ts";
 import {
-  type VoResponse, type VoError, type VoResult, type TranscriptEntry,
-  isVoError, ORCA_COMMANDS,
+  type VoResponse,
+  type VoError,
+  type VoResult,
+  type TranscriptEntry,
+  isVoError,
+  ORCA_COMMANDS,
 } from "../types.ts";
 import * as speech from "./speech.ts";
 import * as atspi from "./atspi.ts";
@@ -81,8 +85,12 @@ export function errorMsg(e: unknown): string {
 }
 
 export function removePidFile() {
-  try { if (existsSync(PID_FILE)) unlinkSync(PID_FILE); } catch {}
-  try { if (existsSync(ORCA_STATE_FILE)) unlinkSync(ORCA_STATE_FILE); } catch {}
+  try {
+    if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
+  } catch {}
+  try {
+    if (existsSync(ORCA_STATE_FILE)) unlinkSync(ORCA_STATE_FILE);
+  } catch {}
 }
 
 /** Strip non-printable characters that leak from modifier key release events. */
@@ -132,11 +140,15 @@ const state: DriverState = {
   browserPid: null,
 };
 
-export function getPage(): Page | null { return state.page; }
+export function getPage(): Page | null {
+  return state.page;
+}
 export function getStatus(): { orcaActive: boolean; currentUrl: string | null; cdpPort: number } {
   return { orcaActive: state.orcaActive, currentUrl: state.currentUrl, cdpPort: state.cdpPort };
 }
-export function getTranscriptLength(): number { return state.transcript.length; }
+export function getTranscriptLength(): number {
+  return state.transcript.length;
+}
 
 // ---------------------------------------------------------------------------
 // Logging & transcript
@@ -144,7 +156,9 @@ export function getTranscriptLength(): number { return state.transcript.length; 
 
 export function log(msg: string, err = false) {
   const line = `[${new Date().toISOString()}] [${err ? "ERROR" : "INFO"}] ${msg}\n`;
-  try { writeFileSync(LOG_FILE, line, { flag: "a" }); } catch {}
+  try {
+    writeFileSync(LOG_FILE, line, { flag: "a" });
+  } catch {}
 }
 
 function recordTranscript(entry: VoResponse): TranscriptEntry {
@@ -175,15 +189,26 @@ async function readCurrentElement(speechMarker: number): Promise<VoResponse> {
   speech.flush();
   let spoken = cleanSpoken(deduplicateSpoken(speech.spokenSince(speechMarker)));
 
-  let name = "", role = "", elementState: string[] = [];
+  let name = "",
+    role = "",
+    elementState: string[] = [];
   try {
     const element = await atspi.getItemInfo();
     if (element) {
       name = element.name;
       role = element.role;
-      elementState = element.state.filter(s =>
-        ["focused", "checked", "expanded", "collapsed", "selected",
-         "required", "visited", "pressed", "has-popup"].includes(s)
+      elementState = element.state.filter((s) =>
+        [
+          "focused",
+          "checked",
+          "expanded",
+          "collapsed",
+          "selected",
+          "required",
+          "visited",
+          "pressed",
+          "has-popup",
+        ].includes(s),
       );
     }
   } catch (e) {
@@ -199,34 +224,63 @@ async function readCurrentElement(speechMarker: number): Promise<VoResponse> {
 // ---------------------------------------------------------------------------
 
 const KEY_MAP: Record<string, string> = {
-  Return: "Return", Enter: "Return",
-  Space: "space", Escape: "Escape", Tab: "Tab",
-  Left: "Left", Right: "Right", Down: "Down", Up: "Up",
-  Delete: "Delete", Backspace: "BackSpace",
-  Home: "Home", End: "End",
-  PageUp: "Prior", PageDown: "Next",
-  F1: "F1", F2: "F2", F3: "F3", F4: "F4", F5: "F5", F6: "F6",
-  F7: "F7", F8: "F8", F9: "F9", F10: "F10", F11: "F11", F12: "F12",
+  Return: "Return",
+  Enter: "Return",
+  Space: "space",
+  Escape: "Escape",
+  Tab: "Tab",
+  Left: "Left",
+  Right: "Right",
+  Down: "Down",
+  Up: "Up",
+  Delete: "Delete",
+  Backspace: "BackSpace",
+  Home: "Home",
+  End: "End",
+  PageUp: "Prior",
+  PageDown: "Next",
+  F1: "F1",
+  F2: "F2",
+  F3: "F3",
+  F4: "F4",
+  F5: "F5",
+  F6: "F6",
+  F7: "F7",
+  F8: "F8",
+  F9: "F9",
+  F10: "F10",
+  F11: "F11",
+  F12: "F12",
 };
 
 const MODIFIER_MAP: Record<string, string> = {
-  control: "ctrl", ctrl: "ctrl",
-  shift: "shift", alt: "alt",
-  option: "alt", super: "super",
-  meta: "super", command: "super",
+  control: "ctrl",
+  ctrl: "ctrl",
+  shift: "shift",
+  alt: "alt",
+  option: "alt",
+  super: "super",
+  meta: "super",
+  command: "super",
 };
 
 export const VALID_MODIFIERS: Record<string, string> = {
-  control: "ctrl", ctrl: "ctrl",
-  shift: "shift", alt: "alt", super: "super",
+  control: "ctrl",
+  ctrl: "ctrl",
+  shift: "shift",
+  alt: "alt",
+  super: "super",
 };
 
-function resolveKey(key: string): string { return KEY_MAP[key] || key; }
+function resolveKey(key: string): string {
+  return KEY_MAP[key] || key;
+}
 
 function resolveModifiers(mods: string[]): string[] {
   return mods.map((m) => {
     const resolved = MODIFIER_MAP[m.toLowerCase()];
-    if (!resolved) throw new Error(`Unknown modifier: ${m}. Valid: ${Object.keys(VALID_MODIFIERS).join(", ")}`);
+    if (!resolved)
+      throw new Error(`Unknown modifier: ${m}. Valid: ${Object.keys(VALID_MODIFIERS).join(", ")}`);
     return resolved;
   });
 }
@@ -249,22 +303,31 @@ function ensureDisplay(): void {
     return;
   }
 
-  try { execSync("which Xvfb", { stdio: "pipe" }); } catch {
+  try {
+    execSync("which Xvfb", { stdio: "pipe" });
+  } catch {
     throw new Error("No DISPLAY set and Xvfb not found. Run: sudo bash drivers/orca/setup.sh");
   }
 
   try {
-    execSync("xdotool getdisplaygeometry", { stdio: "pipe", timeout: 3000, env: { ...process.env, DISPLAY: ":99" } });
+    execSync("xdotool getdisplaygeometry", {
+      stdio: "pipe",
+      timeout: 3000,
+      env: { ...process.env, DISPLAY: ":99" },
+    });
     process.env.DISPLAY = ":99";
     log("Using existing Xvfb on :99");
     return;
   } catch {}
 
-  try { execSync("rm -f /tmp/.X99-lock", { stdio: "pipe" }); } catch {}
+  try {
+    execSync("rm -f /tmp/.X99-lock", { stdio: "pipe" });
+  } catch {}
 
   log("Starting Xvfb on :99...");
   xvfbProc = spawn("Xvfb", [":99", "-screen", "0", "1280x1024x24", "-ac"], {
-    stdio: "pipe", detached: true,
+    stdio: "pipe",
+    detached: true,
   });
   xvfbProc.unref();
 
@@ -272,7 +335,8 @@ function ensureDisplay(): void {
   while (Date.now() - start < 3000) {
     try {
       execSync("xdotool getdisplaygeometry", {
-        stdio: "pipe", timeout: 1000,
+        stdio: "pipe",
+        timeout: 1000,
         env: { ...process.env, DISPLAY: ":99" },
       });
       process.env.DISPLAY = ":99";
@@ -293,7 +357,9 @@ function ensureWindowManager(): void {
     }
   } catch {}
 
-  try { execSync("which openbox", { stdio: "pipe" }); } catch {
+  try {
+    execSync("which openbox", { stdio: "pipe" });
+  } catch {
     log("openbox not found — window focus may not work", true);
     return;
   }
@@ -310,7 +376,7 @@ function ensureDbus(): void {
   }
 
   const result = execSync("dbus-launch --sh-syntax", { encoding: "utf-8" });
-  const match = result.match(/DBUS_SESSION_BUS_ADDRESS='([^']+)'/);
+  const match = /DBUS_SESSION_BUS_ADDRESS='([^']+)'/.exec(result);
   if (!match) throw new Error("dbus-launch output not parseable");
   process.env.DBUS_SESSION_BUS_ADDRESS = match[1];
   log(`D-Bus started: ${match[1]}`);
@@ -318,11 +384,25 @@ function ensureDbus(): void {
 
 function ensureAtSpi2(): void {
   for (const [name, bins] of [
-    ["at-spi-bus-launcher", ["/usr/libexec/at-spi-bus-launcher", "/usr/lib/at-spi2-core/at-spi-bus-launcher"]],
-    ["at-spi2-registryd", ["/usr/libexec/at-spi2-registryd", "/usr/lib/at-spi2-core/at-spi2-registryd"]],
+    [
+      "at-spi-bus-launcher",
+      ["/usr/libexec/at-spi-bus-launcher", "/usr/lib/at-spi2-core/at-spi-bus-launcher"],
+    ],
+    [
+      "at-spi2-registryd",
+      ["/usr/libexec/at-spi2-registryd", "/usr/lib/at-spi2-core/at-spi2-registryd"],
+    ],
   ] as const) {
     try {
-      const bin = bins.find(b => { try { execSync(`test -x ${b}`, { stdio: "pipe" }); return true; } catch { return false; } }) || bins[0];
+      const bin =
+        bins.find((b) => {
+          try {
+            execSync(`test -x ${b}`, { stdio: "pipe" });
+            return true;
+          } catch {
+            return false;
+          }
+        }) || bins[0];
       const proc = spawn(bin, [], { stdio: "ignore", detached: true, env: process.env });
       proc.unref();
       if (name === "at-spi-bus-launcher") atSpiProc = proc;
@@ -335,15 +415,21 @@ function ensureAtSpi2(): void {
 }
 
 function ensureAudioSink(): void {
-  try { execSync("which pulseaudio", { stdio: "pipe" }); } catch {
+  try {
+    execSync("which pulseaudio", { stdio: "pipe" });
+  } catch {
     process.env.PULSE_SERVER = "none";
     log("No PulseAudio, set PULSE_SERVER=none");
     return;
   }
 
   try {
-    execSync("pulseaudio --check 2>/dev/null || pulseaudio --start --exit-idle-time=-1", { stdio: "pipe" });
-    execSync("pactl load-module module-null-sink sink_name=dummy 2>/dev/null || true", { stdio: "pipe" });
+    execSync("pulseaudio --check 2>/dev/null || pulseaudio --start --exit-idle-time=-1", {
+      stdio: "pipe",
+    });
+    execSync("pactl load-module module-null-sink sink_name=dummy 2>/dev/null || true", {
+      stdio: "pipe",
+    });
     log("PulseAudio started with null sink");
   } catch (e) {
     process.env.PULSE_SERVER = "none";
@@ -372,19 +458,30 @@ function ensureDesktopEnv(): void {
 // ---------------------------------------------------------------------------
 
 function isOrcaRunning(): boolean {
-  try { return spawnSync("pgrep", ["-x", "orca"]).status === 0; } catch { return false; }
+  try {
+    return spawnSync("pgrep", ["-x", "orca"]).status === 0;
+  } catch {
+    return false;
+  }
 }
 
 function startOrca(): boolean {
-  if (isOrcaRunning()) { log("Orca already running"); return false; }
+  if (isOrcaRunning()) {
+    log("Orca already running");
+    return false;
+  }
   spawn("orca", [], { detached: true, stdio: "ignore", env: { ...process.env } }).unref();
   log("Started Orca");
   return true;
 }
 
 function stopOrca() {
-  try { spawnSync("pkill", ["-x", "orca"]); log("Stopped Orca"); }
-  catch (e) { log(`Failed to stop Orca: ${errorMsg(e)}`, true); }
+  try {
+    spawnSync("pkill", ["-x", "orca"]);
+    log("Stopped Orca");
+  } catch (e) {
+    log(`Failed to stop Orca: ${errorMsg(e)}`, true);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -400,14 +497,23 @@ async function orcaAction(keyName: string, modifiers: string[] = []): Promise<Tr
 
 function lockedOrcaAction(keyName: string, modifiers: string[] = []): Promise<VoResult> {
   return withLock(async () => {
-    try { return await orcaAction(keyName, modifiers); }
-    catch (e) { return translateError(e); }
+    try {
+      return await orcaAction(keyName, modifiers);
+    } catch (e) {
+      return translateError(e);
+    }
   });
 }
 
-export function orcaNext(): Promise<VoResult> { return lockedOrcaAction("Down"); }
-export function orcaPrevious(): Promise<VoResult> { return lockedOrcaAction("Up"); }
-export function orcaAct(): Promise<VoResult> { return lockedOrcaAction("Return"); }
+export function orcaNext(): Promise<VoResult> {
+  return lockedOrcaAction("Down");
+}
+export function orcaPrevious(): Promise<VoResult> {
+  return lockedOrcaAction("Up");
+}
+export function orcaAct(): Promise<VoResult> {
+  return lockedOrcaAction("Return");
+}
 
 export async function orcaPerform(commandName: string): Promise<VoResult> {
   return withLock(async () => {
@@ -427,7 +533,8 @@ export async function orcaPerform(commandName: string): Promise<VoResult> {
 export async function orcaPress(key: string, modifiers: string[] = []): Promise<VoResult> {
   return withLock(async () => {
     const unknown = modifiers.filter((m) => !MODIFIER_MAP[m.toLowerCase()]);
-    if (unknown.length) return translateError(`Unknown modifier(s): ${unknown.join(", ")}`, { key });
+    if (unknown.length)
+      return translateError(`Unknown modifier(s): ${unknown.join(", ")}`, { key });
     try {
       const marker = speech.mark();
       await sendKey(resolveKey(key), resolveModifiers(modifiers));
@@ -448,19 +555,31 @@ async function focusBrowser() {
     const searchArgs = state.browserPid
       ? ["search", "--pid", state.browserPid.toString()]
       : ["search", "--name", "Chrome"];
-    const result = spawnSync("xdotool", searchArgs, { encoding: "utf-8", timeout: 5000, env: process.env });
+    const result = spawnSync("xdotool", searchArgs, {
+      encoding: "utf-8",
+      timeout: 5000,
+      env: process.env,
+    });
     const windowId = (result.stdout || "").trim().split("\n")[0];
     if (windowId) {
-      spawnSync("xdotool", ["windowfocus", "--sync", windowId], { timeout: 5000, env: process.env });
+      spawnSync("xdotool", ["windowfocus", "--sync", windowId], {
+        timeout: 5000,
+        env: process.env,
+      });
       await sleep(ORCA_QUICK_SETTLE_MS);
     }
     // Click the center of the screen to focus web content (Chrome is maximized).
     // This real X11 click triggers an AT-SPI2 focus event on the web document,
     // which causes Orca to enter browse mode.
-    spawnSync("xdotool", ["mousemove", "640", "600", "click", "1"], { timeout: 5000, env: process.env });
+    spawnSync("xdotool", ["mousemove", "640", "600", "click", "1"], {
+      timeout: 5000,
+      env: process.env,
+    });
     await sleep(ORCA_SETTLE_MS);
     speech.clear();
-  } catch (e) { log(`focus warning: ${errorMsg(e)}`); }
+  } catch (e) {
+    log(`focus warning: ${errorMsg(e)}`);
+  }
 }
 
 export async function initialize(url: string | null, cdpPort: number) {
@@ -492,15 +611,23 @@ export async function initialize(url: string | null, cdpPort: number) {
 
   state.weStartedOrca = startOrca();
   state.orcaActive = isOrcaRunning();
-  if (!state.orcaActive) { await sleep(1000); state.orcaActive = isOrcaRunning(); }
   if (!state.orcaActive) {
-    try { await state.browser.close(); } catch {}
-    state.browser = null; state.page = null;
+    await sleep(1000);
+    state.orcaActive = isOrcaRunning();
+  }
+  if (!state.orcaActive) {
+    try {
+      await state.browser.close();
+    } catch {}
+    state.browser = null;
+    state.page = null;
     throw new Error("Orca failed to start. Install: sudo apt install orca");
   }
   log("Orca active");
 
-  try { writeFileSync(ORCA_STATE_FILE, JSON.stringify({ weStartedOrca: state.weStartedOrca })); } catch {}
+  try {
+    writeFileSync(ORCA_STATE_FILE, JSON.stringify({ weStartedOrca: state.weStartedOrca }));
+  } catch {}
 
   await sleep(ORCA_INIT_SETTLE_MS);
   await focusBrowser();
@@ -528,20 +655,37 @@ export async function cleanup() {
   await operationLock;
   speech.stopWatching();
   atspi.disconnect();
-  try { if (state.browser) { await state.browser.close(); state.browser = null; } }
-  catch (e) { log(`browser close: ${errorMsg(e)}`, true); }
-  if (state.orcaActive && state.weStartedOrca) stopOrca();
-  state.orcaActive = false; state.page = null; state.currentUrl = null;
-  for (const proc of [atSpiRegistryProc, atSpiProc, xvfbProc]) {
-    if (proc?.pid) { try { process.kill(proc.pid); } catch {} }
+  try {
+    if (state.browser) {
+      await state.browser.close();
+      state.browser = null;
+    }
+  } catch (e) {
+    log(`browser close: ${errorMsg(e)}`, true);
   }
-  atSpiRegistryProc = null; atSpiProc = null; xvfbProc = null;
+  if (state.orcaActive && state.weStartedOrca) stopOrca();
+  state.orcaActive = false;
+  state.page = null;
+  state.currentUrl = null;
+  for (const proc of [atSpiRegistryProc, atSpiProc, xvfbProc]) {
+    if (proc?.pid) {
+      try {
+        process.kill(proc.pid);
+      } catch {}
+    }
+  }
+  atSpiRegistryProc = null;
+  atSpiProc = null;
+  xvfbProc = null;
 }
 
 export async function getItemText(): Promise<VoResult> {
   return withLock(async () => {
-    try { return await readCurrentElement(speech.mark()); }
-    catch (e) { return translateError(e); }
+    try {
+      return await readCurrentElement(speech.mark());
+    } catch (e) {
+      return translateError(e);
+    }
   });
 }
 

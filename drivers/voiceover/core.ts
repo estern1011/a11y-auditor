@@ -14,15 +14,27 @@ import { chromium } from "playwright";
 import type { Page, Browser } from "playwright";
 import { translateError, type ErrorContext } from "../errors.ts";
 import {
-  type VoResponse, type VoError, type VoResult, type TranscriptEntry,
-  isVoError, parseVoResponse, VOICEOVER_COMMANDS, KEY_CODES, VOICEOVER_MODIFIERS,
+  type VoResponse,
+  type VoError,
+  type VoResult,
+  type TranscriptEntry,
+  isVoError,
+  parseVoResponse,
+  VOICEOVER_COMMANDS,
+  KEY_CODES,
+  VOICEOVER_MODIFIERS,
 } from "../types.ts";
 
 // Re-export types surface so consumers can import from vo-core alone
 export type { VoResponse, VoError, VoResult, TranscriptEntry } from "../types.ts";
 export {
-  isVoError, parseVoResponse, STATE_KEYWORDS, ROLE_PATTERN,
-  VOICEOVER_COMMANDS, KEY_CODES, VOICEOVER_MODIFIERS,
+  isVoError,
+  parseVoResponse,
+  STATE_KEYWORDS,
+  ROLE_PATTERN,
+  VOICEOVER_COMMANDS,
+  KEY_CODES,
+  VOICEOVER_MODIFIERS,
 } from "./types.ts";
 
 // Backward compat aliases
@@ -81,8 +93,12 @@ export function errorMsg(e: unknown): string {
 }
 
 export function removePidFile() {
-  try { if (existsSync(PID_FILE)) unlinkSync(PID_FILE); } catch {}
-  try { if (existsSync(VO_STATE_FILE)) unlinkSync(VO_STATE_FILE); } catch {}
+  try {
+    if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
+  } catch {}
+  try {
+    if (existsSync(VO_STATE_FILE)) unlinkSync(VO_STATE_FILE);
+  } catch {}
 }
 
 // ---------------------------------------------------------------------------
@@ -115,11 +131,23 @@ const state: DriverState = {
 
 // --- State accessors (no direct mutation from outside vo-core) ---
 
-export function getPage(): Page | null { return state.page; }
-export function getStatus(): { voiceoverActive: boolean; currentUrl: string | null; cdpPort: number } {
-  return { voiceoverActive: state.voiceoverActive, currentUrl: state.currentUrl, cdpPort: state.cdpPort };
+export function getPage(): Page | null {
+  return state.page;
 }
-export function getTranscriptLength(): number { return state.transcript.length; }
+export function getStatus(): {
+  voiceoverActive: boolean;
+  currentUrl: string | null;
+  cdpPort: number;
+} {
+  return {
+    voiceoverActive: state.voiceoverActive,
+    currentUrl: state.currentUrl,
+    cdpPort: state.cdpPort,
+  };
+}
+export function getTranscriptLength(): number {
+  return state.transcript.length;
+}
 
 // ---------------------------------------------------------------------------
 // Logging
@@ -127,7 +155,9 @@ export function getTranscriptLength(): number { return state.transcript.length; 
 
 export function log(msg: string, err = false) {
   const line = `[${new Date().toISOString()}] [${err ? "ERROR" : "INFO"}] ${msg}\n`;
-  try { writeFileSync(LOG_FILE, line, { flag: "a" }); } catch {}
+  try {
+    writeFileSync(LOG_FILE, line, { flag: "a" });
+  } catch {}
 }
 
 function recordTranscript(entry: VoResponse): TranscriptEntry {
@@ -163,7 +193,8 @@ export function clearTranscript(): TranscriptEntry[] {
 export function runAppleScript(script: string, timeout = 10_000): Promise<string> {
   return new Promise((resolve, reject) => {
     const proc = spawn("osascript", ["-e", script]);
-    let out = "", err = "";
+    let out = "",
+      err = "";
     let settled = false;
     proc.stdout.on("data", (d: Buffer) => (out += d));
     proc.stderr.on("data", (d: Buffer) => (err += d));
@@ -207,14 +238,23 @@ async function voAction(action: () => Promise<void>): Promise<TranscriptEntry> {
 
 function lockedVoAction(action: () => Promise<void>): Promise<VoResult> {
   return withLock(async () => {
-    try { return await voAction(action); }
-    catch (e) { return translateError(e); }
+    try {
+      return await voAction(action);
+    } catch (e) {
+      return translateError(e);
+    }
   });
 }
 
-export function voNext(): Promise<VoResult> { return lockedVoAction(() => voiceOver.next()); }
-export function voPrevious(): Promise<VoResult> { return lockedVoAction(() => voiceOver.previous()); }
-export function voAct(): Promise<VoResult> { return lockedVoAction(() => voiceOver.act()); }
+export function voNext(): Promise<VoResult> {
+  return lockedVoAction(() => voiceOver.next());
+}
+export function voPrevious(): Promise<VoResult> {
+  return lockedVoAction(() => voiceOver.previous());
+}
+export function voAct(): Promise<VoResult> {
+  return lockedVoAction(() => voiceOver.act());
+}
 
 export async function voPerform(commandName: string): Promise<VoResult> {
   return withLock(async () => {
@@ -225,16 +265,21 @@ export async function voPerform(commandName: string): Promise<VoResult> {
     try {
       if (entry) {
         if (entry.type === "commander") {
-          const cmd = voiceOver.commanderCommands[entry.name as keyof typeof voiceOver.commanderCommands];
-          if (!cmd) return translateError(`commander command "${entry.name}" not found in guidepup`, ctx);
+          const cmd =
+            voiceOver.commanderCommands[entry.name as keyof typeof voiceOver.commanderCommands];
+          if (!cmd)
+            return translateError(`commander command "${entry.name}" not found in guidepup`, ctx);
           command = cmd;
         } else {
-          const cmd = voiceOver.keyboardCommands[entry.name as keyof typeof voiceOver.keyboardCommands];
-          if (!cmd) return translateError(`keyboard command "${entry.name}" not found in guidepup`, ctx);
+          const cmd =
+            voiceOver.keyboardCommands[entry.name as keyof typeof voiceOver.keyboardCommands];
+          if (!cmd)
+            return translateError(`keyboard command "${entry.name}" not found in guidepup`, ctx);
           command = cmd;
         }
       } else {
-        const cmd = voiceOver.commanderCommands[commandName as keyof typeof voiceOver.commanderCommands];
+        const cmd =
+          voiceOver.commanderCommands[commandName as keyof typeof voiceOver.commanderCommands];
         if (!cmd) return translateError(`Unknown command: ${commandName}`, ctx);
         command = cmd;
       }
@@ -258,7 +303,11 @@ async function _voEnterInner(): Promise<VoResult> {
   // Two strategies in sequence:
   // 1. Climb up VoiceOver's containment hierarchy to find and re-enter web content
   // 2. Tab-walk through browser chrome into the page, then sync VO cursor
-  return await _tryExitReenter() ?? await _tryTabWalk() ?? translateError("Could not find web content area");
+  return (
+    (await _tryExitReenter()) ??
+    (await _tryTabWalk()) ??
+    translateError("Could not find web content area")
+  );
 }
 
 /** Climb VO containment levels via STOP_INTERACTING until we hit the web content container, then START_INTERACTING. */
@@ -270,7 +319,9 @@ async function _tryExitReenter(): Promise<VoResult | null> {
         await voAppleScript('tell commander to perform command "start interacting with item"');
         await sleep(VO_SETTLE_MS);
         const spoken = await voAppleScript("return content of last phrase").catch(() => "");
-        const finalItem = await voAppleScript("return text under cursor of vo cursor").catch(() => "");
+        const finalItem = await voAppleScript("return text under cursor of vo cursor").catch(
+          () => "",
+        );
         const result = parseVoResponse(spoken, finalItem);
         log(`Entered web content (via exit/re-enter): ${finalItem}`);
         return recordTranscript(result);
@@ -305,13 +356,20 @@ async function _tryTabWalk(): Promise<VoResult | null> {
       await runAppleScript('tell application "System Events" to key code 48'); // Tab
       await sleep(VO_QUICK_SETTLE_MS);
       // Sync VO cursor to keyboard focus so we read the right element
-      await voAppleScript('tell commander to perform command "move voiceover cursor to keyboard focus"');
+      await voAppleScript(
+        'tell commander to perform command "move voiceover cursor to keyboard focus"',
+      );
       await sleep(VO_QUICK_SETTLE_MS);
       const itemText = await voAppleScript("return text under cursor of vo cursor");
       const lower = itemText.toLowerCase();
-      if (lower.includes("link") || lower.includes("heading") ||
-          lower.includes("web content") || lower.includes("banner") ||
-          lower.includes("main") || lower.includes("navigation")) {
+      if (
+        lower.includes("link") ||
+        lower.includes("heading") ||
+        lower.includes("web content") ||
+        lower.includes("banner") ||
+        lower.includes("main") ||
+        lower.includes("navigation")
+      ) {
         const spoken = await voAppleScript("return content of last phrase").catch(() => "");
         const result = parseVoResponse(spoken, itemText);
         log(`Entered web content (via Tab fallback): ${itemText}`);
@@ -346,7 +404,10 @@ export async function voPress(key: string, modifiers: string[] = []): Promise<Vo
       const escaped = key.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
       script = `tell application "System Events" to keystroke "${escaped}"${usingClause}`;
     } else {
-      return translateError(`Unknown key: "${key}". Use a named key (Return, Tab, etc.) or a single character.`, { key });
+      return translateError(
+        `Unknown key: "${key}". Use a named key (Return, Tab, etc.) or a single character.`,
+        { key },
+      );
     }
 
     try {
@@ -371,19 +432,25 @@ function detectBrowserApp(): string {
   // Prefer the known Playwright-bundled browser. Only fall back to process
   // scanning if it isn't running — avoids grabbing the user's personal Chrome.
   try {
-    const check = spawnSync("osascript", ["-e",
-      `tell application "System Events" to get name of every process whose name is "${PLAYWRIGHT_BROWSER_APP}"`]);
+    const check = spawnSync("osascript", [
+      "-e",
+      `tell application "System Events" to get name of every process whose name is "${PLAYWRIGHT_BROWSER_APP}"`,
+    ]);
     const names = check.stdout.toString().trim();
     if (names.includes(PLAYWRIGHT_BROWSER_APP)) return PLAYWRIGHT_BROWSER_APP;
   } catch {}
 
   try {
-    const result = spawnSync("osascript", ["-e",
-      'tell application "System Events" to get name of every process whose name contains "Chrome"']);
+    const result = spawnSync("osascript", [
+      "-e",
+      'tell application "System Events" to get name of every process whose name contains "Chrome"',
+    ]);
     const names = result.stdout.toString().trim().split(", ");
-    return names.find((n) => n.includes("Testing"))
-      || names.find((n) => n.includes("Chrome") || n.includes("Chromium"))
-      || PLAYWRIGHT_BROWSER_APP;
+    return (
+      names.find((n) => n.includes("Testing")) ||
+      names.find((n) => n.includes("Chrome") || n.includes("Chromium")) ||
+      PLAYWRIGHT_BROWSER_APP
+    );
   } catch {
     return PLAYWRIGHT_BROWSER_APP;
   }
@@ -402,10 +469,13 @@ async function focusBrowser() {
       await state.page.click("body", { force: true });
       await sleep(VO_QUICK_SETTLE_MS);
     }
-  } catch (e) { log(`focus warning: ${errorMsg(e)}`); }
+  } catch (e) {
+    log(`focus warning: ${errorMsg(e)}`);
+  }
 }
 
-export const SPEECH_RATE_KEY = "SCRCategories_SCRCategorySystemWide_SCRSpeechLanguages_default_SCRSpeechComponentSettings_SCRRateAsPercent";
+export const SPEECH_RATE_KEY =
+  "SCRCategories_SCRCategorySystemWide_SCRSpeechLanguages_default_SCRSpeechComponentSettings_SCRRateAsPercent";
 
 export async function initialize(url: string | null, cdpPort: number) {
   state.cdpPort = cdpPort;
@@ -427,7 +497,9 @@ export async function initialize(url: string | null, cdpPort: number) {
     state.weStartedVoiceOver = true;
   } catch (e) {
     // VoiceOver failed to start — close the browser we just launched
-    try { await state.browser.close(); } catch {}
+    try {
+      await state.browser.close();
+    } catch {}
     state.browser = null;
     state.page = null;
     throw e;
@@ -437,7 +509,11 @@ export async function initialize(url: string | null, cdpPort: number) {
 
   // Save original speech rate before overwriting
   try {
-    const current = spawnSync("defaults", ["read", "com.apple.VoiceOver4/default", SPEECH_RATE_KEY]);
+    const current = spawnSync("defaults", [
+      "read",
+      "com.apple.VoiceOver4/default",
+      SPEECH_RATE_KEY,
+    ]);
     const val = current.stdout.toString().trim();
     if (val && current.status === 0) {
       state.originalSpeechRate = val;
@@ -447,17 +523,28 @@ export async function initialize(url: string | null, cdpPort: number) {
 
   // Persist state so CLI kill command can restore speech rate and check VO ownership
   try {
-    writeFileSync(VO_STATE_FILE, JSON.stringify({
-      weStartedVoiceOver: true,
-      originalSpeechRate: state.originalSpeechRate,
-    }));
+    writeFileSync(
+      VO_STATE_FILE,
+      JSON.stringify({
+        weStartedVoiceOver: true,
+        originalSpeechRate: state.originalSpeechRate,
+      }),
+    );
   } catch {}
 
   // Max out speech rate for faster phrase capture
   try {
-    spawnSync("defaults", ["write", "com.apple.VoiceOver4/default", SPEECH_RATE_KEY, "-int", "100"]);
+    spawnSync("defaults", [
+      "write",
+      "com.apple.VoiceOver4/default",
+      SPEECH_RATE_KEY,
+      "-int",
+      "100",
+    ]);
     log("Speech rate set to 100");
-  } catch (e) { log(`speech rate warning: ${errorMsg(e)}`, true); }
+  } catch (e) {
+    log(`speech rate warning: ${errorMsg(e)}`, true);
+  }
 
   await sleep(VO_INIT_SETTLE_MS);
   await focusBrowser();
@@ -486,16 +573,28 @@ export async function cleanup() {
   // Restore original speech rate before stopping VoiceOver
   if (state.originalSpeechRate !== null) {
     try {
-      spawnSync("defaults", ["write", "com.apple.VoiceOver4/default",
-        SPEECH_RATE_KEY, "-int", state.originalSpeechRate]);
+      spawnSync("defaults", [
+        "write",
+        "com.apple.VoiceOver4/default",
+        SPEECH_RATE_KEY,
+        "-int",
+        state.originalSpeechRate,
+      ]);
       log(`Restored speech rate to ${state.originalSpeechRate}`);
-    } catch (e) { log(`speech rate restore: ${errorMsg(e)}`, true); }
+    } catch (e) {
+      log(`speech rate restore: ${errorMsg(e)}`, true);
+    }
     state.originalSpeechRate = null;
   }
 
   try {
-    if (state.browser) { await state.browser.close(); state.browser = null; }
-  } catch (e) { log(`browser close: ${errorMsg(e)}`, true); }
+    if (state.browser) {
+      await state.browser.close();
+      state.browser = null;
+    }
+  } catch (e) {
+    log(`browser close: ${errorMsg(e)}`, true);
+  }
 
   try {
     if (state.voiceoverActive && state.weStartedVoiceOver) {
@@ -505,7 +604,9 @@ export async function cleanup() {
   } catch (e) {
     log(`guidepup stop: ${errorMsg(e)}`, true);
     if (state.weStartedVoiceOver) {
-      try { spawnSync("osascript", ["-e", 'tell application "VoiceOver" to quit']); } catch {}
+      try {
+        spawnSync("osascript", ["-e", 'tell application "VoiceOver" to quit']);
+      } catch {}
     }
     state.voiceoverActive = false;
   }

@@ -35,12 +35,18 @@ export async function createVoiceOverDriver(): Promise<ScreenReaderDriver> {
 
     initialize: (url, cdpPort) => c.initialize(url, cdpPort),
     cleanup: () => c.cleanup(),
-    removePidFile: () => c.removePidFile(),
+    removePidFile: () => {
+      c.removePidFile();
+    },
 
     getPage: () => c.getPage(),
     getStatus: () => {
       const s = c.getStatus();
-      return { screenReaderActive: s.voiceoverActive, currentUrl: s.currentUrl, cdpPort: s.cdpPort };
+      return {
+        screenReaderActive: s.voiceoverActive,
+        currentUrl: s.currentUrl,
+        cdpPort: s.cdpPort,
+      };
     },
     getTranscriptLength: () => c.getTranscriptLength(),
 
@@ -58,6 +64,8 @@ export async function createVoiceOverDriver(): Promise<ScreenReaderDriver> {
     clearTranscript: () => c.clearTranscript(),
     getCommandNames: () => Object.keys(VOICEOVER_COMMANDS),
 
-    log: (msg, err) => c.log(msg, err),
+    log: (msg, err) => {
+      c.log(msg, err);
+    },
   };
 }

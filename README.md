@@ -159,23 +159,27 @@ The auditor skill prompt teaches Claude the methodology — which tool to use fo
 
 ## Troubleshooting
 
-| Problem | Fix |
-|---------|-----|
-| VoiceOver won't start | Run `bunx @guidepup/setup` and restart terminal |
-| Stuck in browser chrome | `bun drivers/voiceover/driver.ts enter` |
-| Commands timing out | Wake the display, then `bun drivers/voiceover/driver.ts kill` + `start` |
-| Daemon won't stop | `bun drivers/voiceover/driver.ts kill` |
-| CDP connection refused | Check `bun drivers/voiceover/driver.ts status` for the port |
+| Problem                     | Fix                                                                      |
+| --------------------------- | ------------------------------------------------------------------------ |
+| VoiceOver won't start       | Run `bunx @guidepup/setup` and restart terminal                          |
+| Stuck in browser chrome     | `bun drivers/voiceover/driver.ts enter`                                  |
+| Commands timing out         | Wake the display, then `bun drivers/voiceover/driver.ts kill` + `start`  |
+| Daemon won't stop           | `bun drivers/voiceover/driver.ts kill`                                   |
+| CDP connection refused      | Check `bun drivers/voiceover/driver.ts status` for the port              |
 | agent-browser can't connect | Make sure you're using `--cdp 9222` (or whatever port vo-driver reports) |
 
 Logs: `/tmp/vo-driver.log`
 
 ## Development
 
+See [AGENTS.md](AGENTS.md) for detailed development guidance for AI agents.
+
 ```bash
 bun install
 bun test              # run tests
 bun run typecheck     # type-check without emitting
+bun run lint          # run ESLint
+bun run format        # run Prettier
 ```
 
 ## License

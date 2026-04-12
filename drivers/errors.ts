@@ -35,7 +35,8 @@ const ERROR_PATTERNS: ErrorPattern[] = [
   },
   {
     pattern: /Unknown modifier/i,
-    message: (ctx) => ctx.key ? `Invalid modifier for key '${ctx.key}'.` : "Invalid key modifier.",
+    message: (ctx) =>
+      ctx.key ? `Invalid modifier for key '${ctx.key}'.` : "Invalid key modifier.",
     suggestion: "Valid modifiers: control, shift, alt/option, super/command",
   },
 

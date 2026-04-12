@@ -78,6 +78,7 @@ Valid modifiers: `control`, `option`, `command`, `shift`
 Use `perform` for any VoiceOver command. Names follow VoiceOver conventions.
 
 ### Element Navigation
+
 ```bash
 bun drivers/voiceover/driver.ts perform FIND_NEXT_HEADING
 bun drivers/voiceover/driver.ts perform FIND_PREVIOUS_HEADING
@@ -96,6 +97,7 @@ bun drivers/voiceover/driver.ts perform FIND_NEXT_FRAME
 ```
 
 ### Position & Interaction
+
 ```bash
 bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
 bun drivers/voiceover/driver.ts perform GO_TO_END
@@ -105,6 +107,7 @@ bun drivers/voiceover/driver.ts perform ESCAPE
 ```
 
 ### Rotor
+
 ```bash
 bun drivers/voiceover/driver.ts perform OPEN_WEB_ROTOR         # VO+U
 bun drivers/voiceover/driver.ts press Left                      # switch category
@@ -116,6 +119,7 @@ bun drivers/voiceover/driver.ts press Escape                    # close rotor
 ```
 
 ### Reading
+
 ```bash
 bun drivers/voiceover/driver.ts perform READ_CURRENT_ITEM
 bun drivers/voiceover/driver.ts perform READ_ALL
@@ -125,6 +129,7 @@ bun drivers/voiceover/driver.ts perform READ_PAGE_STATS
 ```
 
 ### Table Reading
+
 ```bash
 bun drivers/voiceover/driver.ts perform READ_TABLE_ROW
 bun drivers/voiceover/driver.ts perform READ_TABLE_COLUMN
@@ -133,6 +138,7 @@ bun drivers/voiceover/driver.ts perform READ_TABLE_POSITION
 ```
 
 ### Focus Management
+
 ```bash
 bun drivers/voiceover/driver.ts perform SYNC_CURSOR_TO_KEYBOARD
 bun drivers/voiceover/driver.ts perform SYNC_KEYBOARD_TO_CURSOR
@@ -140,6 +146,7 @@ bun drivers/voiceover/driver.ts perform DESCRIBE_KEYBOARD_FOCUS
 ```
 
 ### Full command list
+
 ```bash
 bun drivers/voiceover/driver.ts commands              # list all
 bun drivers/voiceover/driver.ts commands heading      # filter
@@ -166,6 +173,7 @@ bun drivers/voiceover/driver.ts next --json
 ## Response Format
 
 Every navigation command returns:
+
 - **spoken** — full VoiceOver announcement
 - **name** — the element's accessible name
 - **role** — the element's role (heading, link, button, etc.)
@@ -173,31 +181,37 @@ Every navigation command returns:
 ## WCAG 2.2 AA Audit Methodology
 
 ### Phase 1: Orient
+
 1. `start <url>` — launches browser + VoiceOver, enters web content
 2. `perform READ_PAGE_STATS` — counts of headings, links, controls
 
 ### Phase 2: Document Structure (1.3.1, 2.4.1, 2.4.6)
+
 - Loop headings with `perform FIND_NEXT_HEADING` — check hierarchy
 - Loop landmarks with `perform FIND_NEXT_LANDMARK` — check regions
 - Check images with `perform FIND_NEXT_IMAGE` — check alt text
 
 ### Phase 3: Forms (1.3.1, 3.3.1, 3.3.2, 4.1.2)
+
 - Tab through fields with `press Tab` — check labels announced
 - Use `perform DESCRIBE_KEYBOARD_FOCUS` to verify focus
 - Submit with errors — check error announcements
 
 ### Phase 4: Interactive Components (4.1.2, 4.1.3)
+
 - Navigate to custom widgets — is role announced?
 - Operate with keyboard (arrows, Enter, Escape) — state changes announced?
 - Open/close modals — focus management correct?
 - Trigger actions — live region updates announced?
 
 ### Phase 5: Keyboard (2.1.1, 2.1.2)
+
 - `press Tab` through entire page — all elements reachable?
 - Look for keyboard traps
 - Test custom keyboard patterns
 
 ### Phase 6: Reading Order (1.3.2)
+
 - Walk with `next` — logical sequence?
 - Use `transcript` to review the full reading order
 

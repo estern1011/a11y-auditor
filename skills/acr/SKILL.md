@@ -64,15 +64,15 @@ For each of the 55 WCAG 2.2 A+AA criteria in criteria.json:
 
 The "Remarks and Explanations" column is where the value lives. For each criterion:
 
-- **Supports**: Brief evidence. "All images have descriptive alt text. Verified by axe-core (0 violations for image-alt, role-img-alt) and VoiceOver navigation (all images announced with meaningful descriptions)."
-- **Partially Supports**: What works, what doesn't, and where. "Most form fields are labeled. 3 fields in the checkout flow (phone, zip, CVV) lack associated labels — VoiceOver announces them as 'edit text' with no description."
-- **Does Not Support**: What's broken and the impact. "Custom dropdown menus use div/span with click handlers. No ARIA roles, keyboard operation, or focus management. VoiceOver cannot interact with these controls."
+- **Supports**: Brief evidence. "All images have descriptive alt text. Verified by axe-core (0 violations for image-alt, role-img-alt) and screen reader navigation (all images announced with meaningful descriptions)."
+- **Partially Supports**: What works, what doesn't, and where. "Most form fields are labeled. 3 fields in the checkout flow (phone, zip, CVV) lack associated labels — screen reader announces them as 'edit text' with no description."
+- **Does Not Support**: What's broken and the impact. "Custom dropdown menus use div/span with click handlers. No ARIA roles, keyboard operation, or focus management. Screen reader cannot interact with these controls."
 - **Not Applicable**: Why. "No prerecorded video content on the audited pages."
 - **Not Evaluated**: What would be needed. "Requires testing across multiple pages to verify consistent navigation order. Only one page was audited."
 
 **Remarks must cite evidence:**
 - axe rule IDs and violation counts
-- VoiceOver transcript excerpts (quote the announcement)
+- Screen reader transcript excerpts (quote the announcement)
 - Screenshot observations (describe what you saw)
 - Specific pages/components affected
 
@@ -94,7 +94,7 @@ Generate the ACR as a markdown file. Use this exact structure:
 **Product Description:** [Brief description]
 **Contact Information:** [Contact for accessibility questions]
 **Notes:** [Any relevant notes about scope, methodology]
-**Evaluation Methods Used:** [List tools and methods — e.g., axe-core 4.x, VoiceOver + Chrome on macOS, manual keyboard testing, visual inspection]
+**Evaluation Methods Used:** [List tools and methods — e.g., axe-core 4.x, VoiceOver + Chrome on macOS (or Orca + Chromium on Linux), manual keyboard testing, visual inspection]
 
 ## Applicable Standards/Guidelines
 
@@ -180,7 +180,7 @@ When the user requests JSON (or for programmatic use), also output a machine-rea
   "date": "2026-04-12",
   "standard": "WCAG 2.2",
   "levels": ["A", "AA"],
-  "evaluationMethods": ["axe-core 4.x", "VoiceOver + Chrome", "manual"],
+  "evaluationMethods": ["axe-core 4.x", "screen reader + Chrome", "manual"],
   "criteria": [
     {
       "id": "1.1.1",

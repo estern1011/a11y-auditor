@@ -65,6 +65,7 @@ bun drivers/voiceover/driver.ts item-text               # where did focus land?
 ## vo-driver Command Surface
 
 ### Session
+
 ```bash
 bun drivers/voiceover/driver.ts start <url>           # launch browser + VoiceOver + CDP
 bun drivers/voiceover/driver.ts start <url> --cdp-port 9333  # custom CDP port
@@ -76,18 +77,21 @@ bun drivers/voiceover/driver.ts navigate <url>       # go to new URL + re-enter 
 ```
 
 ### Movement
+
 ```bash
 bun drivers/voiceover/driver.ts next                 # VO+Right
 bun drivers/voiceover/driver.ts previous             # VO+Left
 ```
 
 ### Interaction
+
 ```bash
 bun drivers/voiceover/driver.ts act                  # VO+Space (activate current item)
 bun drivers/voiceover/driver.ts press <key> [mods]   # raw keystroke (Tab, Return, Escape, arrows, etc.)
 ```
 
 ### VoiceOver Commands
+
 ```bash
 bun drivers/voiceover/driver.ts perform <COMMAND>    # any VoiceOver command
 ```
@@ -95,6 +99,7 @@ bun drivers/voiceover/driver.ts perform <COMMAND>    # any VoiceOver command
 Uses VoiceOver-standard command names (FIND_NEXT_HEADING, START_INTERACTING, etc.) so agents with existing VoiceOver knowledge feel at home.
 
 ### Queries
+
 ```bash
 bun drivers/voiceover/driver.ts transcript                # full session transcript
 bun drivers/voiceover/driver.ts transcript --since 42     # entries after index 42
@@ -104,6 +109,7 @@ bun drivers/voiceover/driver.ts commands [filter]         # list available perfo
 ```
 
 ### Flags
+
 ```bash
 --json          # structured JSON output (default: human-readable)
 --cdp-port N    # CDP port (default: 9222)
@@ -122,6 +128,7 @@ $ bun drivers/voiceover/driver.ts next --json
 ```
 
 ### Exit Codes
+
 - **0** — command succeeded (including "Heading not found" — that's useful info)
 - **1** — actual error (VoiceOver not running, daemon not started, timeout)
 
@@ -138,6 +145,7 @@ bun audit.ts --no-tree                     # skip a11y tree snapshot
 ```
 
 Output (always JSON):
+
 ```json
 {
   "url": "https://app.com/page",
@@ -198,6 +206,7 @@ Agent explores the feature with agent-browser, runs audit.ts on the states it en
 ### Conduct an accessibility audit (ACR/VPAT)
 
 Agent systematically tests representative pages/flows. For each page:
+
 1. audit.ts for automated baseline
 2. agent-browser for screenshots and interaction testing
 3. vo-driver for screen reader verification of complex components
@@ -207,6 +216,7 @@ Page auditor outputs structured findings. Separate report builder agent (future)
 ## Screen Reader Abstraction
 
 vo-driver is the VoiceOver/macOS implementation. The command interface (next, previous, act, press, enter, transcript, perform) is generic. Future backends:
+
 - nvda-driver (Windows)
 - orca-driver (Linux)
 
@@ -215,6 +225,7 @@ The auditor skill programs against the interface. Swap implementations per OS.
 ## What to Build
 
 ### Phase 1: Polish vo-driver ✓
+
 - [x] Expose CDP port on start (`--remote-debugging-port`)
 - [x] `enter` command (auto-navigate into web content)
 - [x] Auto-enter on `start` and `navigate`
@@ -228,6 +239,7 @@ The auditor skill programs against the interface. Swap implementations per OS.
 - [x] AI-friendly error translation (vo-errors.ts)
 
 ### Phase 2: audit.ts ✓
+
 - [x] Core function runs in vo-driver process (avoids CDP multi-connection issues)
 - [x] CLI wrapper hits /audit HTTP endpoint
 - [x] Runs axe-core scoped to CSS selector
@@ -236,6 +248,7 @@ The auditor skill programs against the interface. Swap implementations per OS.
 - [x] a11y tree uses Playwright ariaSnapshot with mode:"ai"
 
 ### Phase 3: Auditor skill doc ✓
+
 - [x] Agent persona (expert WCAG 2.2 AA auditor)
 - [x] Three-tool orchestration instructions
 - [x] WCAG criterion testing guide (which tool for which check)
@@ -243,6 +256,7 @@ The auditor skill programs against the interface. Swap implementations per OS.
 - [x] QA workflow and ACR/VPAT workflow
 
 ### Phase 4: Report builder (future)
+
 - [ ] Separate agent/skill
 - [ ] Takes structured findings from page auditors
 - [ ] Produces VPAT 2.5 format ACR

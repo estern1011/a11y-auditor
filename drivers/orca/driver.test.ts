@@ -108,8 +108,9 @@ describe("ORCA_COMMANDS", () => {
   });
 
   test("previous variants use shift modifier", () => {
-    const prevCmds = Object.entries(ORCA_COMMANDS)
-      .filter(([name]) => name.startsWith("FIND_PREVIOUS_"));
+    const prevCmds = Object.entries(ORCA_COMMANDS).filter(([name]) =>
+      name.startsWith("FIND_PREVIOUS_"),
+    );
     expect(prevCmds.length).toBeGreaterThan(5);
     for (const [name, entry] of prevCmds) {
       expect(entry.modifiers).toContain("shift");

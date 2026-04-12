@@ -128,7 +128,10 @@ if (import.meta.main) {
   let includeTree = true;
 
   function requireArg(flag: string, i: number): string {
-    if (!args[i + 1]) { console.error(`${flag} requires a value`); process.exit(1); }
+    if (!args[i + 1]) {
+      console.error(`${flag} requires a value`);
+      process.exit(1);
+    }
     return args[i + 1];
   }
 
@@ -136,7 +139,10 @@ if (import.meta.main) {
     switch (args[i]) {
       case "--port": {
         const val = parseInt(requireArg("--port", i), 10);
-        if (Number.isNaN(val)) { console.error(`Invalid --port value: ${args[i + 1]}`); process.exit(1); }
+        if (Number.isNaN(val)) {
+          console.error(`Invalid --port value: ${args[i + 1]}`);
+          process.exit(1);
+        }
         port = val;
         i++;
         break;

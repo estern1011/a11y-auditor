@@ -1,5 +1,12 @@
 import { describe, test, expect } from "bun:test";
-import { parseVoResponse, ROLE_PATTERN, STATE_KEYWORDS, VOICEOVER_COMMANDS, KEY_CODES, VOICEOVER_MODIFIERS } from "../types.ts";
+import {
+  parseVoResponse,
+  ROLE_PATTERN,
+  STATE_KEYWORDS,
+  VOICEOVER_COMMANDS,
+  KEY_CODES,
+  VOICEOVER_MODIFIERS,
+} from "../types.ts";
 import { translateError, type ErrorContext } from "../errors.ts";
 import { getFlag } from "./driver.ts";
 
@@ -118,7 +125,10 @@ describe("parseVoResponse", () => {
   // State extraction tests
 
   test("extracts unchecked state from checkbox", () => {
-    const r = parseVoResponse("Accept terms, unchecked, checkbox", "Accept terms, unchecked, checkbox");
+    const r = parseVoResponse(
+      "Accept terms, unchecked, checkbox",
+      "Accept terms, unchecked, checkbox",
+    );
     expect(r.name).toBe("Accept terms");
     expect(r.role).toBe("checkbox");
     expect(r.state).toEqual(["unchecked"]);
@@ -181,7 +191,10 @@ describe("parseVoResponse", () => {
   });
 
   test("extracts multiple states", () => {
-    const r = parseVoResponse("Email, required, dimmed, text field", "Email, required, dimmed, text field");
+    const r = parseVoResponse(
+      "Email, required, dimmed, text field",
+      "Email, required, dimmed, text field",
+    );
     expect(r.name).toBe("Email");
     expect(r.role).toBe("text field");
     expect(r.state).toEqual(["required", "dimmed"]);

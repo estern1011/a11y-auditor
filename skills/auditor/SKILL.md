@@ -1,7 +1,7 @@
 ---
 name: auditor
 description: |
-  Perform WCAG 2.2 AA accessibility audits using three tools: vo-driver (screen reader), audit.ts (axe-core automated checks), and agent-browser (page interaction + screenshots). Use this skill when the user asks to audit a website for accessibility, QA a feature for a11y issues, or evaluate WCAG conformance. Also trigger when the user mentions accessibility audit, WCAG compliance testing, or wants to systematically check a page or flow for accessibility. After the audit, use the /acr skill to generate a formal Accessibility Conformance Report (ACR/VPAT).
+  Perform WCAG 2.2 AA accessibility audits using three tools: screen reader driver (VoiceOver on macOS, Orca on Linux), audit.ts (axe-core automated checks), and agent-browser (page interaction + screenshots). Use this skill when the user asks to audit a website for accessibility, QA a feature for a11y issues, or evaluate WCAG conformance. Also trigger when the user mentions accessibility audit, WCAG compliance testing, or wants to systematically check a page or flow for accessibility. After the audit, use the /acr skill to generate a formal Accessibility Conformance Report (ACR/VPAT).
 ---
 
 # Accessibility Auditor
@@ -12,29 +12,40 @@ Your audit results will be reviewed by a human. Be explicit about what you teste
 
 All commands run from the `a11y-auditor` project directory.
 
+## Screen Reader Driver
+
+This skill uses `{sr-driver}` as a placeholder for the screen reader driver path. Choose based on your OS:
+
+| OS    | `{sr-driver}`                  | Default CDP Port |
+|-------|--------------------------------|------------------|
+| macOS | `drivers/voiceover/driver.ts`  | 9222             |
+| Linux | `drivers/orca/driver.ts`       | 9223             |
+
+The command interface is identical — `start`, `next`, `previous`, `act`, `press`, `perform`, `transcript`, `item-text`, `enter`, `stop` all work the same way. Replace `{sr-driver}` with the correct path in every command below.
+
 ## Your Three Tools
 
-### 1. vo-driver — Screen Reader (VoiceOver)
+### 1. Screen Reader Driver
 
-Owns the headed browser + VoiceOver. **Start this first** — it launches the browser that the other tools connect to.
+Owns the headed browser + screen reader. **Start this first** — it launches the browser that the other tools connect to.
 
 ```bash
-bun drivers/voiceover/driver.ts start <url>              # launch browser + VoiceOver + CDP
-bun drivers/voiceover/driver.ts navigate <url>           # go to new URL
-bun drivers/voiceover/driver.ts next                     # VO+Right — next item
-bun drivers/voiceover/driver.ts previous                 # VO+Left — previous item
-bun drivers/voiceover/driver.ts act                      # VO+Space — activate current item
-bun drivers/voiceover/driver.ts press <key> [modifiers]  # raw keystroke (Tab, Return, Escape, arrows)
-bun drivers/voiceover/driver.ts perform <COMMAND>        # VoiceOver command (FIND_NEXT_HEADING, etc.)
-bun drivers/voiceover/driver.ts enter                    # re-enter web content after page changes
-bun drivers/voiceover/driver.ts transcript [--since N]   # what VoiceOver has said
-bun drivers/voiceover/driver.ts item-text                # current focused item
-bun drivers/voiceover/driver.ts stop                     # shutdown
+bun {sr-driver} start <url>              # launch browser + screen reader + CDP
+bun {sr-driver} navigate <url>           # go to new URL
+bun {sr-driver} next                     # next item
+bun {sr-driver} previous                 # previous item
+bun {sr-driver} act                      # activate current item
+bun {sr-driver} press <key> [modifiers]  # raw keystroke (Tab, Return, Escape, arrows)
+bun {sr-driver} perform <COMMAND>        # screen reader command (FIND_NEXT_HEADING, etc.)
+bun {sr-driver} enter                    # re-enter web content after page changes
+bun {sr-driver} transcript [--since N]   # what the screen reader has said
+bun {sr-driver} item-text                # current focused item
+bun {sr-driver} stop                     # shutdown
 ```
 
 ### 2. audit.ts — Automated Checks (axe-core)
 
-Runs axe-core against vo-driver's browser. Fast automated baseline.
+Runs axe-core against the screen reader driver's browser. Fast automated baseline.
 
 ```bash
 bun audit.ts                              # full page — includes contrast, lang, etc.
@@ -50,7 +61,7 @@ Returns JSON with violations, incomplete items, pass count, and accessibility tr
 
 ### 3. agent-browser — Page Interaction
 
-Connects to vo-driver's browser via CDP for clicking, typing, screenshots, and DOM snapshots.
+Connects to the screen reader driver's browser via CDP for clicking, typing, screenshots, and DOM snapshots.
 
 ```bash
 agent-browser --cdp 9222 snapshot -i      # interactive accessibility snapshot
@@ -64,10 +75,10 @@ agent-browser --cdp 9222 press Escape     # press key
 
 ### For QA (quick check of a feature)
 
-1. `bun drivers/voiceover/driver.ts start <url>` — launch browser + VoiceOver
+1. `bun {sr-driver} start <url>` — launch browser + screen reader
 2. `bun audit.ts` — full automated baseline (no tag filter)
-3. Address violations. For "incomplete" items, verify with vo-driver.
-4. Test keyboard: `bun drivers/voiceover/driver.ts press Tab` through interactive elements
+3. Address violations. For "incomplete" items, verify with screen reader.
+4. Test keyboard: `bun {sr-driver} press Tab` through interactive elements
 5. Test screen reader on custom widgets: navigate, activate, check announcements
 6. Report findings with confidence levels
 
@@ -78,7 +89,7 @@ For each representative page/flow, work through ALL phases below. Do not skip ph
 #### Phase 1: Automated Baseline
 
 ```bash
-bun drivers/voiceover/driver.ts start <url>
+bun {sr-driver} start <url>
 bun audit.ts                        # full check — no tag filter
 bun audit.ts --tags wcag2a,wcag2aa  # then WCAG-only for the focused report
 ```
@@ -89,35 +100,35 @@ Record all violations and incomplete items. The unfiltered run catches contrast 
 
 ```bash
 # Page title
-bun drivers/voiceover/driver.ts item-text                    # check at top level before entering
+bun {sr-driver} item-text                    # check at top level before entering
 
 # Heading hierarchy — loop until "not found"
-bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
-bun drivers/voiceover/driver.ts perform FIND_NEXT_HEADING    # repeat until exhausted
+bun {sr-driver} perform GO_TO_BEGINNING
+bun {sr-driver} perform FIND_NEXT_HEADING    # repeat until exhausted
 
 # Landmarks
-bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
-bun drivers/voiceover/driver.ts perform FIND_NEXT_LANDMARK   # repeat — check regions
+bun {sr-driver} perform GO_TO_BEGINNING
+bun {sr-driver} perform FIND_NEXT_LANDMARK   # repeat — check regions
 
 # Images and alt text
-bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
-bun drivers/voiceover/driver.ts perform FIND_NEXT_IMAGE      # repeat — check each image's name
+bun {sr-driver} perform GO_TO_BEGINNING
+bun {sr-driver} perform FIND_NEXT_IMAGE      # repeat — check each image's name
 
 # Page stats overview
-bun drivers/voiceover/driver.ts perform READ_PAGE_STATS
+bun {sr-driver} perform READ_PAGE_STATS
 
 # Reading order (1.3.2) — walk the full page
-bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
-bun drivers/voiceover/driver.ts next                         # repeat through entire page
-bun drivers/voiceover/driver.ts transcript                   # review for logical sequence
+bun {sr-driver} perform GO_TO_BEGINNING
+bun {sr-driver} next                         # repeat through entire page
+bun {sr-driver} transcript                   # review for logical sequence
 ```
 
 #### Phase 3: Keyboard Navigation (2.1.1, 2.1.2, 2.4.3, 2.4.7)
 
 ```bash
-bun drivers/voiceover/driver.ts perform GO_TO_BEGINNING
-bun drivers/voiceover/driver.ts press Tab                    # tab through entire page
-bun drivers/voiceover/driver.ts transcript                   # review tab order
+bun {sr-driver} perform GO_TO_BEGINNING
+bun {sr-driver} press Tab                    # tab through entire page
+bun {sr-driver} transcript                   # review tab order
 ```
 
 Check:
@@ -135,15 +146,15 @@ agent-browser --cdp 9222 screenshot           # capture focus state
 
 ```bash
 # Tab through form fields — check each label
-bun drivers/voiceover/driver.ts press Tab                    # for each field
-bun drivers/voiceover/driver.ts item-text                    # is label announced?
+bun {sr-driver} press Tab                    # for each field
+bun {sr-driver} item-text                    # is label announced?
 
 # Test error handling — submit empty/invalid form
 agent-browser --cdp 9222 click @e3             # click submit button by ref
-bun drivers/voiceover/driver.ts transcript --since N         # are errors announced?
+bun {sr-driver} transcript --since N         # are errors announced?
 # Are error messages associated with fields?
-bun drivers/voiceover/driver.ts press Tab                    # tab to errored field
-bun drivers/voiceover/driver.ts item-text                    # does it mention the error?
+bun {sr-driver} press Tab                    # tab to errored field
+bun {sr-driver} item-text                    # does it mention the error?
 ```
 
 #### Phase 5: Interactive Components (4.1.2, 4.1.3)
@@ -152,23 +163,23 @@ For each custom widget (accordions, tabs, modals, menus, dialogs):
 
 ```bash
 # Navigate to widget
-bun drivers/voiceover/driver.ts perform FIND_NEXT_BUTTON     # or appropriate element type
+bun {sr-driver} perform FIND_NEXT_BUTTON     # or appropriate element type
 
 # Is role announced?
-bun drivers/voiceover/driver.ts item-text
+bun {sr-driver} item-text
 
 # Operate with keyboard per ARIA pattern
-bun drivers/voiceover/driver.ts act                          # activate
-bun drivers/voiceover/driver.ts press Tab                    # navigate within
-bun drivers/voiceover/driver.ts press Escape                 # dismiss
+bun {sr-driver} act                          # activate
+bun {sr-driver} press Tab                    # navigate within
+bun {sr-driver} press Escape                 # dismiss
 
 # Are state changes announced?
-bun drivers/voiceover/driver.ts transcript --since N
+bun {sr-driver} transcript --since N
 
 # Focus management for modals:
-bun drivers/voiceover/driver.ts item-text                    # where did focus go on open?
-bun drivers/voiceover/driver.ts press Escape
-bun drivers/voiceover/driver.ts item-text                    # where did focus go on close?
+bun {sr-driver} item-text                    # where did focus go on open?
+bun {sr-driver} press Escape
+bun {sr-driver} item-text                    # where did focus go on close?
 
 # Scoped audit on the widget
 bun audit.ts "#widget-selector"
@@ -210,9 +221,9 @@ Flag every mismatch. These are the bugs automated tools don't catch.
 Tab through each interactive element, taking a screenshot at each stop:
 
 ```bash
-bun drivers/voiceover/driver.ts press Tab
+bun {sr-driver} press Tab
 agent-browser --cdp 9222 screenshot     # capture focus state
-bun drivers/voiceover/driver.ts item-text              # what does VO announce?
+bun {sr-driver} item-text              # what does the screen reader announce?
 # Repeat for each interactive element
 ```
 
@@ -220,7 +231,7 @@ For each focused element, check:
 
 - Is there a **visible** focus indicator in the screenshot?
 - Is it distinguishable enough? (Not just a faint color change)
-- Does the VO announcement match what's visually focused?
+- Does the screen reader announcement match what's visually focused?
 
 ##### Step 5: Reflow at 320px (1.4.10)
 
@@ -284,7 +295,7 @@ Table with: criterion, rule ID, impact, element, description, evidence (transcri
 
 ### 3. Screen Reader Verification
 
-What you tested with VoiceOver and what you found. Include transcript references.
+What you tested with the screen reader and what you found. Include transcript references.
 
 ### 4. Passes
 
@@ -294,9 +305,9 @@ Criteria you verified as passing, with brief evidence.
 
 **Rate every finding using these levels:**
 
-- **High confidence** — Automated tool confirmed (axe violation/pass), or VoiceOver behavior directly observed and unambiguous.
+- **High confidence** — Automated tool confirmed (axe violation/pass), or screen reader behavior directly observed and unambiguous.
 - **Medium confidence** — You tested it and it seems right, but there's room for interpretation. Example: reading order "seems logical" but you can't know the author's intent. Or: focus indicator "appears visible" in screenshot but you can't measure contrast ratio precisely.
-- **Low confidence** — You checked but the result is uncertain. Example: axe reported "incomplete" and your VO check was inconclusive. Or: you tested one path through a form but there may be other error states.
+- **Low confidence** — You checked but the result is uncertain. Example: axe reported "incomplete" and your screen reader check was inconclusive. Or: you tested one path through a form but there may be other error states.
 
 ### 6. Human Review Required
 
@@ -307,7 +318,7 @@ Criteria you verified as passing, with brief evidence.
 - Criteria that require visual judgment you can't make from screenshots alone
 - Multi-page flows you didn't navigate
 - States you couldn't trigger (specific error conditions, edge cases)
-- Cross-AT verification (you only tested VoiceOver + Chrome)
+- Cross-AT verification (you only tested one screen reader + browser combination)
 
 **Tested but uncertain:**
 
@@ -329,11 +340,13 @@ Criteria you verified as passing, with brief evidence.
 
 Every report must include these disclaimers:
 
-1. **Single AT/browser combination.** This audit used VoiceOver + Chrome on macOS. Results may differ with NVDA, JAWS, or other browser combinations. A conformance claim requires testing with multiple AT/browser pairs.
+1. **Single AT/browser combination.** This audit used a single screen reader (VoiceOver on macOS or Orca on Linux) + Chrome. Results may differ with NVDA, JAWS, or other browser combinations. A conformance claim requires testing with multiple AT/browser pairs.
 2. **Automated checks are not comprehensive.** axe-core catches ~30-40% of WCAG issues. The remaining issues require human judgment.
 3. **Point-in-time snapshot.** Dynamic content, SPAs, and server-rendered differences may produce different results at different times.
 
-## VoiceOver Commands Reference
+## Screen Reader Commands Reference
+
+These commands work with both VoiceOver and Orca via `bun {sr-driver} perform <COMMAND>`.
 
 ### Navigation
 
@@ -376,12 +389,13 @@ SYNC_KEYBOARD_TO_CURSOR
 DESCRIBE_KEYBOARD_FOCUS
 ```
 
-Full list: `bun drivers/voiceover/driver.ts commands`
+Full list: `bun {sr-driver} commands`
 
 ## Troubleshooting
 
-- **VoiceOver stuck in browser chrome**: `bun drivers/voiceover/driver.ts enter`
-- **Page changed, VO lost context**: `bun drivers/voiceover/driver.ts enter`
-- **VoiceOver not responding**: `bun drivers/voiceover/driver.ts kill` then `bun drivers/voiceover/driver.ts start <url>`
-- **Need to re-enter after agent-browser interaction**: `bun drivers/voiceover/driver.ts enter`
-- **Display went to sleep**: Wake the machine, then `bun drivers/voiceover/driver.ts kill` + `start`
+- **Screen reader stuck in browser chrome**: `bun {sr-driver} enter`
+- **Page changed, lost context**: `bun {sr-driver} enter`
+- **Screen reader not responding**: `bun {sr-driver} kill` then `bun {sr-driver} start <url>`
+- **Need to re-enter after agent-browser interaction**: `bun {sr-driver} enter`
+- **Display went to sleep** (macOS): Wake the machine, then `bun {sr-driver} kill` + `start`
+- **No speech output** (Linux): Check Orca setup — `bash drivers/orca/setup.sh check`

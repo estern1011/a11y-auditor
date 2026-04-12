@@ -73,7 +73,9 @@ async function post(port: number, path: string, body?: object, timeout = 30_000)
 }
 
 async function get(port: number, path: string, timeout = 30_000): Promise<any> {
-  const res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(timeout) });
+  const res = await fetch(`http://127.0.0.1:${port}${path}`, {
+    signal: AbortSignal.timeout(timeout),
+  });
   const data = await res.json();
   if (!res.ok) throw new CliError(data?.error || `HTTP ${res.status}`);
   return data;
@@ -84,7 +86,10 @@ async function get(port: number, path: string, timeout = 30_000): Promise<any> {
 // ---------------------------------------------------------------------------
 
 function printVO(r: VoResult, jsonMode: boolean) {
-  if (jsonMode) { console.log(JSON.stringify(r)); return; }
+  if (jsonMode) {
+    console.log(JSON.stringify(r));
+    return;
+  }
   if (isVoError(r)) {
     console.error(`Error: ${r.error}`);
     if (r.suggestion) console.error(`  Suggestion: ${r.suggestion}`);
@@ -95,8 +100,14 @@ function printVO(r: VoResult, jsonMode: boolean) {
 }
 
 function printTranscript(entries: TranscriptEntry[], jsonMode: boolean) {
-  if (jsonMode) { console.log(JSON.stringify(entries)); return; }
-  if (entries.length === 0) { console.log("(empty transcript)"); return; }
+  if (jsonMode) {
+    console.log(JSON.stringify(entries));
+    return;
+  }
+  if (entries.length === 0) {
+    console.log("(empty transcript)");
+    return;
+  }
   for (const e of entries) {
     const prefix = `[${e.index}]`;
     if (e.spoken) console.log(`${prefix} ${e.spoken}`);
@@ -112,11 +123,7 @@ export const USAGE_VO = makeUsage("drivers/voiceover/driver.ts", "VoiceOver");
 export const USAGE_ORCA = makeUsage("drivers/orca/driver.ts", "Orca");
 export const USAGE_UNIFIED = makeUsage("drivers/driver.ts", "screen reader");
 
-export async function cli(
-  args: string[],
-  driver: ScreenReaderDriver,
-  usage: string,
-) {
+export async function cli(args: string[], driver: ScreenReaderDriver, usage: string) {
   const port = (() => {
     const i = args.indexOf("--port");
     return i >= 0 && args[i + 1] ? parseInt(args[i + 1], 10) : driver.defaultPort;
@@ -127,12 +134,15 @@ export async function cli(
   })();
   const jsonMode = args.includes("--json");
 
-  const positional = args.filter((a, i, arr) =>
-    !a.startsWith("--") && !(i > 0 && arr[i - 1]?.startsWith("--"))
+  const positional = args.filter(
+    (a, i, arr) => !a.startsWith("--") && !(i > 0 && arr[i - 1]?.startsWith("--")),
   );
   const cmd = positional[0];
 
-  if (!cmd) { console.log(usage); return; }
+  if (!cmd) {
+    console.log(usage);
+    return;
+  }
 
   try {
     switch (cmd) {
@@ -142,10 +152,22 @@ export async function cli(
         console.log(`Starting ${driver.name} driver...`);
 
         // Spawn the daemon
-        const child = Bun.spawn(["bun", process.argv[1], "serve", url, "--port", String(port), "--cdp-port", String(cdpPort)], {
-          stdio: ["ignore", "pipe", "pipe"],
-          env: process.env,
-        });
+        const child = Bun.spawn(
+          [
+            "bun",
+            process.argv[1],
+            "serve",
+            url,
+            "--port",
+            String(port),
+            "--cdp-port",
+            String(cdpPort),
+          ],
+          {
+            stdio: ["ignore", "pipe", "pipe"],
+            env: process.env,
+          },
+        );
 
         // Poll until server is ready
         for (let i = 0; i < STARTUP_POLL_MAX; i++) {
@@ -181,8 +203,15 @@ export async function cli(
           try {
             const stateData = JSON.parse(readFileSync(driver.stateFile, "utf-8"));
             if (typeof stateData.originalSpeechRate === "string") {
-              const key = "SCRCategories_SCRCategorySystemWide_SCRSpeechLanguages_default_SCRSpeechComponentSettings_SCRRateAsPercent";
-              spawnSync("defaults", ["write", "com.apple.VoiceOver4/default", key, "-int", stateData.originalSpeechRate]);
+              const key =
+                "SCRCategories_SCRCategorySystemWide_SCRSpeechLanguages_default_SCRSpeechComponentSettings_SCRRateAsPercent";
+              spawnSync("defaults", [
+                "write",
+                "com.apple.VoiceOver4/default",
+                key,
+                "-int",
+                stateData.originalSpeechRate,
+              ]);
             }
             if (stateData.weStartedVoiceOver !== false) {
               spawnSync("osascript", ["-e", 'tell application "VoiceOver" to quit']);
@@ -204,16 +233,30 @@ export async function cli(
 
       case "status": {
         const d = await get(port, "/");
-        if (jsonMode) { console.log(JSON.stringify(d)); }
-        else console.log(`Status: ${d.status}\n${driver.name}: ${d.voiceoverActive}\nURL: ${d.currentUrl || "(none)"}\nCDP: ws://127.0.0.1:${d.cdpPort}`);
+        if (jsonMode) {
+          console.log(JSON.stringify(d));
+        } else
+          console.log(
+            `Status: ${d.status}\n${driver.name}: ${d.voiceoverActive}\nURL: ${d.currentUrl || "(none)"}\nCDP: ws://127.0.0.1:${d.cdpPort}`,
+          );
         break;
       }
 
-      case "enter":     printVO(await post(port, "/enter"), jsonMode); break;
-      case "next":      printVO(await post(port, "/next"), jsonMode); break;
-      case "previous":  printVO(await post(port, "/previous"), jsonMode); break;
-      case "act":       printVO(await post(port, "/act"), jsonMode); break;
-      case "item-text": printVO(await get(port, "/item-text"), jsonMode); break;
+      case "enter":
+        printVO(await post(port, "/enter"), jsonMode);
+        break;
+      case "next":
+        printVO(await post(port, "/next"), jsonMode);
+        break;
+      case "previous":
+        printVO(await post(port, "/previous"), jsonMode);
+        break;
+      case "act":
+        printVO(await post(port, "/act"), jsonMode);
+        break;
+      case "item-text":
+        printVO(await get(port, "/item-text"), jsonMode);
+        break;
 
       case "navigate": {
         const url = positional[1];
@@ -242,7 +285,7 @@ export async function cli(
           const d = await fetch(`http://127.0.0.1:${port}/transcript`, {
             method: "DELETE",
             signal: AbortSignal.timeout(driver.cliTimeoutMs),
-          }).then(r => r.json());
+          }).then((r) => r.json());
           console.log(`Cleared ${d.cleared} entries`);
         } else {
           const sinceIdx = args.indexOf("--since");
@@ -257,11 +300,16 @@ export async function cli(
         const filter = positional[1] ? `?filter=${encodeURIComponent(positional[1])}` : "";
         const d = await get(port, `/commands${filter}`);
         if (jsonMode) console.log(JSON.stringify(d.commands));
-        else d.commands.forEach((c: string) => console.log(`  ${c}`));
+        else
+          d.commands.forEach((c: string) => {
+            console.log(`  ${c}`);
+          });
         break;
       }
 
-      case "help": case "--help": case "-h":
+      case "help":
+      case "--help":
+      case "-h":
         console.log(usage);
         break;
 

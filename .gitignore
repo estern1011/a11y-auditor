@@ -3,7 +3,11 @@ node_modules/
 *.log
 .DS_Store
 .agents/
-.factory/
+.factory/skills/
 skills-lock.json
 .claude/skills/find-skills/
 .sprite
+
+# Keep these config files
+!.prettierrc
+!.lintstagedrc.json

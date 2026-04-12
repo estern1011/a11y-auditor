@@ -1,0 +1,34 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: lint
+        name: ESLint
+        entry: bun run lint
+        language: system
+        types: [ts]
+        pass_filenames: false
+
+      - id: format-check
+        name: Prettier check
+        entry: bun run format:check
+        language: system
+        types: [ts, json, md]
+        pass_filenames: false
+
+      - id: typecheck
+        name: TypeScript type check
+        entry: bun run typecheck
+        language: system
+        types: [ts]
+        pass_filenames: false

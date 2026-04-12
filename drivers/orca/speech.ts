@@ -10,7 +10,15 @@
  * with mark/since semantics matching the VoiceOver driver's transcript.
  */
 
-import { writeFileSync, readFileSync, mkdirSync, existsSync, watchFile, unwatchFile, statSync } from "fs";
+import {
+  writeFileSync,
+  readFileSync,
+  mkdirSync,
+  existsSync,
+  watchFile,
+  unwatchFile,
+  statSync,
+} from "fs";
 import { execSync } from "child_process";
 import { homedir } from "os";
 import { join } from "path";
@@ -48,7 +56,7 @@ export function mark(): number {
  * Get all speech entries since a given marker.
  */
 export function since(marker: number): SpeechEntry[] {
-  return entries.filter(e => e.index >= marker);
+  return entries.filter((e) => e.index >= marker);
 }
 
 /**
@@ -63,7 +71,9 @@ export function lastEntries(n?: number): SpeechEntry[] {
  * Get the combined spoken text since a marker, joined with spaces.
  */
 export function spokenSince(marker: number): string {
-  return since(marker).map(e => e.text).join(" ");
+  return since(marker)
+    .map((e) => e.text)
+    .join(" ");
 }
 
 /**
@@ -74,7 +84,9 @@ export function clear(): number {
   entries = [];
   nextIndex = 0;
   filePos = 0;
-  try { writeFileSync(SPEECH_LOG, ""); } catch {}
+  try {
+    writeFileSync(SPEECH_LOG, "");
+  } catch {}
   return count;
 }
 
@@ -89,7 +101,7 @@ function readNew(): void {
     const newContent = content.slice(filePos);
     filePos = content.length;
 
-    const lines = newContent.split("\n").filter(l => l.trim());
+    const lines = newContent.split("\n").filter((l) => l.trim());
     const now = Date.now();
     for (const line of lines) {
       entries.push({
@@ -108,12 +120,16 @@ function readNew(): void {
  */
 export function startWatching(): void {
   if (watching) return;
-  try { writeFileSync(SPEECH_LOG, ""); } catch {}
+  try {
+    writeFileSync(SPEECH_LOG, "");
+  } catch {}
   filePos = 0;
   watching = true;
 
   // Poll-based watching (more reliable than fs.watch in containers)
-  watchFile(SPEECH_LOG, { interval: 100 }, () => readNew());
+  watchFile(SPEECH_LOG, { interval: 100 }, () => {
+    readNew();
+  });
 }
 
 /**
@@ -193,7 +209,9 @@ export function ensureSpeechCapture(log: (msg: string) => void): void {
   writeFileSync(customPath, ORCA_CUSTOMIZATIONS);
 
   // Kill any existing Orca so it restarts with our customizations
-  try { execSync("pkill -x orca", { stdio: "pipe" }); } catch {}
+  try {
+    execSync("pkill -x orca", { stdio: "pipe" });
+  } catch {}
 
   // Clear and start watching the log file
   clear();

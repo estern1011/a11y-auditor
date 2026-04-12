@@ -37,9 +37,9 @@ if (import.meta.main) {
   const cdpPort = getFlag(args, "cdp-port", driver.defaultCdpPort);
 
   if (args[0] === "serve") {
-    const positional = args.slice(1).filter((a, i, arr) =>
-      !a.startsWith("--") && !(i > 0 && arr[i - 1]?.startsWith("--"))
-    );
+    const positional = args
+      .slice(1)
+      .filter((a, i, arr) => !a.startsWith("--") && !(i > 0 && arr[i - 1]?.startsWith("--")));
     await startServer(driver, port, cdpPort, positional[0] || null);
   } else if (args.length === 0) {
     console.log(USAGE_UNIFIED);

@@ -22,7 +22,7 @@ export async function createDriver(): Promise<ScreenReaderDriver> {
 
   throw new Error(
     `Unsupported platform: ${process.platform}. ` +
-    `Supported: macOS (VoiceOver), Linux (Orca). ` +
-    `Override with SCREEN_READER_FORCE=voiceover|orca`
+      `Supported: macOS (VoiceOver), Linux (Orca). ` +
+      `Override with SCREEN_READER_FORCE=voiceover|orca`,
   );
 }

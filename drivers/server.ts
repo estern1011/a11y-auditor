@@ -28,16 +28,35 @@ function readBody(req: IncomingMessage, maxSize: number): Promise<string> {
     req.on("data", (c: Buffer) => {
       if (settled) return;
       size += c.length;
-      if (size > maxSize) { settled = true; req.destroy(); reject(new Error("Request body too large")); return; }
+      if (size > maxSize) {
+        settled = true;
+        req.destroy();
+        reject(new Error("Request body too large"));
+        return;
+      }
       b += c;
     });
-    req.on("end", () => { if (!settled) { settled = true; resolve(b); } });
-    req.on("error", (e) => { if (!settled) { settled = true; reject(e); } });
+    req.on("end", () => {
+      if (!settled) {
+        settled = true;
+        resolve(b);
+      }
+    });
+    req.on("error", (e) => {
+      if (!settled) {
+        settled = true;
+        reject(e);
+      }
+    });
   });
 }
 
 function parseBody(body: string): Record<string, unknown> | null {
-  try { return JSON.parse(body || "{}"); } catch { return null; }
+  try {
+    return JSON.parse(body || "{}");
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -53,69 +72,99 @@ export function createHandler(driver: ScreenReaderDriver) {
     try {
       if (path === "/" && method === "GET") {
         const s = driver.getStatus();
-        return json(res, 200, {
+        json(res, 200, {
           status: "running",
-          voiceoverActive: s.screenReaderActive,  // keep field name for API compat
+          voiceoverActive: s.screenReaderActive, // keep field name for API compat
           currentUrl: s.currentUrl,
           cdpPort: s.cdpPort,
         });
+        return;
       }
 
-      if (path === "/next" && method === "POST")
-        return json(res, 200, await driver.next());
+      if (path === "/next" && method === "POST") {
+        json(res, 200, await driver.next());
+        return;
+      }
 
-      if (path === "/previous" && method === "POST")
-        return json(res, 200, await driver.previous());
+      if (path === "/previous" && method === "POST") {
+        json(res, 200, await driver.previous());
+        return;
+      }
 
-      if (path === "/act" && method === "POST")
-        return json(res, 200, await driver.act());
+      if (path === "/act" && method === "POST") {
+        json(res, 200, await driver.act());
+        return;
+      }
 
       if (path === "/perform" && method === "POST") {
         const body = parseBody(await readBody(req, driver.maxRequestBody));
-        if (!body?.command || typeof body.command !== "string")
-          return json(res, 400, { error: "Missing 'command' in request body" });
-        return json(res, 200, await driver.perform(body.command));
+        if (!body?.command || typeof body.command !== "string") {
+          json(res, 400, { error: "Missing 'command' in request body" });
+          return;
+        }
+        json(res, 200, await driver.perform(body.command));
+        return;
       }
 
       if (path === "/press" && method === "POST") {
         const body = parseBody(await readBody(req, driver.maxRequestBody));
-        if (!body?.key || typeof body.key !== "string")
-          return json(res, 400, { error: "Missing 'key' in request body" });
-        const mods = Array.isArray(body.modifiers) ? body.modifiers as string[]
-          : typeof body.modifiers === "string" ? [body.modifiers] : [];
-        return json(res, 200, await driver.press(body.key, mods));
+        if (!body?.key || typeof body.key !== "string") {
+          json(res, 400, { error: "Missing 'key' in request body" });
+          return;
+        }
+        const mods = Array.isArray(body.modifiers)
+          ? (body.modifiers as string[])
+          : typeof body.modifiers === "string"
+            ? [body.modifiers]
+            : [];
+        json(res, 200, await driver.press(body.key, mods));
+        return;
       }
 
-      if (path === "/enter" && method === "POST")
-        return json(res, 200, await driver.enter());
+      if (path === "/enter" && method === "POST") {
+        json(res, 200, await driver.enter());
+        return;
+      }
 
       if (path === "/navigate" && method === "POST") {
         const body = parseBody(await readBody(req, driver.maxRequestBody));
-        if (!body?.url || typeof body.url !== "string")
-          return json(res, 400, { error: "Missing 'url' in request body" });
-        return json(res, 200, await driver.navigate(body.url));
+        if (!body?.url || typeof body.url !== "string") {
+          json(res, 400, { error: "Missing 'url' in request body" });
+          return;
+        }
+        json(res, 200, await driver.navigate(body.url));
+        return;
       }
 
-      if (path === "/item-text" && method === "GET")
-        return json(res, 200, await driver.getItemText());
+      if (path === "/item-text" && method === "GET") {
+        json(res, 200, await driver.getItemText());
+        return;
+      }
 
       if (path === "/transcript" && method === "GET") {
         const since = url.searchParams.get("since");
-        const entries = since !== null ? driver.getTranscript(parseInt(since, 10)) : driver.getTranscript();
-        return json(res, 200, { entries, length: driver.getTranscriptLength() });
+        const entries =
+          since !== null ? driver.getTranscript(parseInt(since, 10)) : driver.getTranscript();
+        json(res, 200, { entries, length: driver.getTranscriptLength() });
+        return;
       }
 
       if (path === "/transcript" && method === "DELETE") {
         const cleared = driver.clearTranscript();
-        return json(res, 200, { cleared: cleared.length });
+        json(res, 200, { cleared: cleared.length });
+        return;
       }
 
       if (path === "/audit" && method === "POST") {
         const page = driver.getPage();
-        if (!page) return json(res, 400, { error: "No browser page open" });
+        if (!page) {
+          json(res, 400, { error: "No browser page open" });
+          return;
+        }
         const body = parseBody(await readBody(req, driver.maxRequestBody));
         const result = await runAxeAudit(page, body || {});
-        return json(res, 200, result);
+        json(res, 200, result);
+        return;
       }
 
       if (path === "/commands" && method === "GET") {
@@ -123,9 +172,10 @@ export function createHandler(driver: ScreenReaderDriver) {
         const filter = url.searchParams.get("filter");
         if (filter) {
           const lower = filter.toLowerCase();
-          commands = commands.filter(c => c.toLowerCase().includes(lower));
+          commands = commands.filter((c) => c.toLowerCase().includes(lower));
         }
-        return json(res, 200, { commands });
+        json(res, 200, { commands });
+        return;
       }
 
       if (path === "/stop" && method === "POST") {
@@ -157,7 +207,9 @@ export async function startServer(
   cdpPort: number,
   url: string | null,
 ) {
-  try { writeFileSync(driver.logFile, ""); } catch {}
+  try {
+    writeFileSync(driver.logFile, "");
+  } catch {}
 
   await driver.initialize(url, cdpPort);
 
@@ -173,13 +225,17 @@ export async function startServer(
       driver.log(`Server on http://127.0.0.1:${port}, CDP on port ${cdpPort}`);
       console.log(`Server ready on http://127.0.0.1:${port}`);
       console.log(`CDP available on ws://127.0.0.1:${cdpPort}`);
-      try { writeFileSync(driver.pidFile, process.pid.toString()); } catch {}
+      try {
+        writeFileSync(driver.pidFile, process.pid.toString());
+      } catch {}
       resolve();
     });
   });
 
   if (url) {
-    try { await driver.enter(); } catch (e) {
+    try {
+      await driver.enter();
+    } catch (e) {
       driver.log(`auto-enter: ${e instanceof Error ? e.message : e}`, true);
     }
   }

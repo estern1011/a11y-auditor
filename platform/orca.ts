@@ -33,7 +33,9 @@ export async function createOrcaDriver(): Promise<ScreenReaderDriver> {
 
     initialize: (url, cdpPort) => c.initialize(url, cdpPort),
     cleanup: () => c.cleanup(),
-    removePidFile: () => c.removePidFile(),
+    removePidFile: () => {
+      c.removePidFile();
+    },
 
     getPage: () => c.getPage(),
     getStatus: () => {
@@ -56,6 +58,8 @@ export async function createOrcaDriver(): Promise<ScreenReaderDriver> {
     clearTranscript: () => c.clearTranscript(),
     getCommandNames: () => Object.keys(ORCA_COMMANDS),
 
-    log: (msg, err) => c.log(msg, err),
+    log: (msg, err) => {
+      c.log(msg, err);
+    },
   };
 }
