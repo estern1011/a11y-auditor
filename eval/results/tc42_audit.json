@@ -1,0 +1,49 @@
+{
+  "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/6cfa84/5bd22090d0f74dcea752749ef4ad8411e3772535.html",
+  "selector": "(full page)",
+  "axe": {
+    "violations": [
+      {
+        "id": "landmark-one-main",
+        "impact": "moderate",
+        "description": "Ensure the document has a main landmark",
+        "help": "Document should have one main landmark",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/landmark-one-main?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Passed Example 1</title>\n</head>\n<body>\n\t<p aria-hidden=\"true\">Some text</p>\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Document does not have a main landmark"
+          }
+        ]
+      },
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+        "help": "Page should contain a level-one heading",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/page-has-heading-one?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Passed Example 1</title>\n</head>\n<body>\n\t<p aria-hidden=\"true\">Some text</p>\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Page must have a level-one heading"
+          }
+        ]
+      }
+    ],
+    "incomplete": [],
+    "passes": 6,
+    "inapplicable": 81
+  }
+}

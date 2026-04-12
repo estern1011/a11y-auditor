@@ -1,0 +1,69 @@
+{
+  "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/97a4e1/ffe1796f06e1082a8ddae54a471dcca66c783c4e.html",
+  "selector": "(full page)",
+  "axe": {
+    "violations": [
+      {
+        "id": "aria-command-name",
+        "impact": "serious",
+        "description": "Ensure every ARIA button, link and menuitem has an accessible name",
+        "help": "ARIA commands must have an accessible name",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/aria-command-name?application=playwright",
+        "wcag": [
+          "wcag2a",
+          "wcag412"
+        ],
+        "nodes": [
+          {
+            "html": "<span role=\"button\"></span>",
+            "target": [
+              "span"
+            ],
+            "failureSummary": "Fix any of the following:\n  Element does not have text that is visible to screen readers\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+          }
+        ]
+      },
+      {
+        "id": "landmark-one-main",
+        "impact": "moderate",
+        "description": "Ensure the document has a main landmark",
+        "help": "Document should have one main landmark",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/landmark-one-main?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Failed Example 3</title>\n</head>\n<body>\n\t<span role=\"button\"></span>\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Document does not have a main landmark"
+          }
+        ]
+      },
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+        "help": "Page should contain a level-one heading",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/page-has-heading-one?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Failed Example 3</title>\n</head>\n<body>\n\t<span role=\"button\"></span>\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Page must have a level-one heading"
+          }
+        ]
+      }
+    ],
+    "incomplete": [],
+    "passes": 10,
+    "inapplicable": 76
+  }
+}

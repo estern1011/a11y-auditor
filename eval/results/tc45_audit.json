@@ -1,0 +1,69 @@
+{
+  "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/6cfa84/2adaacc2f7b8d7a0d2d1496ad6f56aafd171f7fe.html",
+  "selector": "(full page)",
+  "axe": {
+    "violations": [
+      {
+        "id": "aria-hidden-focus",
+        "impact": "serious",
+        "description": "Ensure aria-hidden elements are not focusable nor contain focusable elements",
+        "help": "ARIA hidden element must not be focusable or contain focusable elements",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/aria-hidden-focus?application=playwright",
+        "wcag": [
+          "wcag2a",
+          "wcag412"
+        ],
+        "nodes": [
+          {
+            "html": "<div aria-hidden=\"true\">\n\t\t<input aria-disabled=\"true\">\n\t</div>",
+            "target": [
+              "div"
+            ],
+            "failureSummary": "Fix all of the following:\n  Focusable content should be disabled or be removed from the DOM"
+          }
+        ]
+      },
+      {
+        "id": "landmark-one-main",
+        "impact": "moderate",
+        "description": "Ensure the document has a main landmark",
+        "help": "Document should have one main landmark",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/landmark-one-main?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Failed Example 2</title>\n</head>\n<body>\n\t<div aria-hidden=\"true\">\n\t\t<input aria-disabled=\"true\">\n\t</div>\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Document does not have a main landmark"
+          }
+        ]
+      },
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+        "help": "Page should contain a level-one heading",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/page-has-heading-one?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Failed Example 2</title>\n</head>\n<body>\n\t<div aria-hidden=\"true\">\n\t\t<input aria-disabled=\"true\">\n\t</div>\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Page must have a level-one heading"
+          }
+        ]
+      }
+    ],
+    "incomplete": [],
+    "passes": 4,
+    "inapplicable": 82
+  }
+}

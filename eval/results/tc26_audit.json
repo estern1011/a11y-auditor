@@ -1,0 +1,90 @@
+{
+  "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/047fe0/8e7af0a95841a94b2d1dbee0860b4719c2085945.html",
+  "selector": "(full page)",
+  "axe": {
+    "violations": [
+      {
+        "id": "html-has-lang",
+        "impact": "serious",
+        "description": "Ensure every HTML document has a lang attribute",
+        "help": "<html> element must have a lang attribute",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/html-has-lang?application=playwright",
+        "wcag": [
+          "wcag2a",
+          "wcag311"
+        ],
+        "nodes": [
+          {
+            "html": "<html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix any of the following:\n  The <html> element does not have a lang attribute"
+          }
+        ]
+      },
+      {
+        "id": "landmark-one-main",
+        "impact": "moderate",
+        "description": "Ensure the document has a main landmark",
+        "help": "Document should have one main landmark",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/landmark-one-main?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Document does not have a main landmark"
+          }
+        ]
+      },
+      {
+        "id": "region",
+        "impact": "moderate",
+        "description": "Ensure all page content is contained by landmarks",
+        "help": "All page content should be contained by landmarks",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/region?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<h1>Content</h1>",
+            "target": [
+              "h1:nth-child(1)"
+            ],
+            "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+          },
+          {
+            "html": "<ol>\n\t\t\t<li><a>Chapter 1</a></li>\n\t\t\t<li><a href=\"/WAI/content-assets/wcag-act-rules/test-assets/bypass-blocks-cf77f2/chapter2.html\">Chapter 2</a></li>\n\t\t</ol>",
+            "target": [
+              "ol"
+            ],
+            "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+          },
+          {
+            "html": "<h1>Three Heroes Swear Brotherhood at a Feast in the Peach Garden</h1>",
+            "target": [
+              "h1:nth-child(3)"
+            ],
+            "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+          },
+          {
+            "html": "<p>\n\t\t\tUnity succeeds division and division follows unity. One is bound to be replaced by the other after a long span of\n\t\t\ttime.\n\t\t</p>",
+            "target": [
+              "p"
+            ],
+            "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+          }
+        ]
+      }
+    ],
+    "incomplete": [],
+    "passes": 11,
+    "inapplicable": 76
+  }
+}

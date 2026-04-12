@@ -1,0 +1,68 @@
+{
+  "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/23a2a8/32bfac8a98cc212aa7bf9151bf40f665a7f51696.html",
+  "selector": "(full page)",
+  "axe": {
+    "violations": [
+      {
+        "id": "landmark-one-main",
+        "impact": "moderate",
+        "description": "Ensure the document has a main landmark",
+        "help": "Document should have one main landmark",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/landmark-one-main?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Passed Example 1</title>\n</head>\n<body>\n\t<img alt=\"W3C logo\" src=\"/WAI/content-assets/wcag-act-rules/test-assets/shared/w3c-logo.png\">\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Document does not have a main landmark"
+          }
+        ]
+      },
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+        "help": "Page should contain a level-one heading",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/page-has-heading-one?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Passed Example 1</title>\n</head>\n<body>\n\t<img alt=\"W3C logo\" src=\"/WAI/content-assets/wcag-act-rules/test-assets/shared/w3c-logo.png\">\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Page must have a level-one heading"
+          }
+        ]
+      },
+      {
+        "id": "region",
+        "impact": "moderate",
+        "description": "Ensure all page content is contained by landmarks",
+        "help": "All page content should be contained by landmarks",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/region?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<img alt=\"W3C logo\" src=\"/WAI/content-assets/wcag-act-rules/test-assets/shared/w3c-logo.png\">",
+            "target": [
+              "img"
+            ],
+            "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+          }
+        ]
+      }
+    ],
+    "incomplete": [],
+    "passes": 7,
+    "inapplicable": 79
+  }
+}

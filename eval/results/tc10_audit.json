@@ -1,0 +1,70 @@
+{
+  "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/59796f/5c71cdabc04f9038e21d872e20a516cb429a7619.html",
+  "selector": "(full page)",
+  "axe": {
+    "violations": [
+      {
+        "id": "input-image-alt",
+        "impact": "critical",
+        "description": "Ensure <input type=\"image\"> elements have alternative text",
+        "help": "Image buttons must have alternative text",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/input-image-alt?application=playwright",
+        "wcag": [
+          "wcag2a",
+          "wcag111",
+          "wcag412"
+        ],
+        "nodes": [
+          {
+            "html": "<input type=\"image\" src=\"/WAI/content-assets/wcag-act-rules/test-assets/shared/search-icon.svg\" alt=\"\">",
+            "target": [
+              "input"
+            ],
+            "failureSummary": "Fix any of the following:\n  Element has an empty alt attribute\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute\n  Element does not have an implicit (wrapped) <label>\n  Element does not have an explicit <label>"
+          }
+        ]
+      },
+      {
+        "id": "landmark-one-main",
+        "impact": "moderate",
+        "description": "Ensure the document has a main landmark",
+        "help": "Document should have one main landmark",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/landmark-one-main?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Failed Example 2</title>\n</head>\n<body>\n\t<input type=\"image\" src=\"/WAI/content-assets/wcag-act-rules/test-assets/shared/search-icon.svg\" alt=\"\">\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Document does not have a main landmark"
+          }
+        ]
+      },
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+        "help": "Page should contain a level-one heading",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/page-has-heading-one?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Failed Example 2</title>\n</head>\n<body>\n\t<input type=\"image\" src=\"/WAI/content-assets/wcag-act-rules/test-assets/shared/search-icon.svg\" alt=\"\">\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Page must have a level-one heading"
+          }
+        ]
+      }
+    ],
+    "incomplete": [],
+    "passes": 6,
+    "inapplicable": 80
+  }
+}

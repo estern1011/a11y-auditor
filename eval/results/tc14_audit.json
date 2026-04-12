@@ -1,0 +1,75 @@
+{
+  "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/e086e5/6726b79b0534d80f567c3e5fd7174962d411be95.html",
+  "selector": "(full page)",
+  "axe": {
+    "violations": [
+      {
+        "id": "landmark-one-main",
+        "impact": "moderate",
+        "description": "Ensure the document has a main landmark",
+        "help": "Document should have one main landmark",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/landmark-one-main?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Passed Example 3</title>\n</head>\n<body>\n\t<label for=\"country\">Country</label>\n\t<select id=\"country\">\n\t\t<option>England</option>\n\t\t<option>Scotland</option>\n\t\t<option>Wales</option>\n\t\t<option>Northern Ireland</option>\n\t</select>\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Document does not have a main landmark"
+          }
+        ]
+      },
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+        "help": "Page should contain a level-one heading",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/page-has-heading-one?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Passed Example 3</title>\n</head>\n<body>\n\t<label for=\"country\">Country</label>\n\t<select id=\"country\">\n\t\t<option>England</option>\n\t\t<option>Scotland</option>\n\t\t<option>Wales</option>\n\t\t<option>Northern Ireland</option>\n\t</select>\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Page must have a level-one heading"
+          }
+        ]
+      },
+      {
+        "id": "region",
+        "impact": "moderate",
+        "description": "Ensure all page content is contained by landmarks",
+        "help": "All page content should be contained by landmarks",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/region?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<label for=\"country\">Country</label>",
+            "target": [
+              "label"
+            ],
+            "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+          },
+          {
+            "html": "<select id=\"country\">\n\t\t<option>England</option>\n\t\t<option>Scotland</option>\n\t\t<option>Wales</option>\n\t\t<option>Northern Ireland</option>\n\t</select>",
+            "target": [
+              "#country"
+            ],
+            "failureSummary": "Fix any of the following:\n  Some page content is not contained by landmarks"
+          }
+        ]
+      }
+    ],
+    "incomplete": [],
+    "passes": 11,
+    "inapplicable": 76
+  }
+}

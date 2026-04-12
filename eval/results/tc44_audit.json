@@ -1,0 +1,90 @@
+{
+  "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/6cfa84/4e7955d592cbf361a55113fcd4524e979b16bb08.html",
+  "selector": "(full page)",
+  "axe": {
+    "violations": [
+      {
+        "id": "aria-hidden-focus",
+        "impact": "serious",
+        "description": "Ensure aria-hidden elements are not focusable nor contain focusable elements",
+        "help": "ARIA hidden element must not be focusable or contain focusable elements",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/aria-hidden-focus?application=playwright",
+        "wcag": [
+          "wcag2a",
+          "wcag412"
+        ],
+        "nodes": [
+          {
+            "html": "<div aria-hidden=\"true\">\n\t\t<a href=\"/\" style=\"position:absolute; top:-999em\">Link</a>\n\t</div>",
+            "target": [
+              "div"
+            ],
+            "failureSummary": "Fix all of the following:\n  Focusable content should have tabindex=\"-1\" or be removed from the DOM"
+          }
+        ]
+      },
+      {
+        "id": "landmark-one-main",
+        "impact": "moderate",
+        "description": "Ensure the document has a main landmark",
+        "help": "Document should have one main landmark",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/landmark-one-main?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Failed Example 1</title>\n</head>\n<body>\n\t<div aria-hidden=\"true\">\n\t\t<a href=\"/\" style=\"position:absolute; top:-999em\">Link</a>\n\t</div>\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Document does not have a main landmark"
+          }
+        ]
+      },
+      {
+        "id": "page-has-heading-one",
+        "impact": "moderate",
+        "description": "Ensure that the page, or at least one of its frames contains a level-one heading",
+        "help": "Page should contain a level-one heading",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/page-has-heading-one?application=playwright",
+        "wcag": [
+          "best-practice"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Failed Example 1</title>\n</head>\n<body>\n\t<div aria-hidden=\"true\">\n\t\t<a href=\"/\" style=\"position:absolute; top:-999em\">Link</a>\n\t</div>\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix all of the following:\n  Page must have a level-one heading"
+          }
+        ]
+      }
+    ],
+    "incomplete": [
+      {
+        "id": "bypass",
+        "impact": "serious",
+        "description": "Ensure each page has at least one mechanism for a user to bypass navigation and jump straight to the content",
+        "help": "Page must have means to bypass repeated blocks",
+        "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/bypass?application=playwright",
+        "wcag": [
+          "wcag2a",
+          "wcag241"
+        ],
+        "nodes": [
+          {
+            "html": "<html lang=\"en\"><head>\n\t<title>Failed Example 1</title>\n</head>\n<body>\n\t<div aria-hidden=\"true\">\n\t\t<a href=\"/\" style=\"position:absolute; top:-999em\">Link</a>\n\t</div>\n\n</body></html>",
+            "target": [
+              "html"
+            ],
+            "failureSummary": "Fix any of the following:\n  No valid skip link found\n  Page does not have a heading\n  Page does not have a landmark region"
+          }
+        ]
+      }
+    ],
+    "passes": 4,
+    "inapplicable": 81
+  }
+}
