@@ -11,22 +11,17 @@ results against ground truth.
 Before running any audits, create and bootstrap a sprite. The user
 must provide a **run name** — a short unique slug for this eval run
 (e.g., `baseline`, `contrast-fix`, `v2`). If they haven't provided
-one, ask for it before proceeding.
-
-Name sprites using the pattern `<run-name>-<n>`, where `<n>` is a
-sequence number starting at 1. This avoids collisions when multiple
-eval runs happen in parallel, and lets a single run use multiple
-sprites (`baseline-1`, `baseline-2`, etc.).
+one, ask for it before proceeding. The sprite is named after the run.
 
 Determine which branch to evaluate. If no specific branch is
 requested, use `main`.
 
 ```bash
-# 1. Create the sprite
-sprite create <run-name>-<n> --skip-console
+# 1. Create the sprite (named after the run)
+sprite create <run-name> --skip-console
 
 # 2. Bootstrap it (installs bun, orca deps, playwright, clones repo)
-sprite exec -s <run-name>-<n> -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/estern1011/a11y-auditor/main/eval/sprite-bootstrap.sh)" -- <branch>
+sprite exec -s <run-name> -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/estern1011/a11y-auditor/main/eval/sprite-bootstrap.sh)" -- <branch>
 ```
 
 **Do this automatically at the start of the evaluation.** Do not ask
@@ -36,12 +31,12 @@ All audit commands run on the sprite via `sprite exec`. Use
 `--dir /root/a11y-auditor` for commands that need the repo:
 
 ```bash
-sprite exec -s <your-sprite-name> --dir /root/a11y-auditor -- <command>
+sprite exec -s <run-name> --dir /root/a11y-auditor -- <command>
 ```
 
 All commands from the `/auditor` skill must be prefixed with:
 ```
-sprite exec -s <your-sprite-name> --dir /root/a11y-auditor --
+sprite exec -s <run-name> --dir /root/a11y-auditor --
 ```
 
 Note: The `/auditor` skill references `{sr-driver}`. On the sprite,
@@ -115,7 +110,7 @@ Save results to `eval/results.json`:
 ```json
 {
   "date": "2026-04-12",
-  "sprite": "<your-sprite-name>",
+  "run": "<run-name>",
   "commit": "<git commit hash of a11y-auditor on sprite>",
   "summary": {
     "total": 187,
