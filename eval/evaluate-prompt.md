@@ -8,16 +8,20 @@ results against ground truth.
 
 ### Setting up a sprite
 
-The `sprite` CLI is pre-installed and authenticated. Create a fresh
-sprite and bootstrap it:
+Before running any audits, create and bootstrap a sprite. Pick a unique
+name (e.g., `eval-<timestamp>`) and determine which branch to evaluate.
+If no specific branch is requested, use `main`.
 
 ```bash
+# 1. Create the sprite
 sprite create <your-sprite-name> --skip-console
 
-# Bootstrap with the current branch (pass branch name to evaluate
-# unpushed changes instead of main):
-sprite exec -s <your-sprite-name> -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/estern1011/a11y-auditor/main/eval/sprite-bootstrap.sh)" -- <branch-name>
+# 2. Bootstrap it (installs bun, orca deps, playwright, clones repo)
+sprite exec -s <your-sprite-name> -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/estern1011/a11y-auditor/main/eval/sprite-bootstrap.sh)" -- <branch>
 ```
+
+**Do this automatically at the start of the evaluation.** Do not ask
+the user to create the sprite — that is your job.
 
 All audit commands run on the sprite via `sprite exec`. Use
 `--dir /root/a11y-auditor` for commands that need the repo:

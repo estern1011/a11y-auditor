@@ -193,38 +193,16 @@ This produces `eval/act-test-cases.json`. Commit and push it.
 
 ### Step 2: Run the evaluation
 
-```bash
-# Create a sprite and bootstrap it with your branch
-sprite create eval-1 --skip-console
-sprite exec -s eval-1 -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/estern1011/a11y-auditor/main/eval/sprite-bootstrap.sh)" -- main
+Give an agent the prompt in `eval/evaluate-prompt.md`. The agent will
+automatically create a sprite, bootstrap it, and run the full eval:
 
-# Then give an agent the eval prompt:
-> Use the prompt in eval/evaluate-prompt.md
-```
+1. Create and bootstrap a sprite (Orca + Chromium + repo)
+2. Read `eval/act-test-cases.json` and `skills/acr/criteria.json`
+3. For each test case, run the right tools (`axe`, `sr`, `screenshot`) on the sprite
+4. Compare results against ground truth
+5. Produce `eval/results.json` with precision, recall, and per-criterion breakdown
 
-The agent will:
-1. Read `eval/act-test-cases.json` and `skills/acr/criteria.json`
-2. For each test case, run the right tools (`axe`, `sr`, `screenshot`) on the sprite
-3. Compare results against ground truth
-4. Produce `eval/results.json` with precision, recall, and per-criterion breakdown
-
-### Parallel evaluation
-
-Spin up multiple sprites to split work:
-
-```bash
-sprite create eval-1 --skip-console
-sprite create eval-2 --skip-console
-# Bootstrap both, give each agent a slice of criteria
-```
-
-### Evaluating a branch
-
-Pass the branch name to the bootstrap script:
-
-```bash
-sprite exec -s eval-1 -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/estern1011/a11y-auditor/main/eval/sprite-bootstrap.sh)" -- my-feature-branch
-```
+To evaluate a specific branch, tell the agent which branch to use.
 
 ## Development
 
