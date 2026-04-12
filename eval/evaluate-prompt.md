@@ -8,16 +8,25 @@ results against ground truth.
 
 ### Setting up a sprite
 
-Before running any audits, create and bootstrap a sprite. Pick a unique
-name (e.g., `eval-<timestamp>`) and determine which branch to evaluate.
-If no specific branch is requested, use `main`.
+Before running any audits, create and bootstrap a sprite. Name it
+using the pattern `<run-name>-<n>`, where `<run-name>` is a short
+slug describing this eval run and `<n>` is a sequence number
+(e.g., `act-baseline-1`, `contrast-fix-1`, `v2-retest-1`). If the
+user provides a run name, use it; otherwise derive one from the
+branch name or task (e.g., branch `fix/heading-nav` → `heading-nav-1`).
+
+The sequence number lets you spin up parallel sprites for the same
+run (`heading-nav-1`, `heading-nav-2`, etc.).
+
+Determine which branch to evaluate. If no specific branch is
+requested, use `main`.
 
 ```bash
 # 1. Create the sprite
-sprite create <your-sprite-name> --skip-console
+sprite create <run-name>-<n> --skip-console
 
 # 2. Bootstrap it (installs bun, orca deps, playwright, clones repo)
-sprite exec -s <your-sprite-name> -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/estern1011/a11y-auditor/main/eval/sprite-bootstrap.sh)" -- <branch>
+sprite exec -s <run-name>-<n> -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/estern1011/a11y-auditor/main/eval/sprite-bootstrap.sh)" -- <branch>
 ```
 
 **Do this automatically at the start of the evaluation.** Do not ask
