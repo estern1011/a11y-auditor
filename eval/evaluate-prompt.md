@@ -46,8 +46,9 @@ Note: The `/auditor` skill references `{sr-driver}`. On the sprite,
 
 Read two files from the repo:
 
-1. `eval/act-test-cases.json` — the ground truth test cases (collected
-   separately via the collect prompt)
+1. **Test cases** — use `eval/sample-test-cases.json` for a quick run
+   (~26 cases), or `eval/act-test-cases.json` for the full suite
+   (~1,010 cases). Use the sample unless told otherwise.
 2. `skills/acr/criteria.json` — the WCAG 2.2 criteria with `testTools`
    arrays defining which tools to use per criterion
 

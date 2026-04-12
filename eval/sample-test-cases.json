@@ -1,0 +1,254 @@
+{
+  "collected": "2026-04-12",
+  "source": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases.json",
+  "note": "Sample subset: 1 pass + 1 fail per rule, focused on criteria requiring SR or screenshot (not axe-only).",
+  "rules": [
+    {
+      "ruleId": "80af7b",
+      "ruleName": "Focusable element has no keyboard trap",
+      "wcagCriteria": [
+        "2.1.2"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/96eb4b26010e8c598cb659108dbc34ca0abd82f9.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/f5ea9fd3b681971b2af4953fae9bb2d319a203c6.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    },
+    {
+      "ruleId": "36b590",
+      "ruleName": "Error message describes invalid form field value",
+      "wcagCriteria": [
+        "3.3.1"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/36b590/e2cc934a42be5a597106214fa0fbcefd6ceac599.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/36b590/3bb6b76d2dd823e02cace7c6be2a7ebe535d1d97.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    },
+    {
+      "ruleId": "80f0bf",
+      "ruleName": "Audio or video element avoids automatically playing audio",
+      "wcagCriteria": [
+        "1.4.2"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80f0bf/0d2dcde8931a9083e590034768ae2e0af747491c.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80f0bf/968b12b14eb008b424f050ab74277426b2ea81bf.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    },
+    {
+      "ruleId": "cf77f2",
+      "ruleName": "Bypass Blocks of Repeated Content",
+      "wcagCriteria": [
+        "2.4.1"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/fa30de1d9c2d3a313f7f18bc4e2cf6843ea10a89.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/55a6cc3efc35180844d75a9f207b456373b1435c.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    },
+    {
+      "ruleId": "c4a8a4",
+      "ruleName": "HTML page title is descriptive",
+      "wcagCriteria": [
+        "2.4.2"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/c4a8a4/c19c231ab5175fb62b6a74b998aec0dd965c25c5.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/c4a8a4/2c1397032aad720fe43dee2be0d326be56957320.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    },
+    {
+      "ruleId": "b49b2e",
+      "ruleName": "Heading is descriptive",
+      "wcagCriteria": [
+        "2.4.6"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/25cb1d68473c174a3f3e464704de6826b7aabdd4.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/79cce8d89309bea03e122d2917d340a525db4de0.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    },
+    {
+      "ruleId": "5effbb",
+      "ruleName": "Link in context is descriptive",
+      "wcagCriteria": [
+        "2.4.4"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/c7661d61606728f898297f6e69f68af3d5b6c6d0.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/b2a671d96ac510ccc6e34dd58a141d13bb196508.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    },
+    {
+      "ruleId": "ffbc54",
+      "ruleName": "No keyboard shortcut uses only printable characters",
+      "wcagCriteria": [
+        "2.1.4"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/42e3322c82511e8b5df7ced0de580da73d48cee3.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/5824a1b3c92824e9ac93f1ca91e743deb6ca795e.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    },
+    {
+      "ruleId": "oj04fd",
+      "ruleName": "Element in sequential focus order has visible focus",
+      "wcagCriteria": [
+        "2.4.7"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/52be6331dc0978990a8b806a9a4a84bf738a43e1.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/f1c9efb4c8d1b5f7870c693bce2e6ca046dd768d.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    },
+    {
+      "ruleId": "afw4f7",
+      "ruleName": "Text has minimum contrast",
+      "wcagCriteria": [
+        "1.4.3"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/fd406bedf0bb3bdc4c2a718f49a3dd0f7aaa7556.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/eaf0a926896f045a498073da42ea6263a4d6d36c.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    },
+    {
+      "ruleId": "0va7u6",
+      "ruleName": "HTML images contain no text",
+      "wcagCriteria": [
+        "1.4.5"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/6e6a506352542f40f4fe08a805ce736e89b46b06.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/80ff3d6a9f2de0b2b9f179a13d91d47ce8c9ab26.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    },
+    {
+      "ruleId": "9bd38c",
+      "ruleName": "Content has alternative for visual reference",
+      "wcagCriteria": [
+        "1.3.3"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/6edd8b8ec9bb14d8f35763e549f01cc21b3ef161.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/e25c4256ff639ea16f196a9b9fedcdabba540125.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    },
+    {
+      "ruleId": "b33eff",
+      "ruleName": "Orientation of the page is not restricted using CSS transforms",
+      "wcagCriteria": [
+        "1.3.4"
+      ],
+      "testCases": [
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/0b392e6774d063a24241c3629113909e98c98607.html",
+          "expected": "passed",
+          "description": "Passed Example 1"
+        },
+        {
+          "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/3b2f386c66ccb9c1a9a848017dab9b074afbf858.html",
+          "expected": "failed",
+          "description": "Failed Example 1"
+        }
+      ]
+    }
+  ]
+}
