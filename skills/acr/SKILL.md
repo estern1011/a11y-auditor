@@ -39,9 +39,9 @@ Gather every finding from the audit:
 
 For each of the 55 WCAG 2.2 A+AA criteria in criteria.json:
 
-1. **Check axe results** — look at the `axeRules` array for that criterion. Did any of those rules produce violations? Did they all pass?
-2. **Check SR findings** — if `srTestable` is true, were there screen reader observations relevant to this criterion?
-3. **Check manual observations** — any visual/keyboard/interaction findings?
+1. **Check the `testTools` array** — this tells you which tools apply: `"axe"` (automated), `"sr"` (screen reader + keyboard), `"screenshot"` (visual + DOM/CSS inspection).
+2. **For each tool in `testTools`**, check whether the audit produced relevant findings. Use the per-tool instructions in `testMethod`.
+3. **If `testTools` is empty**, the criterion requires multi-page testing or input modalities we can't test — assign "Not Evaluated" and cite the `note` field.
 4. **Assign a conformance level:**
 
 | Conformance Level | When to Use |
@@ -55,9 +55,10 @@ For each of the 55 WCAG 2.2 A+AA criteria in criteria.json:
 **Rules for assigning conformance levels:**
 
 - If axe found violations for a criterion but the scope is limited (e.g., 2 of 50 images missing alt text), that's "Partially Supports", not "Does Not Support"
-- If `automatedCoverage` is "partial" or "none", axe passes alone are NOT sufficient for "Supports" — you need SR or manual verification too
-- If `automatedCoverage` is "full" and all related axe rules pass, you can assign "Supports"
-- If a criterion was not tested at all (no axe rules, no SR check, no manual check), assign "Not Evaluated" — never guess
+- If `testTools` includes multiple tools, axe passes alone are NOT sufficient for "Supports" — you need confirmation from the other listed tools (sr, screenshot) too
+- If `testTools` is `["axe"]` only and all related axe rules pass, you can assign "Supports"
+- If a criterion was not tested by any of its listed tools, assign "Not Evaluated" — never guess
+- If `testTools` is `[]`, assign "Not Evaluated" and cite the `note` field explaining why
 - When in doubt between two levels, choose the less favorable one
 
 ### Step 4: Write the Remarks
