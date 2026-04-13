@@ -15,7 +15,7 @@
  */
 
 import { parseArgs } from "util";
-import { mkdirSync, writeFileSync, existsSync } from "fs";
+import { mkdirSync, writeFileSync, existsSync, readdirSync, rmSync } from "fs";
 import { join } from "path";
 
 const { values } = parseArgs({
@@ -24,6 +24,7 @@ const { values } = parseArgs({
     dir: { type: "string", default: "/tmp/eval-queue" },
     rules: { type: "string", default: "" },
     criteria: { type: "string", default: "" },
+    clean: { type: "boolean", default: false },
   },
 });
 
@@ -117,8 +118,37 @@ for (const rule of data.rules) {
   }
 }
 
-// Create directory structure
+// Create directory structure (with idempotency check)
 const dir = values.dir!;
+if (existsSync(dir)) {
+  const existingPending = existsSync(join(dir, "pending"))
+    ? readdirSync(join(dir, "pending")).filter(f => f.endsWith(".json"))
+    : [];
+  const existingResults = existsSync(join(dir, "results"))
+    ? readdirSync(join(dir, "results")).filter(f => f.endsWith(".json"))
+    : [];
+
+  if ((existingPending.length > 0 || existingResults.length > 0) && !values.clean) {
+    console.error(
+      `Queue already exists at ${dir} (${existingPending.length} pending, ${existingResults.length} results).\n` +
+      `Use --clean to reset, or choose a different --dir.`
+    );
+    process.exit(1);
+  }
+
+  if (values.clean) {
+    for (const sub of ["pending", "claimed", "results"]) {
+      const subDir = join(dir, sub);
+      if (existsSync(subDir)) {
+        for (const f of readdirSync(subDir)) {
+          rmSync(join(subDir, f));
+        }
+      }
+    }
+    const gt = join(dir, "ground-truth.json");
+    if (existsSync(gt)) rmSync(gt);
+  }
+}
 for (const sub of ["pending", "claimed", "results"]) {
   mkdirSync(join(dir, sub), { recursive: true });
 }

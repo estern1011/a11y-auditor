@@ -135,7 +135,10 @@ for (const [, s] of Object.entries(byCriterion)) {
   st.recall = st.tp + st.fn > 0 ? Math.round((st.tp / (st.tp + st.fn)) * 100) / 100 : 1.0;
 }
 
-// By tool
+// By tool — NOTE: these stats reflect overall case verdicts attributed to
+// each tool that was used, not the tool's individual contribution. A case
+// using ["axe", "sr"] that the agent gets wrong counts as a miss for both
+// tools, even if one tool was correct and the other caused the error.
 const byTool: Record<string, any> = { axe: { tp: 0, tn: 0, fp: 0, fn: 0 }, sr: { tp: 0, tn: 0, fp: 0, fn: 0 }, screenshot: { tp: 0, tn: 0, fp: 0, fn: 0 } };
 for (const c of cases) {
   for (const tool of c.toolsUsed) {

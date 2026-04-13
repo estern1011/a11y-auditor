@@ -84,20 +84,20 @@ async function agentBrowser(...args: string[]): Promise<string> {
   return text.trim();
 }
 
-// --- Title redaction ---
+// --- Answer redaction ---
 
-function redactTitle(html: string): string {
-  // Replace "Passed Example N" / "Failed Example N" / "Inapplicable Example N"
-  // in <title> tags to prevent answer leakage
-  return html.replace(
-    /<title[^>]*>(.*?)<\/title>/gi,
-    (match, content) => {
-      const redacted = content
-        .replace(/\b(Passed|Failed|Inapplicable)\s+(Example|Test)\s*\d*/gi, "Test Page")
-        .replace(/\b(Pass|Fail)\w*\s+(Example|Test)\s*\d*/gi, "Test Page");
-      return `<title>${redacted}</title>`;
-    }
-  );
+const ANSWER_PATTERN = /\b(Passed|Failed|Inapplicable)\s+(Example|Test)\s*\d*/gi;
+const ANSWER_PATTERN_SHORT = /\b(Pass|Fail)\w*\s+(Example|Test)\s*\d*/gi;
+
+function redactAnswers(html: string): string {
+  // Redact "Passed/Failed/Inapplicable Example N" from:
+  // 1. <title> tags
+  // 2. <h1>-<h6> tags
+  // 3. Any visible text that matches the pattern
+  // This prevents answer leakage from page content.
+  return html
+    .replace(ANSWER_PATTERN, "Test Page")
+    .replace(ANSWER_PATTERN_SHORT, "Test Page");
 }
 
 // --- Main collection ---
@@ -127,7 +127,7 @@ async function collect(): Promise<Evidence> {
 
   // Get HTML (redacted) and snapshot
   const rawHtml = await agentBrowser("eval", "document.documentElement.outerHTML");
-  const html = redactTitle(rawHtml);
+  const html = redactAnswers(rawHtml);
   const snapshot = await agentBrowser("snapshot", "-i");
 
   const evidence: Evidence = { url, html, snapshot };
@@ -199,7 +199,8 @@ async function collect(): Promise<Evidence> {
   return evidence;
 }
 
-// Run and output
+// Run and output — always exit 0 with parseable JSON.
+// Callers check for the `error` field to detect failures.
 try {
   const evidence = await collect();
   console.log(JSON.stringify(evidence));
@@ -211,5 +212,4 @@ try {
     snapshot: "",
     error: err.message,
   }));
-  process.exit(1);
 }
