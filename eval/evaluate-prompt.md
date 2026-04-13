@@ -149,11 +149,11 @@ Launch one sub-agent per sprite. Each agent loops:
 
 3. **Judge** the evidence. Using the case's `criterion`, `testMethod`
    instructions, and the collected evidence, determine a verdict:
-   - **`fail`** — any tool found a violation
-   - **`pass`** — all tools confirm no issues
-   - **`inapplicable`** — the page doesn't contain the element type
-     the criterion tests (no images for image rules, no audio for
-     audio rules, etc.)
+   - **`fail`** — any tool found a violation of this specific criterion
+   - **`pass`** — the page contains the relevant content type AND
+     all tools confirm it meets the criterion
+   - **`inapplicable`** — the page does not contain the content type
+     that the criterion governs (see applicability guide below)
 
 4. **Save** the verdict:
    ```json
@@ -190,14 +190,73 @@ Repeat until the queue is empty:
 
 ## Judgment guidelines
 
-- Use the testMethod instructions for each tool to know what to check
-- "fail" = any tool found a clear violation
-- "pass" = all tools confirm the criterion is met
-- "inapplicable" = the page lacks the element type the criterion tests
-- When axe returns "incomplete", use other evidence (HTML, SR) to resolve
-- When unsure between pass and inapplicable, check whether the relevant
-  element type exists in the HTML
-- Base your verdict ONLY on tool evidence. Do not guess.
+### Pass vs inapplicable (CRITICAL — most common error)
+
+"Inapplicable" means the criterion's *preconditions* are not met —
+the page simply does not contain the content type the criterion
+governs. It does NOT mean "the page complies."
+
+**Use "pass"** when the relevant content type EXISTS and meets the
+criterion. Examples:
+- 1.4.5 Images of Text: page has an `<img>` of a photograph (not
+  text) → **pass** (images exist, none contain text)
+- 1.3.3 Sensory Characteristics: page has text mentioning shapes
+  but not as instructions for finding UI → **pass** (content exists,
+  no sensory-only instructions)
+- 2.4.6 Headings: page has a heading that accurately describes its
+  section → **pass**
+- 2.4.1 Bypass Blocks: page has a `<nav>` landmark → **pass** (the
+  landmark IS a bypass mechanism)
+
+**Use "inapplicable"** ONLY when the content type is entirely absent:
+- 1.4.5: page has zero `<img>`, `<svg>`, `<canvas>`, `<object>`,
+  `<input type=image>`, CSS background-image, or role=img elements
+- 1.3.3: page has no instructions at all (just raw content)
+- 1.4.2: page has no `<audio>` or `<video>` elements
+- 2.1.2: page has no focusable elements (no links, buttons, inputs)
+- 2.4.7: page has no elements in sequential focus order
+  (all interactive elements have tabindex="-1")
+- 2.1.4: page has no keyboard shortcuts, OR all shortcuts use
+  non-printable keys (Escape, arrows, F-keys)
+- 2.4.6: page has no heading elements at all
+
+**When in doubt, choose "pass" over "inapplicable".** A page that
+has the relevant content and handles it correctly is a pass. Only
+use inapplicable when you're certain the content type is absent.
+
+### Resolving axe "incomplete"
+
+When axe returns "incomplete" for a rule, it means axe couldn't
+compute a definitive answer — NOT that there's a violation. Common
+cases:
+- **color-contrast incomplete** (gradients, images, transparency):
+  Check the CSS color values manually. If foreground/background
+  can be determined and ratio ≥ 4.5:1 for normal text → pass.
+  Only flag as fail if you can confirm the ratio is below threshold.
+- **bypass incomplete**: Check for ANY of these bypass mechanisms —
+  any ONE is sufficient: skip link, `<nav>` landmark, `<main>`
+  landmark, heading structure. A `<nav>` alone satisfies 2.4.1.
+
+Do NOT treat "incomplete" as "fail". Use the other tools and HTML
+evidence to make a definitive call.
+
+### Specific criteria notes
+
+- **2.4.1 Bypass Blocks**: A `<nav>` landmark IS a valid bypass
+  mechanism by itself. You don't need skip links AND headings AND
+  main landmark — any single mechanism suffices.
+- **2.4.6 Headings**: An empty heading (`<h1></h1>`) is inapplicable
+  for "headings are descriptive" — an empty element is not
+  functioning as a heading. Don't flag it as a fail for this rule.
+- **1.4.5 Images of Text**: Logos are explicitly exempt. `<object>`
+  elements displaying photographs are not images of text (pass).
+  CSS `background-image` used for logos → pass (exempt).
+- **1.3.4 Orientation**: Only applies when CSS uses orientation
+  media queries with rotation transforms. Unconditional rotation
+  (no media query) is a different issue. `translateX` is not a
+  rotation — it doesn't lock orientation.
+- **2.1.2 No Keyboard Trap**: A `tabindex="-1"` element is not in
+  the tab order, so there's nothing to trap — inapplicable.
 
 ## Commands
 [include sprite exec prefix, PATH setup, etc.]
