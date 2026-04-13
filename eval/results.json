@@ -4,81 +4,81 @@
   "commit": "e755995ce85f8b9fb041892f230e1a58f9563836",
   "summary": {
     "total": 188,
-    "truePositive": 33,
-    "trueNegative": 112,
-    "falsePositive": 23,
-    "falseNegative": 20,
+    "truePositive": 39,
+    "trueNegative": 117,
+    "falsePositive": 18,
+    "falseNegative": 14,
     "notEvaluated": 0,
-    "precision": 0.59,
-    "recall": 0.62
+    "precision": 0.68,
+    "recall": 0.74
   },
   "byCriterion": {
     "1.3.3": {
-      "tp": 2,
-      "tn": 14,
+      "tp": 3,
+      "tn": 17,
       "fp": 0,
       "fn": 1,
       "precision": 1.0,
-      "recall": 0.67
+      "recall": 0.75
     },
     "1.3.4": {
       "tp": 1,
-      "tn": 5,
+      "tn": 8,
       "fp": 1,
       "fn": 3,
       "precision": 0.5,
       "recall": 0.25
     },
     "1.4.2": {
-      "tp": 1,
+      "tp": 2,
       "tn": 3,
       "fp": 3,
       "fn": 0,
-      "precision": 0.25,
+      "precision": 0.4,
       "recall": 1.0
     },
     "1.4.3": {
-      "tp": 6,
-      "tn": 17,
+      "tp": 8,
+      "tn": 21,
       "fp": 2,
       "fn": 3,
-      "precision": 0.75,
-      "recall": 0.67
+      "precision": 0.8,
+      "recall": 0.73
     },
     "1.4.5": {
-      "tp": 2,
-      "tn": 8,
+      "tp": 3,
+      "tn": 10,
       "fp": 0,
       "fn": 2,
       "precision": 1.0,
-      "recall": 0.5
+      "recall": 0.6
     },
     "2.1.2": {
-      "tp": 4,
-      "tn": 7,
+      "tp": 5,
+      "tn": 9,
       "fp": 2,
       "fn": 0,
-      "precision": 0.67,
+      "precision": 0.71,
       "recall": 1.0
     },
     "2.1.4": {
-      "tp": 1,
-      "tn": 3,
+      "tp": 2,
+      "tn": 4,
       "fp": 4,
       "fn": 0,
-      "precision": 0.2,
+      "precision": 0.33,
       "recall": 1.0
     },
     "2.4.1": {
       "tp": 1,
-      "tn": 7,
+      "tn": 9,
       "fp": 4,
       "fn": 0,
       "precision": 0.2,
       "recall": 1.0
     },
     "2.4.2": {
-      "tp": 2,
+      "tp": 3,
       "tn": 4,
       "fp": 0,
       "fn": 0,
@@ -86,16 +86,16 @@
       "recall": 1.0
     },
     "2.4.4": {
-      "tp": 2,
-      "tn": 10,
+      "tp": 3,
+      "tn": 12,
       "fp": 0,
       "fn": 3,
       "precision": 1.0,
-      "recall": 0.4
+      "recall": 0.5
     },
     "2.4.6": {
       "tp": 3,
-      "tn": 6,
+      "tn": 8,
       "fp": 2,
       "fn": 1,
       "precision": 0.6,
@@ -103,19 +103,19 @@
     },
     "2.4.7": {
       "tp": 1,
-      "tn": 7,
+      "tn": 8,
       "fp": 0,
       "fn": 0,
       "precision": 1.0,
       "recall": 1.0
     },
     "3.3.1": {
-      "tp": 3,
+      "tp": 4,
       "tn": 4,
       "fp": 0,
       "fn": 1,
       "precision": 1.0,
-      "recall": 0.75
+      "recall": 0.8
     }
   },
   "byTool": {
@@ -2098,26 +2098,26 @@
       "criterion": "1.4.5",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/372b4acc620b897e8fa5e22607121407399f5e07.html",
       "expected": "pass",
-      "actual": "inapplicable",
-      "correct": false,
+      "actual": "pass",
+      "correct": true,
       "toolsUsed": [
         "screenshot"
       ],
-      "remarks": "Page lacks relevant element type for this rule.",
-      "source": "script"
+      "remarks": "Object element contains a photo of Times Square with descriptive title; no text embedded in image. Passes 1.4.5.",
+      "source": "agent"
     },
     {
       "ruleId": "0va7u6",
       "criterion": "1.4.5",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/45041ac39ebf8f9d8ff642ea0bb56e947f0ac76e.html",
       "expected": "fail",
-      "actual": "inapplicable",
-      "correct": false,
+      "actual": "fail",
+      "correct": true,
       "toolsUsed": [
         "screenshot"
       ],
-      "remarks": "Page lacks relevant element type for this rule.",
-      "source": "script"
+      "remarks": "Input type=image with button.jpg containing visible text 'Press me' - image of text used instead of real text. Fails 1.4.5.",
+      "source": "agent"
     },
     {
       "ruleId": "0va7u6",
@@ -2129,8 +2129,8 @@
       "toolsUsed": [
         "screenshot"
       ],
-      "remarks": "Page lacks relevant element type for this rule.",
-      "source": "script"
+      "remarks": "Page contains only SVG text elements; rule 0va7u6 does not apply to SVG, only to HTML img/input elements and CSS background images.",
+      "source": "agent"
     },
     {
       "ruleId": "36b590",
@@ -2142,48 +2142,50 @@
       "toolsUsed": [
         "sr"
       ],
-      "remarks": "sr: error text in DOM but not associated with input field",
-      "source": "script"
+      "remarks": "Error message span has aria-hidden='true', making it inaccessible to screen readers. SR cannot read the error message. Fails 3.3.1.",
+      "source": "agent"
     },
     {
       "ruleId": "5effbb",
       "criterion": "2.4.4",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/2eb4856e68c4cf8b3ed55f7d34b08ad4ae8b3fdd.html",
       "expected": "pass",
-      "actual": "inapplicable",
-      "correct": false,
+      "actual": "pass",
+      "correct": true,
       "toolsUsed": [
-        "screenshot"
+        "axe",
+        "sr"
       ],
-      "remarks": "Page lacks relevant element type for this rule.",
-      "source": "script"
+      "remarks": "Link text 'See description of the product.' is descriptive on its own. SR announces full descriptive link text. No 2.4.4 axe violations.",
+      "source": "agent"
     },
     {
       "ruleId": "5effbb",
       "criterion": "2.4.4",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/4e89fcc7903980482fe12350f864ca75963d6efd.html",
       "expected": "pass",
-      "actual": "inapplicable",
-      "correct": false,
+      "actual": "pass",
+      "correct": true,
       "toolsUsed": [
-        "screenshot"
+        "axe",
+        "sr"
       ],
-      "remarks": "Page lacks relevant element type for this rule.",
-      "source": "script"
+      "remarks": "Links 'Applicability' and 'Expectation' use aria-describedby pointing to heading 'Button has accessible name'. SR announces context. No 2.4.4 axe violations.",
+      "source": "agent"
     },
     {
       "ruleId": "5effbb",
       "criterion": "2.4.4",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/45d884e81c4ef8234cfbd85d259dd6a64685c9d2.html",
       "expected": "fail",
-      "actual": "pass",
-      "correct": false,
+      "actual": "fail",
+      "correct": true,
       "toolsUsed": [
         "axe",
         "sr"
       ],
-      "remarks": "axe-incomplete:bypass: Page must have means to bypass repeated blocks; sr: link text=\"Download\"",
-      "source": "script"
+      "remarks": "Link text 'Download' in a table is not descriptive in isolation. SR announces only 'Download link' with no programmatic context linking to book title. Fails 2.4.4.",
+      "source": "agent"
     },
     {
       "ruleId": "80af7b",
@@ -2195,34 +2197,34 @@
       "toolsUsed": [
         "sr"
       ],
-      "remarks": "sr: focus moves freely through 4 elements",
-      "source": "script"
+      "remarks": "Element has tabindex='-1', not in sequential tab order. No keyboard trap possible via Tab key. Passes 2.1.2.",
+      "source": "agent"
     },
     {
       "ruleId": "80af7b",
       "criterion": "2.1.2",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/0ec0e93e7f8ffca39e1eb58a4a8503f1bd4cb145.html",
       "expected": "fail",
-      "actual": "pass",
-      "correct": false,
+      "actual": "fail",
+      "correct": true,
       "toolsUsed": [
         "sr"
       ],
-      "remarks": "sr: focus moves freely through 4 elements",
-      "source": "script"
+      "remarks": "Buttons 1 and 3 use onblur with setTimeout to re-focus themselves. SR confirmed focus returns to Button 1 when attempting to Tab to Button 2, creating a keyboard trap. Fails 2.1.2.",
+      "source": "agent"
     },
     {
       "ruleId": "80af7b",
       "criterion": "2.1.2",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/6e3dcc2f3612826dd3d8589c4e2951ad7a3e4dd7.html",
       "expected": "inapplicable",
-      "actual": "pass",
-      "correct": false,
+      "actual": "inapplicable",
+      "correct": true,
       "toolsUsed": [
         "sr"
       ],
-      "remarks": "sr: focus moves freely through 4 elements",
-      "source": "script"
+      "remarks": "Only a disabled button on page. Disabled buttons are not focusable, so keyboard trap rule is inapplicable.",
+      "source": "agent"
     },
     {
       "ruleId": "80f0bf",
@@ -2234,8 +2236,8 @@
       "toolsUsed": [
         "sr"
       ],
-      "remarks": "sr: audio/video has autoplay without controls",
-      "source": "script"
+      "remarks": "Video element has 'autoplay' attribute without 'muted'. Video has an audio track and plays automatically, violating 1.4.2.",
+      "source": "agent"
     },
     {
       "ruleId": "9bd38c",
@@ -2247,8 +2249,8 @@
       "toolsUsed": [
         "screenshot"
       ],
-      "remarks": "screenshot: sensory reference with non-sensory alternative",
-      "source": "script"
+      "remarks": "'Find the menu on the right' - the menu IS positioned to the right via CSS columns and can be programmatically determined. Non-visual reference is supplementary. Passes 1.3.3.",
+      "source": "agent"
     },
     {
       "ruleId": "9bd38c",
@@ -2260,8 +2262,8 @@
       "toolsUsed": [
         "screenshot"
       ],
-      "remarks": "screenshot: no sensory-only references found",
-      "source": "script"
+      "remarks": "Page describes a square using only non-visual terms (four equal sides, four right angles). No sensory-only references. Passes 1.3.3.",
+      "source": "agent"
     },
     {
       "ruleId": "9bd38c",
@@ -2273,21 +2275,21 @@
       "toolsUsed": [
         "screenshot"
       ],
-      "remarks": "screenshot: no sensory-only references found",
-      "source": "script"
+      "remarks": "'Find the navigation on the right' - navigation is in a semantic <nav> element accessible programmatically. Visual reference is supplementary. Passes 1.3.3.",
+      "source": "agent"
     },
     {
       "ruleId": "9bd38c",
       "criterion": "1.3.3",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/b98e3574a99c86e8cc5b63c6f85868ab4427f4e9.html",
       "expected": "fail",
-      "actual": "pass",
-      "correct": false,
+      "actual": "fail",
+      "correct": true,
       "toolsUsed": [
         "screenshot"
       ],
-      "remarks": "screenshot: no sensory-only references found",
-      "source": "script"
+      "remarks": "'Look underneath the star' - visual reference to a star image with no programmatic alternative identifier. No non-visual way to locate the content. Fails 1.3.3.",
+      "source": "agent"
     },
     {
       "ruleId": "afw4f7",
@@ -2297,11 +2299,11 @@
       "actual": "pass",
       "correct": true,
       "toolsUsed": [
-        "axe",
-        "screenshot"
+        "screenshot",
+        "axe"
       ],
-      "remarks": "axe: no WCAG violations; screenshot: contrast checked via axe",
-      "source": "script"
+      "remarks": "Black text on #737373 with white text-shadow. Axe reports no color-contrast violation. Text-shadow provides additional legibility. Passes 1.4.3.",
+      "source": "agent"
     },
     {
       "ruleId": "afw4f7",
@@ -2311,11 +2313,11 @@
       "actual": "pass",
       "correct": true,
       "toolsUsed": [
-        "axe",
-        "screenshot"
+        "screenshot",
+        "axe"
       ],
-      "remarks": "axe: no WCAG violations; screenshot: contrast checked via axe",
-      "source": "script"
+      "remarks": "Shadow DOM has color:#333 on white background (ratio ~12.6:1). Axe finds no color-contrast violation. Passes 1.4.3.",
+      "source": "agent"
     },
     {
       "ruleId": "afw4f7",
@@ -2325,133 +2327,134 @@
       "actual": "fail",
       "correct": true,
       "toolsUsed": [
-        "axe",
-        "screenshot"
+        "screenshot",
+        "axe"
       ],
-      "remarks": "axe:color-contrast (serious): Elements must meet minimum color contrast ratio thresholds; screenshot: contrast checked via axe",
-      "source": "script"
+      "remarks": "color:rgba(0,0,0,.3) on white renders as #b3b3b3. Axe reports contrast ratio 2.09:1, far below required 4.5:1. Fails 1.4.3.",
+      "source": "agent"
     },
     {
       "ruleId": "afw4f7",
       "criterion": "1.4.3",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/a7d34d6d1dad765c7e444d3c3f63b18ca4742e9e.html",
       "expected": "fail",
-      "actual": "inapplicable",
-      "correct": false,
+      "actual": "fail",
+      "correct": true,
       "toolsUsed": [
-        "screenshot"
+        "screenshot",
+        "axe"
       ],
-      "remarks": "Page lacks relevant element type for this rule.",
-      "source": "script"
+      "remarks": "Button with color:#777 on background:#EEE. Axe reports contrast ratio 3.85:1, below required 4.5:1 for normal text. Fails 1.4.3.",
+      "source": "agent"
     },
     {
       "ruleId": "afw4f7",
       "criterion": "1.4.3",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/881897444deae644139c4b799b8eeb4b4b764c2a.html",
       "expected": "inapplicable",
-      "actual": "pass",
-      "correct": false,
+      "actual": "inapplicable",
+      "correct": true,
       "toolsUsed": [
-        "axe",
-        "screenshot"
+        "screenshot",
+        "axe"
       ],
-      "remarks": "axe: no WCAG violations; screenshot: contrast checked via axe",
-      "source": "script"
+      "remarks": "Page only contains SVG text. ACT rule afw4f7 applies only to HTML text elements; SVG text is excluded. Axe marks color-contrast as incomplete. Inapplicable.",
+      "source": "agent"
     },
     {
       "ruleId": "afw4f7",
       "criterion": "1.4.3",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/9e3383a60ab67d5988ac2144fec58a34677c52b2.html",
       "expected": "inapplicable",
-      "actual": "pass",
-      "correct": false,
+      "actual": "inapplicable",
+      "correct": true,
       "toolsUsed": [
-        "axe",
-        "screenshot"
+        "screenshot",
+        "axe"
       ],
-      "remarks": "axe: no WCAG violations; screenshot: contrast checked via axe",
-      "source": "script"
+      "remarks": "Text is inside a group with aria-disabled='true'. Disabled content is excluded from 1.4.3 requirements. Axe finds no color-contrast violation. Inapplicable.",
+      "source": "agent"
     },
     {
       "ruleId": "b33eff",
       "criterion": "1.3.4",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/405d1e8fb50b36ae53c655c228126a078e591d3b.html",
       "expected": "pass",
-      "actual": "fail",
-      "correct": false,
+      "actual": "pass",
+      "correct": true,
       "toolsUsed": [
         "screenshot"
       ],
-      "remarks": "screenshot: orientation restricted via CSS transform: matrix(1, -1.22465e-15, 1.22465e-15, 1, 0, 0)",
-      "source": "script"
+      "remarks": "Portrait orientation CSS uses matrix(1,-1.22e-15,1.22e-15,1,0,0) which is essentially identity (no actual rotation). Page content is not orientation-restricted. Passes 1.3.4.",
+      "source": "agent"
     },
     {
       "ruleId": "b33eff",
       "criterion": "1.3.4",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/c59f09b11f0743c523cc63ae3c827996889fa32d.html",
       "expected": "inapplicable",
-      "actual": "pass",
-      "correct": false,
+      "actual": "inapplicable",
+      "correct": true,
       "toolsUsed": [
         "screenshot"
       ],
-      "remarks": "screenshot: no orientation-locking CSS found",
-      "source": "script"
+      "remarks": "Page has no CSS at all - no orientation media queries or transform rules. Rule b33eff is inapplicable.",
+      "source": "agent"
     },
     {
       "ruleId": "b33eff",
       "criterion": "1.3.4",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/3600a3d783678e384fec62211e854cb8a4d3d2d0.html",
       "expected": "inapplicable",
-      "actual": "pass",
-      "correct": false,
+      "actual": "inapplicable",
+      "correct": true,
       "toolsUsed": [
         "screenshot"
       ],
-      "remarks": "screenshot: no orientation-locking CSS found",
-      "source": "script"
+      "remarks": "Body has display:none, making all page content invisible. Rule b33eff requires visible content to be applicable. Inapplicable.",
+      "source": "agent"
     },
     {
       "ruleId": "b49b2e",
       "criterion": "2.4.6",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/fd12fb78f149251c49409189ee65a041c7d03ec5.html",
       "expected": "pass",
-      "actual": "fail",
-      "correct": false,
+      "actual": "pass",
+      "correct": true,
       "toolsUsed": [
         "axe",
         "sr"
       ],
-      "remarks": "axe:document-title (serious): Documents must have <title> element to aid in navigation; sr: heading announced=\"Opening Hours heading 1 Opening Hours heading 1\", body=\"\" Opening Hours \\n\\t We are open Monday through Friday from 10 to 16 \\n\\t We are open Saturday from 10 to 13 \\n \"\"",
-      "source": "script"
+      "remarks": "Heading 'Opening Hours' is descriptive and conveys the purpose of the section. SR announces heading correctly. No heading-related axe violations. Passes 2.4.6.",
+      "source": "agent"
     },
     {
       "ruleId": "b49b2e",
       "criterion": "2.4.6",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/6b63f3bcb8cfa7d388c35ebe82cedf6111e3c8f6.html",
       "expected": "inapplicable",
-      "actual": "fail",
-      "correct": false,
+      "actual": "inapplicable",
+      "correct": true,
       "toolsUsed": [
         "axe",
         "sr"
       ],
-      "remarks": "axe:document-title (serious): Documents must have <title> element to aid in navigation; sr: heading announced=\"No more headings. No more headings.\", body=\"\" Opening Hours \\n\\t We are open Monday through Friday from 10 to 16 \\n \"\"",
-      "source": "script"
+      "remarks": "Heading h1 has 'hidden' attribute - not visible. SR reports 'No more headings'. ACT rule b49b2e only applies to visible headings. Inapplicable.",
+      "source": "agent"
     },
     {
       "ruleId": "c4a8a4",
       "criterion": "2.4.2",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/c4a8a4/1844d7bce889d85a80b620468baa804eab3ff2c8.html",
       "expected": "fail",
-      "actual": "pass",
-      "correct": false,
+      "actual": "fail",
+      "correct": true,
       "toolsUsed": [
         "axe",
         "sr"
       ],
-      "remarks": "axe: no WCAG violations; sr: title=\"First title is incorrect\", body preview=\"\" \\n\\t\\t First title is incorrect \\n\\t\\t Clementine harvesting season \\n\\t \\n\\t \\n\\t\\t \\n\\t\\t\\tClementines will be ready to harvest from late October through February.\\n\\t\\t \\n\\t\\n \"\"",
-      "source": "script"
+      "remarks": "Page has two title elements; browser uses first: 'First title is incorrect' which is not descriptive. SR announces this non-descriptive title. Fails 2.4.2.",
+      "source": "agent"
     },
     {
       "ruleId": "cf77f2",
@@ -2464,36 +2467,36 @@
         "axe",
         "sr"
       ],
-      "remarks": "axe: no WCAG violations; sr: skip link found in HTML",
-      "source": "script"
+      "remarks": "Page has a 'Skip to main content' link as first focusable element. SR announces skip link on Tab. Provides bypass mechanism. Passes 2.4.1.",
+      "source": "agent"
     },
     {
       "ruleId": "cf77f2",
       "criterion": "2.4.1",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/07c0b535c3c68a3deeb9fde43c4ba5aca09fb94e.html",
       "expected": "pass",
-      "actual": "fail",
-      "correct": false,
+      "actual": "pass",
+      "correct": true,
       "toolsUsed": [
         "axe",
         "sr"
       ],
-      "remarks": "axe:html-has-lang (serious): <html> element must have a lang attribute; sr: skip link found in HTML",
-      "source": "script"
+      "remarks": "Page has a <nav> landmark with multiple skip links (to sections). SR announces skip links on Tab. Nav landmark provides bypass mechanism. Passes 2.4.1.",
+      "source": "agent"
     },
     {
       "ruleId": "ffbc54",
       "criterion": "2.1.4",
       "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/5eb51f191548caa164fc474a272f511493bd7b9c.html",
       "expected": "pass",
-      "actual": "fail",
-      "correct": false,
+      "actual": "pass",
+      "correct": true,
       "toolsUsed": [
         "axe",
         "sr"
       ],
-      "remarks": "axe:html-has-lang (serious): <html> element must have a lang attribute; sr: keyboard shortcut has remap/disable mechanism",
-      "source": "script"
+      "remarks": "'+' printable character shortcut has a visible checkbox directly on page to toggle/disable it. Mechanism to turn off shortcut is immediately accessible. Passes 2.1.4.",
+      "source": "agent"
     },
     {
       "ruleId": "ffbc54",
@@ -2506,8 +2509,8 @@
         "axe",
         "sr"
       ],
-      "remarks": "axe:html-has-lang (serious): <html> element must have a lang attribute; sr: keyboard shortcut has remap/disable mechanism",
-      "source": "script"
+      "remarks": "'+' shortcut mechanism to disable/remap is hidden in a modal overlay (display:none by default). The shortcut is active before the user can access the settings modal. Fails 2.1.4.",
+      "source": "agent"
     },
     {
       "ruleId": "oj04fd",
@@ -2517,11 +2520,11 @@
       "actual": "pass",
       "correct": true,
       "toolsUsed": [
-        "sr",
-        "screenshot"
+        "screenshot",
+        "sr"
       ],
-      "remarks": "sr: focus moved, 1 entries; sr: no outline:none in inline styles",
-      "source": "script"
+      "remarks": "Links use class 'no-focus-default' (outline:none) but JS toggles a solid navy indicator span on focus/blur. Visual focus indicator provided programmatically. Passes 2.4.7.",
+      "source": "agent"
     }
   ]
 }
