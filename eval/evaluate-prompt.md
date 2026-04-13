@@ -6,18 +6,18 @@ outcomes (pass/fail/inapplicable) per WCAG criterion. For each test
 case, run an audit using the appropriate tools, then compare our
 results against ground truth.
 
-### Setting up a sprite
+### Setting up sprites
 
-Before running any audits, create and bootstrap a sprite. The user
+Before running any audits, prepare one or more sprites. The user
 must provide a **run name** — a short unique slug for this eval run
 (e.g., `baseline`, `contrast-fix`, `v2`). If they haven't provided
-one, ask for it before proceeding. The sprite is named after the run.
+one, ask for it before proceeding.
 
 Determine which branch to evaluate. If no specific branch is
 requested, use `main`.
 
 ```bash
-# 1. Create the sprite (named after the run)
+# 1. Create the sprite (named after the run, or use existing sprites)
 sprite create <run-name> --skip-console
 
 # 2. Bootstrap it — pipe the local script since the repo may be private
@@ -37,17 +37,17 @@ download). To skip this on subsequent runs, use sprite checkpoints:
 
 ```bash
 # After first successful bootstrap — save a checkpoint
-sprite checkpoint create --name eval-base -s <run-name>
+sprite checkpoint create -s <run-name>
 
 # On future runs — restore instead of bootstrapping
 sprite create <new-run-name> --skip-console
 sprite restore <checkpoint-id> -s <new-run-name>
 # Then just fetch the branch you want to evaluate:
-sprite exec -s <new-run-name> --dir $HOME/a11y-auditor -- git fetch origin && git checkout <branch>
+sprite exec -s <new-run-name> -- bash -c 'cd $HOME/a11y-auditor && git fetch origin && git checkout <branch>'
 ```
 
-Check for existing checkpoints with `sprite checkpoint list` before
-running a full bootstrap.
+Check for existing checkpoints with `sprite checkpoint list -s <name>`
+before running a full bootstrap.
 
 #### Working directory and PATH
 
@@ -55,28 +55,188 @@ The bootstrap installs the repo to `$HOME/a11y-auditor` on the sprite
 (typically `/home/sprite/a11y-auditor`). It also appends bun and
 node global bin directories to `~/.bashrc`.
 
-All audit commands run on the sprite via `sprite exec`. Use
-`--dir $HOME/a11y-auditor` for commands that need the repo:
-
+All commands on the sprite need this PATH prefix:
 ```bash
-sprite exec -s <run-name> --dir $HOME/a11y-auditor -- <command>
-```
-
-All commands from the `/auditor` skill must be prefixed with:
-```
-sprite exec -s <run-name> --dir $HOME/a11y-auditor --
-```
-
-If `bun` or `agent-browser` is not found, prepend this to your
-command:
-```bash
-export PATH="$HOME/.bun/bin:$(npm root -g)/../bin:$PATH"
+sprite exec -s <name> -- bash -c 'export PATH="$HOME/.bun/bin:/.sprite/languages/node/nvm/versions/node/v22.20.0/bin:$PATH" && cd $HOME/a11y-auditor && COMMAND'
 ```
 
 Note: The `/auditor` skill references `{sr-driver}`. On the sprite,
 `{sr-driver}` = `drivers/orca/driver.ts`.
 
-### Step 1: Load test cases and criteria
+---
+
+### Queue-based evaluation (recommended for multi-sprite runs)
+
+For evaluations using multiple sprites in parallel, use the queue
+system. This provides blind evaluation (agents never see expected
+outcomes), even load distribution, and fault tolerance.
+
+#### Step 1: Initialize the queue
+
+```bash
+# Full suite (~1,010 cases)
+bun eval/queue-init.ts
+
+# Subset by rules
+bun eval/queue-init.ts --rules 80af7b,afw4f7,cf77f2
+
+# Subset by criteria
+bun eval/queue-init.ts --criteria 1.4.3,2.1.2,2.4.1
+
+# Custom test file
+bun eval/queue-init.ts --cases eval/sample-test-cases.json
+```
+
+This creates:
+```
+/tmp/eval-queue/
+  pending/     ← case files (URL + criterion, NO expected values)
+    0001.json
+    0002.json
+    ...
+  claimed/     ← agents move files here to claim them
+  results/     ← agents write verdicts here
+  ground-truth.json ← ONLY used by scorer, never given to agents
+```
+
+Each case file contains only what the agent needs to audit:
+```json
+{
+  "id": 42,
+  "url": "https://...",
+  "criterion": "1.4.3",
+  "criterionName": "Contrast (Minimum)",
+  "testTools": ["axe", "screenshot"],
+  "testMethod": {
+    "axe": "Check color-contrast rule...",
+    "screenshot": "For axe incomplete items, visually inspect..."
+  },
+  "ruleId": "afw4f7",
+  "ruleName": "Text has minimum contrast"
+}
+```
+
+**No expected outcome. No description with "Passed/Failed Example".
+The agent evaluates blind.**
+
+#### Step 2: Start the Orca driver on each sprite
+
+```bash
+sprite exec -s <sprite> -- bash -c 'export PATH="$HOME/.bun/bin:/.sprite/languages/node/nvm/versions/node/v22.20.0/bin:$PATH" && cd $HOME/a11y-auditor && bun drivers/orca/driver.ts start https://example.com'
+```
+
+Wait for `Server ready on http://127.0.0.1:7484` before proceeding.
+
+#### Step 3: Launch worker agents
+
+Launch one sub-agent per sprite. Each agent loops:
+
+1. **Claim** a case from the queue:
+   ```bash
+   f=$(ls /tmp/eval-queue/pending/ | head -1) \
+     && mv /tmp/eval-queue/pending/$f /tmp/eval-queue/claimed/$f \
+     && cat /tmp/eval-queue/claimed/$f
+   ```
+   If `pending/` is empty → done, exit.
+
+2. **Collect** evidence on the sprite:
+   ```bash
+   sprite exec -s <sprite> -- bash -c '... && bun eval/queue-collect.ts "URL" "axe,sr,screenshot"'
+   ```
+   This returns JSON with: redacted HTML, accessibility snapshot,
+   axe results, SR transcripts (tab sequence, landmarks, headings,
+   links). Page titles are automatically redacted to prevent bias.
+
+3. **Judge** the evidence. Using the case's `criterion`, `testMethod`
+   instructions, and the collected evidence, determine a verdict:
+   - **`fail`** — any tool found a violation
+   - **`pass`** — all tools confirm no issues
+   - **`inapplicable`** — the page doesn't contain the element type
+     the criterion tests (no images for image rules, no audio for
+     audio rules, etc.)
+
+4. **Save** the verdict:
+   ```json
+   // /tmp/eval-queue/results/0042.json
+   {
+     "id": 42,
+     "url": "https://...",
+     "criterion": "1.4.3",
+     "verdict": "fail",
+     "toolsUsed": ["axe", "screenshot"],
+     "remarks": "axe flagged color-contrast: ratio 2.32:1 on #AAA/#FFF",
+     "sprite": "<sprite-name>"
+   }
+   ```
+
+5. **Repeat** from step 1.
+
+#### Worker agent prompt template
+
+When launching sub-agents, use this structure:
+
+```
+You are an accessibility auditor evaluating web pages against WCAG criteria.
+You are assigned to sprite "<sprite-name>".
+
+## Your loop
+
+Repeat until the queue is empty:
+1. Claim: `f=$(ls /tmp/eval-queue/pending/ | head -1) && mv /tmp/eval-queue/pending/$f /tmp/eval-queue/claimed/$f`
+2. Read the claimed case file
+3. Collect evidence: `sprite exec -s <sprite> -- bash -c '... && bun eval/queue-collect.ts "URL" "TOOLS"'`
+4. Judge: determine pass/fail/inapplicable based on criterion + evidence
+5. Write verdict to /tmp/eval-queue/results/{id}.json
+
+## Judgment guidelines
+
+- Use the testMethod instructions for each tool to know what to check
+- "fail" = any tool found a clear violation
+- "pass" = all tools confirm the criterion is met
+- "inapplicable" = the page lacks the element type the criterion tests
+- When axe returns "incomplete", use other evidence (HTML, SR) to resolve
+- When unsure between pass and inapplicable, check whether the relevant
+  element type exists in the HTML
+- Base your verdict ONLY on tool evidence. Do not guess.
+
+## Commands
+[include sprite exec prefix, PATH setup, etc.]
+```
+
+#### Step 4: Monitor progress
+
+```bash
+echo "Pending: $(ls /tmp/eval-queue/pending/ | wc -l)"
+echo "Claimed: $(ls /tmp/eval-queue/claimed/ | wc -l)"
+echo "Done:    $(ls /tmp/eval-queue/results/ | wc -l)"
+```
+
+**Failure recovery:** If an agent dies, sweep stale claimed files
+back to pending:
+```bash
+# Move anything in claimed/ back to pending/
+mv /tmp/eval-queue/claimed/*.json /tmp/eval-queue/pending/ 2>/dev/null
+```
+
+#### Step 5: Score results
+
+Once all cases are processed (pending and claimed both empty):
+
+```bash
+bun eval/queue-score.ts --run <run-name> --commit $(git rev-parse --short HEAD)
+```
+
+This compares blind verdicts against `ground-truth.json` and produces
+`eval/results.json` with full metrics (precision, recall, per-criterion
+breakdown, per-tool breakdown, errors).
+
+---
+
+### Direct evaluation (single sprite, small runs)
+
+For quick evaluations on a single sprite without the queue system:
+
+#### Step 1: Load test cases and criteria
 
 Read two files from the repo:
 
@@ -92,7 +252,7 @@ Read two files from the repo:
 `"failed"` / `"inapplicable"`. Normalize these to `"pass"` / `"fail"`
 / `"inapplicable"` when comparing against our verdicts.
 
-### Step 2: Audit each test case
+#### Step 2: Audit each test case
 
 For each test case, use `criteria.json` to determine the right tools:
 
@@ -113,7 +273,7 @@ each tool to know exactly what to check.
 **If a criterion has `testTools: []`**, skip it — our tools can't
 evaluate it (see the `note` field for why).
 
-### Step 3: Determine our verdict
+#### Step 3: Determine our verdict
 
 For each test case, collapse our tool output into a verdict:
 
@@ -131,7 +291,7 @@ needs updating.
 A pass requires all applicable tools to agree. A fail requires any
 single tool to flag an issue.
 
-### Step 4: Compare against ground truth
+#### Step 4: Compare against ground truth
 
 For each test case, compare our verdict against the expected outcome:
 
@@ -144,59 +304,11 @@ For each test case, compare our verdict against the expected outcome:
 | inapplicable | inapplicable | True Negative |
 | not_evaluated | any    | Not Evaluated  |
 
-### Step 5: Produce results
+#### Step 5: Produce results
 
-Save results to `eval/results.json`:
+Save results to `eval/results.json` (see queue-score.ts output format).
 
-```json
-{
-  "date": "2026-04-12",
-  "run": "<run-name>",
-  "commit": "<git commit hash of a11y-auditor on sprite>",
-  "summary": {
-    "total": 187,
-    "truePositive": 82,
-    "trueNegative": 71,
-    "falsePositive": 12,
-    "falseNegative": 15,
-    "notEvaluated": 7,
-    "precision": 0.87,
-    "recall": 0.85
-  },
-  "byCriterion": {
-    "1.1.1": {
-      "tp": 12, "tn": 8, "fp": 0, "fn": 1,
-      "precision": 1.0, "recall": 0.92
-    }
-  },
-  "byTool": {
-    "axe": { "tp": 60, "tn": 55, "fp": 8, "fn": 5 },
-    "sr": { "tp": 20, "tn": 14, "fp": 3, "fn": 8 },
-    "screenshot": { "tp": 2, "tn": 2, "fp": 1, "fn": 2 }
-  },
-  "coverageGaps": [
-    {
-      "criterion": "1.4.3",
-      "testCaseUrl": "https://...",
-      "reason": "axe returned incomplete for color-contrast, screenshot inspection inconclusive"
-    }
-  ],
-  "cases": [
-    {
-      "ruleId": "23a2a8",
-      "criterion": "1.1.1",
-      "url": "https://...",
-      "expected": "fail",
-      "actual": "fail",
-      "correct": true,
-      "toolsUsed": ["axe", "sr"],
-      "remarks": "axe flagged image-alt violation. SR confirmed: FIND_NEXT_IMAGE announced 'image' with no description."
-    }
-  ]
-}
-```
-
-### Step 6: Write a summary
+#### Step 6: Write a summary
 
 After generating `results.json`, write `eval/results-summary.md` with:
 
@@ -209,6 +321,8 @@ After generating `results.json`, write `eval/results-summary.md` with:
 6. **False positives** — cases where we flagged issues that aren't real
 7. **Recommendations** — specific improvements to criteria.json,
    testTools mappings, or driver capabilities
+
+---
 
 ### Notes
 
@@ -224,3 +338,6 @@ After generating `results.json`, write `eval/results-summary.md` with:
 - **Real SR output only.** Every SR observation must come from actual
   driver commands with real transcript output. Never fabricate what the
   screen reader announced — if you can't capture it, say so.
+- **Blind evaluation preferred.** When using the queue system, agents
+  never see expected outcomes. Page titles are redacted by the collector.
+  Verdicts are compared against ground truth only in the scoring phase.
