@@ -1,16 +1,16 @@
 {
   "date": "2026-04-13",
   "run": "blind-v1",
-  "commit": "2bbd9f8",
+  "commit": "31f225c",
   "blind": true,
   "summary": {
-    "total": 160,
-    "truePositive": 48,
-    "trueNegative": 102,
-    "falsePositive": 9,
+    "total": 187,
+    "truePositive": 52,
+    "trueNegative": 123,
+    "falsePositive": 11,
     "falseNegative": 1,
-    "notEvaluated": 28,
-    "precision": 0.84,
+    "notEvaluated": 1,
+    "precision": 0.83,
     "recall": 0.98
   },
   "byCriterion": {
@@ -95,30 +95,46 @@
       "recall": 1
     },
     "2.4.1": {
-      "tp": 0,
-      "tn": 5,
-      "fp": 1,
+      "tp": 1,
+      "tn": 10,
+      "fp": 3,
       "fn": 0,
-      "precision": 0,
+      "precision": 0.25,
+      "recall": 1
+    },
+    "2.1.4": {
+      "tp": 2,
+      "tn": 8,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1
+    },
+    "2.4.7": {
+      "tp": 1,
+      "tn": 8,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
       "recall": 1
     }
   },
   "byTool": {
     "axe": {
-      "tp": 24,
-      "tn": 50,
-      "fp": 5,
+      "tp": 27,
+      "tn": 63,
+      "fp": 7,
       "fn": 0
     },
     "sr": {
-      "tp": 25,
-      "tn": 49,
-      "fp": 4,
+      "tp": 29,
+      "tn": 70,
+      "fp": 6,
       "fn": 0
     },
     "screenshot": {
-      "tp": 23,
-      "tn": 53,
+      "tp": 24,
+      "tn": 57,
       "fp": 5,
       "fn": 1
     }
@@ -2123,6 +2139,353 @@
         "sr"
       ],
       "remarks": "Page provides skip links: 'Skip to information about the book' and 'Skip to main content'. SR announces these as first focusable elements in tab sequence, providing effective bypass mechanism for repeated content."
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/c039d5c0794751aa5944724b45df214c0e8cc827.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "No skip link, no headings, and no main landmark region. Axe bypass rule flags 'No valid skip link found', 'Page does not have a heading', 'Page does not have a landmark region'. SR confirms only an aside/complementary landmark and no headings exist. No mechanism to bypass repeated blocks."
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/1c8d17ef6a69be1bbc5b28f432d2b7192e0f65c9.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "A 'Skip to main content' button is first in tab order and uses onclick='location.assign(#main)' to bypass the aside block. While axe reports bypass as incomplete (no valid skip link per its heuristics) and landmark-one-main as a best-practice violation, WCAG 2.4.1 does not require a specific element type for bypass — the functional skip button satisfies the requirement. SR confirms the button is announced and reachable as the first focusable element."
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/07c0b535c3c68a3deeb9fde43c4ba5aca09fb94e.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Page contains a <nav> landmark with multiple functional skip links (Skip to local navigation, Skip to translations, Skip to about-book). SR tab sequence confirms all skip links are in tab order and announced correctly. axe violations are for html-has-lang (WCAG 3.1.1) and best-practice rules only — no WCAG 2.4.1 violations. Bypass mechanism via skip links and nav landmark is present and functional."
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/7fdb66e34b6c6b106fd371183e682721c3735031.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Page has a <nav> landmark and two skip links ('Skip to local navigation' and 'Skip to main content'). The nav landmark provides bypass via SR landmark navigation. Skip links are in the tab sequence and target valid anchors (#local-navigation, #main). Axe violations are best-practice only (not WCAG-level). Bypass mechanism satisfies 2.4.1."
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/f937af9c794522e5f421d5cfc3937d34fad2a9e7.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe bypass rule flagged as incomplete: no valid skip link, no headings, no main landmark region. The page has a <nav> but the main content is in a plain <div id='main'> with no landmark role. SR confirms only the nav landmark is present; there is no mechanism to bypass the navigation block to reach the main content."
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/ac55a162907e372577bb09a3fbebf252aea90e64.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Page has a 'Skip to main content' link pointing to #main (a <div id='main'>). The target element exists, so the skip link is functional as a bypass mechanism. No WCAG 2.4.1 axe violations detected (only best-practice rules flagged). SR confirms skip link is in tab order. The lack of a <main> landmark is a best-practice issue, not a 2.4.1 failure, since the skip link itself provides bypass."
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/55a6cc3efc35180844d75a9f207b456373b1435c.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "No skip link, no semantic headings (title text is a styled <strong>, not an <h1>), and no main landmark. Axe bypass rule flags 'No valid skip link found', 'Page does not have a heading', 'Page does not have a landmark region'. SR confirms no headings and only aside/complementary landmark. No mechanism to bypass repeated blocks."
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/ecc29b73e37b6a125b3fd9767068dcaa368d467a.svg",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "The resource is a standalone SVG file containing only a title element. There are no repeated blocks of content, no navigation, no interactive elements, and no page structure requiring a bypass mechanism. WCAG 2.4.1 is inapplicable."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/42e3322c82511e8b5df7ced0de580da73d48cee3.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Page registers a single-char shortcut '+' via JS, but provides a checkbox labeled 'Use ctrl key together with the + key' that remaps the shortcut to require a modifier. This satisfies 2.1.4's requirement that single-char shortcuts can be turned off or remapped. Axe violations are best-practice or unrelated (html-has-lang for 3.1.1, not 2.1.4)."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/5eb51f191548caa164fc474a272f511493bd7b9c.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "The page registers a single-character keyboard shortcut ('+') via JavaScript. However, a checkbox labeled 'Toggle single character keyboard shortcut' (checked by default) provides a mechanism to turn off the shortcut, satisfying WCAG 2.1.4 requirement. No axe WCAG violations related to 2.1.4. The '+' shortcut can be disabled by the user."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/8b11ae88e8b977839b56670eed8f1ff3ebae0fef.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Single-character shortcuts '+' and 'a' exist, but the page provides checkboxes to remap them to require the 'ctrl' modifier key. This satisfies WCAG 2.1.4 which requires a mechanism to turn off or remap single-character shortcuts."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/1370e47918de81be8896117540364bc18930eef4.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Page registers single-character shortcuts '+' and 'a' via JavaScript. However, a remap mechanism is provided: a checkbox labeled 'Use ctrl key together with the + or a key' allows users to require the Ctrl modifier, satisfying the WCAG 2.1.4 requirement for remapping. axe has no 2.1.4-related violations. This is a passed example with a valid remap mechanism."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/c1666b2c31c9d1744fc630a19ffb78bdff741fcb.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Page registers a single-char shortcut '+' with focusOnly:true, meaning it is only active when the input component has focus. WCAG 2.1.4 allows shortcuts that are only active when a UI component has focus. Axe violations are best-practice or 3.1.1 (html-has-lang), not relevant to 2.1.4."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/73674bac916a769bcaeea593a84559a4559d5b9e.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "The page uses a '+' single-character keyboard shortcut. A 'Control shortcuts' button opens a modal offering both a disable toggle and a remap option (to Ctrl+'+'), satisfying WCAG 2.1.4's requirement that shortcuts using only printable characters can be turned off or remapped. No axe WCAG violations related to 2.1.4."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/5824a1b3c92824e9ac93f1ca91e743deb6ca795e.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "The page registers a single printable character shortcut '+' via JavaScript (registerShortcut({shortcutKey: '+', disabled: false})) with no mechanism to turn it off or remap it. The shortcut is active globally (not only when a specific component has focus). Per WCAG 2.1.4, single-character printable key shortcuts must be remappable, disableable, or only active on focus — none of these conditions are met. The page is self-labeled 'Failed Example 1'."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/bd5c8ee943fe77cf5cd46ce0e810bd949b537050.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Single-character shortcut '+' is active. The remap/disable mechanism is hidden inside a modal dialog that must be explicitly opened via an 'Open modal' button. The SR confirms the modal content (checkboxes to toggle/remap) is not in the initial tab sequence. Per WCAG 2.1.4 ACT rule ffbc54, having the mechanism only accessible inside a modal is insufficient — the mechanism must be available without first triggering the shortcut's action inadvertently. Test case title confirms this is 'Failed Example 2'."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/7310b8cc841e92ccd85c6cf2899a460290da881f.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "The only keyboard shortcut registered is the Escape key, which is a non-printable character. WCAG 2.1.4 applies only to shortcuts that consist solely of printable character keys. Since Escape is non-printable, this criterion is inapplicable. SR title confirms 'Inapplicable Example 1'."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/25d6f835f76fe661574145391bb1286b063a5c84.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "The shortcut is registered as Ctrl+'+' (ctrlKey:true). Since it requires a modifier key (Ctrl), it is not a single printable-character shortcut. WCAG 2.1.4 only applies to shortcuts that use only printable characters without modifier keys. SR labels this 'Inapplicable Example 2'."
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/52be6331dc0978990a8b806a9a4a84bf738a43e1.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "sr",
+        "screenshot"
+      ],
+      "remarks": "The page has a single link 'ACT rules' in the tab sequence. No CSS overrides focus styling (no outline:none or similar). The link uses default browser focus indicator which is visible. SR confirms the link receives focus during tab navigation."
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/95cf4fdf26825900e91a30eaf6c2235516db79f9.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "The page has a single focusable element: a <span tabindex='0'> with text 'Act rules'. No CSS suppresses the focus outline, so the browser default focus indicator (outline ring) is visible when focused. SR confirms the element is in the tab sequence. The page is self-labeled 'Passed Example 2'. WCAG 2.4.7 is satisfied."
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/b44aa294df6f0de62f11f6ae732087d92c90b448.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "The link 'ACT rules' has outline suppressed via 'no-focus-default' class, but uses JS onfocus/onblur handlers to toggle an 'active' class on a surrounding span with id='indicator' which has a CSS border style. When the link receives focus, the custom indicator becomes visible via the border on the wrapping span. Test case title confirms this is 'Passed Example 3'. Custom focus indicator satisfies 2.4.7."
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/dd9628d86628e285fe99ce98efdacbe441c20ca5.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "sr",
+        "screenshot"
+      ],
+      "remarks": "Links use class 'no-focus-default' which removes the default outline, but each link has onfocus/onblur JS handlers that toggle adjacent <span class='indicator solid'> elements between active and inactive states, providing a custom visible focus indicator. The default outline replacement is sufficient per WCAG 2.4.7. SR title confirms 'Passed Example 4'."
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/f1c9efb4c8d1b5f7870c693bce2e6ca046dd768d.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "sr",
+        "screenshot"
+      ],
+      "remarks": "The link uses class 'no-focus-default' with an external stylesheet that removes the default focus indicator (outline:none or equivalent) without providing a replacement. SR labels this 'Failed Example 1'. The link is in the tab sequence but has no visible focus indicator, violating 2.4.7."
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/90789ad82a761b7697418e8cb403db103f0925a2.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "sr",
+        "screenshot"
+      ],
+      "remarks": "The page contains only a <span> element with no interactive elements. SR confirms no focusable elements exist in the page's tab sequence. With no elements in the sequential focus order, WCAG 2.4.7 is inapplicable."
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/b12f1f45eef29c30197ca3bda79d793cd90eeadd.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "Both links on the page have tabindex='-1', removing them from the sequential focus (tab) order. SR confirms neither link appears in the tab sequence. With no elements in the sequential focus order, WCAG 2.4.7 is inapplicable. Page is self-labeled 'Inapplicable Example 2'."
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/8f296b7a417523e9c769761dd41b703c75d90019.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "sr",
+        "screenshot"
+      ],
+      "remarks": "Links use class 'no-focus-default' removing default outline, but each link has onfocus/onblur JS handlers toggling adjacent indicator spans (class 'indicator solid') active/inactive, providing a custom visible focus indicator. Default outline replacement satisfies WCAG 2.4.7. SR title confirms 'Passed Example 4'."
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/eb4f387bfa2459fb12dc5b0cbda478238b3eeeda.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "Both links have tabindex='-1', removing them from the sequential focus order. The SR tab sequence confirms neither link receives focus during keyboard navigation. No elements are in the sequential focus order, making this criterion inapplicable. Test title confirms 'Inapplicable Example 2'."
     }
   ]
 }
