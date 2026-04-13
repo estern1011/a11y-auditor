@@ -3,139 +3,139 @@
   "run": "smoke-v1",
   "commit": "e755995ce85f8b9fb041892f230e1a58f9563836",
   "summary": {
-    "total": 26,
-    "truePositive": 13,
-    "trueNegative": 13,
-    "falsePositive": 0,
-    "falseNegative": 0,
+    "total": 156,
+    "truePositive": 29,
+    "trueNegative": 95,
+    "falsePositive": 18,
+    "falseNegative": 14,
     "notEvaluated": 0,
-    "precision": 1.0,
-    "recall": 1.0
+    "precision": 0.62,
+    "recall": 0.67
   },
   "byCriterion": {
-    "2.1.2": {
-      "tp": 1,
-      "tn": 1,
+    "1.3.3": {
+      "tp": 2,
+      "tn": 14,
       "fp": 0,
-      "fn": 0,
+      "fn": 1,
       "precision": 1.0,
-      "recall": 1.0
+      "recall": 0.67
     },
-    "3.3.1": {
+    "1.3.4": {
       "tp": 1,
-      "tn": 1,
-      "fp": 0,
-      "fn": 0,
-      "precision": 1.0,
-      "recall": 1.0
+      "tn": 5,
+      "fp": 1,
+      "fn": 3,
+      "precision": 0.5,
+      "recall": 0.25
     },
     "1.4.2": {
       "tp": 1,
-      "tn": 1,
-      "fp": 0,
+      "tn": 3,
+      "fp": 3,
       "fn": 0,
+      "precision": 0.25,
+      "recall": 1.0
+    },
+    "1.4.3": {
+      "tp": 6,
+      "tn": 17,
+      "fp": 2,
+      "fn": 3,
+      "precision": 0.75,
+      "recall": 0.67
+    },
+    "1.4.5": {
+      "tp": 2,
+      "tn": 8,
+      "fp": 0,
+      "fn": 2,
       "precision": 1.0,
+      "recall": 0.5
+    },
+    "2.1.2": {
+      "tp": 4,
+      "tn": 7,
+      "fp": 2,
+      "fn": 0,
+      "precision": 0.67,
+      "recall": 1.0
+    },
+    "2.1.4": {
+      "tp": 1,
+      "tn": 3,
+      "fp": 4,
+      "fn": 0,
+      "precision": 0.2,
       "recall": 1.0
     },
     "2.4.1": {
       "tp": 1,
-      "tn": 1,
-      "fp": 0,
+      "tn": 7,
+      "fp": 4,
       "fn": 0,
-      "precision": 1.0,
+      "precision": 0.2,
       "recall": 1.0
     },
     "2.4.2": {
-      "tp": 1,
-      "tn": 1,
-      "fp": 0,
-      "fn": 0,
-      "precision": 1.0,
-      "recall": 1.0
-    },
-    "2.4.6": {
-      "tp": 1,
-      "tn": 1,
+      "tp": 2,
+      "tn": 4,
       "fp": 0,
       "fn": 0,
       "precision": 1.0,
       "recall": 1.0
     },
     "2.4.4": {
-      "tp": 1,
-      "tn": 1,
+      "tp": 2,
+      "tn": 10,
       "fp": 0,
-      "fn": 0,
+      "fn": 3,
       "precision": 1.0,
-      "recall": 1.0
+      "recall": 0.4
     },
-    "2.1.4": {
-      "tp": 1,
-      "tn": 1,
-      "fp": 0,
-      "fn": 0,
-      "precision": 1.0,
-      "recall": 1.0
+    "2.4.6": {
+      "tp": 3,
+      "tn": 6,
+      "fp": 2,
+      "fn": 1,
+      "precision": 0.6,
+      "recall": 0.75
     },
     "2.4.7": {
       "tp": 1,
-      "tn": 1,
+      "tn": 7,
       "fp": 0,
       "fn": 0,
       "precision": 1.0,
       "recall": 1.0
     },
-    "1.4.3": {
-      "tp": 1,
-      "tn": 1,
+    "3.3.1": {
+      "tp": 3,
+      "tn": 4,
       "fp": 0,
-      "fn": 0,
+      "fn": 1,
       "precision": 1.0,
-      "recall": 1.0
-    },
-    "1.4.5": {
-      "tp": 1,
-      "tn": 1,
-      "fp": 0,
-      "fn": 0,
-      "precision": 1.0,
-      "recall": 1.0
-    },
-    "1.3.3": {
-      "tp": 1,
-      "tn": 1,
-      "fp": 0,
-      "fn": 0,
-      "precision": 1.0,
-      "recall": 1.0
-    },
-    "1.3.4": {
-      "tp": 1,
-      "tn": 1,
-      "fp": 0,
-      "fn": 0,
-      "precision": 1.0,
-      "recall": 1.0
+      "recall": 0.75
     }
   },
   "byTool": {
     "axe": {
-      "tp": 1,
-      "tn": 6,
-      "fp": 0,
-      "fn": 5
+      "tp": 15,
+      "tn": 41,
+      "fp": 12,
+      "fn": 6
     },
     "sr": {
-      "tp": 8,
-      "tn": 9,
-      "fp": 0,
-      "fn": 1
+      "tp": 18,
+      "tn": 45,
+      "fp": 15,
+      "fn": 3
     },
     "screenshot": {
-      "tp": 5,
-      "tn": 5,
-      "fp": 0,
-      "fn": 0
+      "tp": 12,
+      "tn": 56,
+      "fp": 3,
+      "fn": 11
     }
   },
   "coverageGaps": [],
@@ -147,8 +147,10 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["sr"],
-      "remarks": "Focus moved from Link 1 to Button1 to browser chrome — no keyboard trap. Tab order correct, focus escapes freely."
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "Focus moved from Link 1 to Button1 to browser chrome \u2014 no keyboard trap. Tab order correct, focus escapes freely."
     },
     {
       "ruleId": "80af7b",
@@ -157,7 +159,9 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["sr"],
+      "toolsUsed": [
+        "sr"
+      ],
       "remarks": "Keyboard trap detected: Tab cycles between Link 2 and Button1 indefinitely. Focus never escapes to browser chrome."
     },
     {
@@ -167,8 +171,10 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["sr"],
-      "remarks": "SR announced 'Age (years) spin button 0. Invalid value for age. Age must be at least 1.' — error message properly associated via aria-describedby and describes the invalid value."
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "SR announced 'Age (years) spin button 0. Invalid value for age. Age must be at least 1.' \u2014 error message properly associated via aria-describedby and describes the invalid value."
     },
     {
       "ruleId": "36b590",
@@ -177,7 +183,9 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["sr"],
+      "toolsUsed": [
+        "sr"
+      ],
       "remarks": "SR announced 'Age (years) spin button 0' with no error description. Error message exists on page but is not programmatically associated with the input field."
     },
     {
@@ -187,7 +195,9 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["sr"],
+      "toolsUsed": [
+        "sr"
+      ],
       "remarks": "Audio element present with play button (not auto-playing), volume slider, mute button, and time scrubber. User has full control."
     },
     {
@@ -197,7 +207,9 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["sr"],
+      "toolsUsed": [
+        "sr"
+      ],
       "remarks": "Audio element has autoplay attribute with no controls. Audio plays automatically on page load with no mechanism to pause, stop, or control volume."
     },
     {
@@ -207,8 +219,11 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["axe", "sr"],
-      "remarks": "axe returned bypass as incomplete, but SR confirmed navigation landmark exists — valid bypass mechanism. FIND_NEXT_LANDMARK announced 'navigation' with list of chapters."
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe returned bypass as incomplete, but SR confirmed navigation landmark exists \u2014 valid bypass mechanism. FIND_NEXT_LANDMARK announced 'navigation' with list of chapters."
     },
     {
       "ruleId": "cf77f2",
@@ -217,7 +232,10 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["axe", "sr"],
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
       "remarks": "axe returned bypass as incomplete. SR confirmed: no skip link, no headings, no main landmark. Only a complementary landmark exists which does not serve as bypass for main content."
     },
     {
@@ -227,8 +245,11 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["axe", "sr"],
-      "remarks": "axe found no document-title violation. SR announced 'Clementine harvesting season' — title accurately describes page content about clementine harvesting."
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe found no document-title violation. SR announced 'Clementine harvesting season' \u2014 title accurately describes page content about clementine harvesting."
     },
     {
       "ruleId": "c4a8a4",
@@ -237,7 +258,10 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["axe", "sr"],
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
       "remarks": "axe found no document-title violation (title exists). But SR + content comparison reveals mismatch: title says 'Apple harvesting season' while content is about clementines. Title does not identify page purpose."
     },
     {
@@ -247,8 +271,11 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["axe", "sr"],
-      "remarks": "axe found no empty-heading violation. SR announced 'Opening Hours heading 1' — heading accurately describes the section content about opening hours."
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe found no empty-heading violation. SR announced 'Opening Hours heading 1' \u2014 heading accurately describes the section content about opening hours."
     },
     {
       "ruleId": "b49b2e",
@@ -257,7 +284,10 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["axe", "sr"],
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
       "remarks": "axe found no empty-heading violation (heading exists). But SR + content comparison: heading says 'Weather' while content is 'We are open Monday through Friday from 10 to 16.' Heading does not describe the section."
     },
     {
@@ -267,8 +297,11 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["axe", "sr"],
-      "remarks": "axe found no link-name violation. SR announced 'See the description of this product. link' — link text clearly identifies its purpose."
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe found no link-name violation. SR announced 'See the description of this product. link' \u2014 link text clearly identifies its purpose."
     },
     {
       "ruleId": "5effbb",
@@ -277,8 +310,11 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["axe", "sr"],
-      "remarks": "axe found no link-name violation (link text exists). But SR announced 'More link' — ambiguous link text that does not identify the link purpose in context."
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe found no link-name violation (link text exists). But SR announced 'More link' \u2014 ambiguous link text that does not identify the link purpose in context."
     },
     {
       "ruleId": "ffbc54",
@@ -287,7 +323,10 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["axe", "sr"],
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
       "remarks": "Single-character shortcut '+' exists, but page provides a checkbox to remap it with Ctrl modifier. SR confirmed checkbox is labeled and accessible: 'Use ctrl key together with the + key'."
     },
     {
@@ -297,8 +336,11 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["axe", "sr"],
-      "remarks": "Single-character shortcut '+' is active with no mechanism to remap, disable, or restrict to focused component. Page only has a text input and label — no settings to modify the shortcut."
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Single-character shortcut '+' is active with no mechanism to remap, disable, or restrict to focused component. Page only has a text input and label \u2014 no settings to modify the shortcut."
     },
     {
       "ruleId": "oj04fd",
@@ -307,8 +349,11 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["sr", "screenshot"],
-      "remarks": "SR confirmed focus on 'ACT rules' link. Screenshot shows clear visible focus indicator — dark rectangular outline around focused link."
+      "toolsUsed": [
+        "sr",
+        "screenshot"
+      ],
+      "remarks": "SR confirmed focus on 'ACT rules' link. Screenshot shows clear visible focus indicator \u2014 dark rectangular outline around focused link."
     },
     {
       "ruleId": "oj04fd",
@@ -317,8 +362,11 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["sr", "screenshot"],
-      "remarks": "SR confirmed focus on 'ACT rules' link, but screenshot shows no visible focus indicator — no outline, border, or visual change on the focused element. CSS likely has outline:none."
+      "toolsUsed": [
+        "sr",
+        "screenshot"
+      ],
+      "remarks": "SR confirmed focus on 'ACT rules' link, but screenshot shows no visible focus indicator \u2014 no outline, border, or visual change on the focused element. CSS likely has outline:none."
     },
     {
       "ruleId": "afw4f7",
@@ -327,7 +375,10 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["axe", "screenshot"],
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
       "remarks": "axe found no color-contrast violations. Text is #333 on #FFF (~12.6:1 ratio), well above 4.5:1 minimum."
     },
     {
@@ -337,7 +388,10 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["axe", "screenshot"],
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
       "remarks": "axe flagged color-contrast violation: ratio 2.32:1 (#AAA on #FFF, 16px normal weight). Required minimum is 4.5:1."
     },
     {
@@ -347,8 +401,10 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["screenshot"],
-      "remarks": "Screenshot shows a photograph (fireworks at Eiffel Tower) — not an image of text. Image contains no rendered text."
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Screenshot shows a photograph (fireworks at Eiffel Tower) \u2014 not an image of text. Image contains no rendered text."
     },
     {
       "ruleId": "0va7u6",
@@ -357,7 +413,9 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["screenshot"],
+      "toolsUsed": [
+        "screenshot"
+      ],
       "remarks": "Screenshot shows text rendered as a JPG image ('The Accessibility Conformance Testing (ACT) Rules Format 1.0...'). Text should be rendered as actual HTML text, not an image."
     },
     {
@@ -367,8 +425,10 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["screenshot"],
-      "remarks": "Instruction 'Click the button labelled howdy, on the right' uses visual location but also provides the button label — non-sensory alternative present."
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Instruction 'Click the button labelled howdy, on the right' uses visual location but also provides the button label \u2014 non-sensory alternative present."
     },
     {
       "ruleId": "9bd38c",
@@ -377,7 +437,9 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["screenshot"],
+      "toolsUsed": [
+        "screenshot"
+      ],
       "remarks": "Instruction 'Find the menu on the right, to navigate' relies solely on visual location with no non-sensory alternative for identifying the navigation."
     },
     {
@@ -387,8 +449,10 @@
       "expected": "pass",
       "actual": "pass",
       "correct": true,
-      "toolsUsed": ["screenshot"],
-      "remarks": "CSS has @media (orientation: portrait) with rotateZ(1turn) — a 360-degree rotation that results in no visual change. Orientation is not restricted."
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "CSS has @media (orientation: portrait) with rotateZ(1turn) \u2014 a 360-degree rotation that results in no visual change. Orientation is not restricted."
     },
     {
       "ruleId": "b33eff",
@@ -397,8 +461,1637 @@
       "expected": "fail",
       "actual": "fail",
       "correct": true,
-      "toolsUsed": ["screenshot"],
+      "toolsUsed": [
+        "screenshot"
+      ],
       "remarks": "CSS has @media (orientation: portrait) with rotate(1.5708rad) (~90 degrees), forcing landscape layout in portrait mode. Orientation is restricted via CSS transform."
+    },
+    {
+      "ruleId": "0va7u6",
+      "criterion": "1.4.5",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/28b2597a08ca7a6fd85a273b484b599c04a03f1a.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Image of styled 'Ivanhoe' text has descriptive alt text explaining the visual appearance of the text, satisfying 1.4.5"
+    },
+    {
+      "ruleId": "0va7u6",
+      "criterion": "1.4.5",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/bf023941401d04f61ce739ee10fcc15f87d298a7.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "CSS background-image (textimage.jpg) contains text with no alt text mechanism available, fails 1.4.5"
+    },
+    {
+      "ruleId": "36b590",
+      "criterion": "3.3.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/36b590/34b98eee090db39d3c703d360e3b8c49d9b8acfa.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "Submit button has aria-describedby linking to error message; SR announces 'Name and color cannot be empty. Please complete all required fields.' when Submit is focused"
+    },
+    {
+      "ruleId": "36b590",
+      "criterion": "3.3.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/36b590/d7863608ff2aab99c43663cb3701c65c28b75c23.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "Error message span not associated with Submit button; SR only announces 'Submit button' with no error description when Submit is focused"
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/b130285915a8ca42926a11553a5791f44b65d487.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Links 'HTML', 'EPUB', 'Plain text' are descriptive in context of the Ulysses list item; axe reports no 2.4.4 violations; SR confirms descriptive link names"
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/bf3ba787eb7a6819ea1a6adccdfd1f30842ed788.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "div with role='link' has text 'More' which is non-descriptive with no additional context; SR announces 'More link' with no context to determine purpose"
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/e64416f9e9792cd76b77ee209a26269d47c3ff97.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Element is an anchor with role='button', making it a button not a link; 2.4.4 link purpose rule does not apply"
+    },
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/ab24c77ed9daefc8fa1650aedf0d1c6438460243.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "Buttons trap focus but page displays 'Press Ctrl+M to Exit' instruction providing a documented escape mechanism; JS implements escapeTrapOnCtrlM handler"
+    },
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/7dcc4ae00712889d448ecbcba200e032dca59bf0.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "Focus cycles between Button 1 and Button 2 indefinitely with no escape instructions or mechanism; Tab key repeatedly cycles between the same 2 buttons"
+    },
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/9d47dcc67abbcb177876ce082ae073947cc7135d.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "Page only contains a button with display:none (not focusable); no elements in sequential focus order, rule does not apply"
+    },
+    {
+      "ruleId": "80f0bf",
+      "criterion": "1.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80f0bf/ffa08bb05064fdf4005d0e3baff46b9f7de21336.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "Video element autoplays but has 'muted' attribute so no audio plays; 1.4.2 audio control only applies to audio content, not muted video"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/432e113b02825ed7fcfaac362f32aa6daa44a915.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Text content is available in a tilted div; content is readable text not relying solely on visual orientation as a sensory characteristic"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/4b4ad8012cb0399cf60658adbdfebfc09b5dbbf3.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "'This circle is nice' text does not rely solely on sensory characteristics for understanding; the circle visual element uses role='presentation'"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/b1ea0d4d1bb1b2edc85aa84e424b57d5545c705d.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "'Click the button, for a surprise' identifies the control by its name/label not by shape, color, or position alone"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/8ffada5cb337c6481f65a1b0c0fc318f0695fd56.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page contains only a linked image with alt text; no instructions referencing sensory characteristics present, rule does not apply"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/04344f745bd9bad51292748e7893f146c045aae4.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot",
+        "axe"
+      ],
+      "remarks": "Black (#000) text on gray (#666) background; contrast ratio ~5.74:1 passes AA for large text (18pt) and normal text thresholds; axe reports no contrast violations"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/173cb00f20c52f35970c322dedf7bc11450b70c1.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot",
+        "axe"
+      ],
+      "remarks": "Default link 'W3C' with standard browser styling on white background; axe reports no contrast violations; link text contrast passes AA"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/7507c8139cfda2c482c394fe00aaaf69e15acabb.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot",
+        "axe"
+      ],
+      "remarks": "Black text with opacity 0.3 on white background; effective color is light gray with insufficient contrast; axe flags color-contrast violation (wcag143)"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/19123c99ec390011b87736827720d5e1e794bad2.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot",
+        "axe"
+      ],
+      "remarks": "#777 text on #EEE background; contrast ratio ~3.0:1 fails AA 4.5:1 requirement; axe flags color-contrast violation (wcag143)"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/20f9cd78dd0fa87ee8d40ea3ed35a1fe3ff66508.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot",
+        "axe"
+      ],
+      "remarks": "Page contains only an image with alt text, no visible text content; 1.4.3 text contrast rule does not apply; axe reports no contrast violations"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/b4fcc1ea76d19ae86033ed687613f78297ee6069.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot",
+        "axe"
+      ],
+      "remarks": "Disabled button with #777 text on #EEE; disabled components are exempt from 1.4.3 contrast requirements; axe reports no contrast violations"
+    },
+    {
+      "ruleId": "b33eff",
+      "criterion": "1.3.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/4fa1ac6e6c6c65a3cc17e144823e45ff30f428bb.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "CSS uses 'rotate: 0turn' in portrait media query which normalizes rotation, does not lock or restrict orientation; page content accessible in both orientations"
+    },
+    {
+      "ruleId": "b33eff",
+      "criterion": "1.3.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/b8d71ae629b704bd374b0a2dcde569bd108c848e.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "CSS only contains font-size responsive rules with no orientation-locking transforms; rule does not apply"
+    },
+    {
+      "ruleId": "b49b2e",
+      "criterion": "2.4.6",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/8a83ca44601cb4ab173c388413df9649c8aac11f.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "'Opening Hours' heading accurately describes the following section about business hours; SR announces 'Opening Hours heading 1'"
+    },
+    {
+      "ruleId": "b49b2e",
+      "criterion": "2.4.6",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/acae544ba63bf9c71988fb67d491c7d404164f52.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "'Weather' heading does not describe the section content about business opening hours; heading is misleading/non-descriptive; SR announces 'Weather heading 1'"
+    },
+    {
+      "ruleId": "b49b2e",
+      "criterion": "2.4.6",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/b67b5eda7529c918280b442609e5b7d59c57317b.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Page has only an empty h1 with no text content; 2.4.6 applies to headings that describe sections, an empty heading has no descriptive content to evaluate"
+    },
+    {
+      "ruleId": "c4a8a4",
+      "criterion": "2.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/c4a8a4/4c72b3b9b06bf1edc3c959070731b65871ee0c8f.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Title 'University of Arkham' does not describe the page which shows search results for 'accessibility'; SR announces 'University of Arkham' but h1 says 'Search results for accessibility at the University of Arkham'"
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/758c009716931b1a14a1215eda5d4f9d72135aaa.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Nav element with multiple skip links ('Skip to translator's biography', 'Skip to information about the book', 'Skip to main content') provides bypass mechanism; SR finds nav landmark"
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/7fdb66e34b6c6b106fd371183e682721c3735031.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Nav element with skip links ('Skip to local navigation', 'Skip to main content') provides bypass mechanism; SR announces navigation landmark with skip links"
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/8b11ae88e8b977839b56670eed8f1ff3ebae0fef.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Printable character shortcuts '+' and 'a' are used, but checkboxes allow remapping to require Ctrl modifier; remap mechanism satisfies 2.1.4"
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/7310b8cc841e92ccd85c6cf2899a460290da881f.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "Only shortcut is 'Escape' key which is a non-printable character; 2.1.4 only applies to keyboard shortcuts using printable characters, so rule is inapplicable"
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/90789ad82a761b7697418e8cb403db103f0925a2.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot",
+        "sr"
+      ],
+      "remarks": "Page only contains a non-focusable span element; no elements in sequential focus order exist, so 2.4.7 focus visibility rule does not apply"
+    },
+    {
+      "ruleId": "0va7u6",
+      "criterion": "1.4.5",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/48f02a3a361b09761b70fe85571ce0fe55b62e18.html",
+      "expected": "pass",
+      "actual": "inapplicable",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "0va7u6",
+      "criterion": "1.4.5",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/00a1b04016513662a754e5114d0efbbd98ba58c8.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: image src=\"\", alt=\"\""
+    },
+    {
+      "ruleId": "0va7u6",
+      "criterion": "1.4.5",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/6a7f199a37309ccab08941b0bc64e182770c29ac.html",
+      "expected": "fail",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: image src=\"\", alt=\"\""
+    },
+    {
+      "ruleId": "36b590",
+      "criterion": "3.3.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/36b590/a51e05dc7b64d927ff25bc493bb0aa069c963d29.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: error text in DOM but not associated with input field"
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/9863e3ea603a1bdde28e5b94f8675579e33a16d7.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe: no WCAG violations; sr: link text=\"\""
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/474db50232349ade7714e41c88af801d1f1e378b.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe: no WCAG violations; sr: link text=\"Go to the main content.\""
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/98f0638a038a244b0bde70ff316cde1be7ce9a3b.html",
+      "expected": "fail",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe-incomplete:bypass: Page must have means to bypass repeated blocks; sr: link text=\"\""
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/ca563b842b32b8fc79ac872f8fc4e799fcf76072.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe: no WCAG violations; sr: link text=\"\""
+    },
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/b92b5214d2b2214b89fb9812b389536759701790.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: focus moves freely through 3 elements"
+    },
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/62fd24e73ea55f55ad45de392128a816a6f03526.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: keyboard trap detected \u2014 focus cycles between Button 1 and Button 2"
+    },
+    {
+      "ruleId": "80f0bf",
+      "criterion": "1.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80f0bf/e4d78b5074773ab0cbd8c72732e948c4608f5c9d.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: audio/video has autoplay without controls"
+    },
+    {
+      "ruleId": "80f0bf",
+      "criterion": "1.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80f0bf/b5c74f9ddba668623e33e33e3b8f773776f3177f.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: audio/video has controls or does not autoplay"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/09eef7b7b29e82e2902cb09afe8102af365276d4.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no sensory-only references found"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/dcc4ce96f7930eae43e20af69cb33038b64a2f4d.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: sensory reference with non-sensory alternative"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/83cffb1ea6a8411d7c4a021e64f4dead893f4875.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: instructions rely solely on sensory characteristics"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/ab4691ef474d6263e9ceec824f07faa51a30112e.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe-incomplete:color-contrast: Elements must meet minimum color contrast ratio thresholds; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/2845a8409b1c07caa856d1bfbf42ed244b0de9c2.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe: no WCAG violations; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/e8f3acb1dc814b8b815c69b7150cdea67d5bd98e.html",
+      "expected": "fail",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe-incomplete:color-contrast: Elements must meet minimum color contrast ratio thresholds; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/bf47c65f2854b6ac100a6f700d354b243b069231.html",
+      "expected": "fail",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe-incomplete:color-contrast: Elements must meet minimum color contrast ratio thresholds; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/dbd2374952b96375369afe2a012bfbadd182bf6b.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe: no WCAG violations; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/7c7d6412dae7381d90517a6f3c0a30104d63062a.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe: no WCAG violations; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/eb4bfbbeba4e803fef10ebad17427f32e306ae82.html",
+      "expected": "pass",
+      "actual": "inapplicable",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "b33eff",
+      "criterion": "1.3.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/93ad10ce32325be5b7c8cbaec7254d55e8fb577c.html",
+      "expected": "fail",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no orientation-locking CSS found"
+    },
+    {
+      "ruleId": "b33eff",
+      "criterion": "1.3.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/4c34705d8d866194fd8fe96a0bd1abaf267b11f0.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no orientation-locking CSS found"
+    },
+    {
+      "ruleId": "b49b2e",
+      "criterion": "2.4.6",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/14ecbd9d655c833f5f9c5ee9563c472faee663c4.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe:document-title (serious): Documents must have <title> element to aid in navigation; sr: heading announced=\"document web A heading 1 heading 1\", body=\"\" A \\n\\t \\n\\t\\t airplane \\n\\t\\t \\n\\t\\t\\ta powered flying vehicle with fixed wings and a weight greater than that of the air it displaces.\\n\\t\\t \\n\\t\\t apple \\n\\t\\t \\n\\t\\t\\tthe round fruit of a tree of\""
+    },
+    {
+      "ruleId": "b49b2e",
+      "criterion": "2.4.6",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/d76e8834b616356b2803586a8fbd0825a84e3fc8.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe:document-title (serious): Documents must have <title> element to aid in navigation; sr: heading announced=\"document web Wrapping to top. Wrapping to top. Weather heading 1 Weather heading 1\", body=\"\" Weather \\n\\t We are open Monday through Friday from 10 to 16 \\n\\t It is going to rain tomorrow \\n \"\""
+    },
+    {
+      "ruleId": "c4a8a4",
+      "criterion": "2.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/c4a8a4/107a5e462b4ad6dd297742a2a177e24d32d27c26.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe: no WCAG violations; sr: title=\"Clementine harvesting season\", body preview=\"\" \\n\\t\\t Clementine harvesting season \\n\\t\\t Second title is ignored \\n\\t \\n\\t \\n\\t\\t \\n\\t\\t\\tClementines will be ready to harvest from late October through February.\\n\\t\\t \\n\\t\\n \"\""
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/36f679b6844299beda3f720e0d94cabdcfa122ba.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe:html-has-lang (serious): <html> element must have a lang attribute; sr: found landmarks: The Three Kingdoms, Chapter 1, document web navigation List with 2 items List with 2 items 1. Chapter 1. Chapter 1."
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/c039d5c0794751aa5944724b45df214c0e8cc827.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe-incomplete:bypass: Page must have means to bypass repeated blocks; sr: skip link found in HTML"
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/ac55a162907e372577bb09a3fbebf252aea90e64.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe: no WCAG violations; sr: skip link found in HTML"
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/c1666b2c31c9d1744fc630a19ffb78bdff741fcb.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe:html-has-lang (serious): <html> element must have a lang attribute; sr: keyboard shortcut found with no remap/disable mechanism"
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/95cf4fdf26825900e91a30eaf6c2235516db79f9.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "sr",
+        "screenshot"
+      ],
+      "remarks": "sr: focus moved, 2 entries; sr: no outline:none in inline styles"
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/8f296b7a417523e9c769761dd41b703c75d90019.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "sr",
+        "screenshot"
+      ],
+      "remarks": "sr: focus moved, 2 entries; sr: no outline:none in inline styles"
+    },
+    {
+      "ruleId": "0va7u6",
+      "criterion": "1.4.5",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/74e69f0f02fd050e3b3bde3d1e81ca7fbc04670a.html",
+      "expected": "pass",
+      "actual": "inapplicable",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "0va7u6",
+      "criterion": "1.4.5",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/e1d4ed7556dabfcfde47aaf4cd0861e0fdf585d9.html",
+      "expected": "fail",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: image src=\"\", alt=\"\""
+    },
+    {
+      "ruleId": "36b590",
+      "criterion": "3.3.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/36b590/baa48e5f5a149f6d4d8038b693477ec94176d5a0.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: form field announced: \"tab Product filter entry. Product filter entry. Focus mode Focus mode\""
+    },
+    {
+      "ruleId": "36b590",
+      "criterion": "3.3.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/36b590/ac63f6ffcb1831a5614e525627822e7a6f15343d.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/a1e9ff296f0728e180aeb920beacb26bf88ddb12.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe-incomplete:bypass: Page must have means to bypass repeated blocks; sr: link text=\"HTML\""
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/e6a7c924092d2351c3a5b4361ccde7917ad23c66.html",
+      "expected": "fail",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe-incomplete:color-contrast: Elements must meet minimum color contrast ratio thresholds; sr: link text=\"Go\""
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/afcf56e62d62b8f69b4a2881475f625a1ed7ecf9.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe-incomplete:bypass: Page must have means to bypass repeated blocks; sr: link text=\"\""
+    },
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/e3902f01b8589702925be6d97f9542895ef3c76d.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: keyboard trap detected \u2014 focus cycles between Button 2 and Button 1"
+    },
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/8fba3918b361f251dab4c19bec8eddc5624218ee.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: keyboard trap detected \u2014 focus cycles between Button 1 and Button 2"
+    },
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/30ffb2991af4d1727223409c9f1235e44acc1c13.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: focus moves freely through 4 elements"
+    },
+    {
+      "ruleId": "80f0bf",
+      "criterion": "1.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80f0bf/7d3d7214d9fca81a8a09a819665871a474f85548.html",
+      "expected": "inapplicable",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: audio/video has autoplay without controls"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/82e2fbab97b00d55b198c4a2b8914341a2ea1131.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: sensory reference with non-sensory alternative"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/f435059abb93ebf8727962b7601eae3cacad532b.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no sensory-only references found"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/d76ef447c5266fed36f05cbe00cf2a11b649f652.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no sensory-only references found"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/547eb8bf40d515cb7e8f35259af350bd7a92019c.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no sensory-only references found"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/aed692e9f0a1be5c87ef1de56afa8e23e14cc3ba.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe: no WCAG violations; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/668856825e6d3b4e480005acf97723c7b1004ba3.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe: no WCAG violations; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/b1a65bd18381a1ea4ad3077fd98c50368947012c.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe:color-contrast (serious): Elements must meet minimum color contrast ratio thresholds; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/2347a45232c34aa309087ed099f4781cd70b5b1e.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe: no WCAG violations; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/328b967c5b544b48f7acd8e42f2f05d355501f2a.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/6b811d065fc243c2c94002f315891791e181d518.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe: no WCAG violations; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "b33eff",
+      "criterion": "1.3.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/388f97562ae3b7e3aec7ad6305df36a91b68cf77.html",
+      "expected": "fail",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no orientation-locking CSS found"
+    },
+    {
+      "ruleId": "b33eff",
+      "criterion": "1.3.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/5cde20e2acab8991c299a317825201af48bf5736.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no orientation-locking CSS found"
+    },
+    {
+      "ruleId": "b49b2e",
+      "criterion": "2.4.6",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/14faa79c92b5e281d8694f8a18ec00ba0c11da6b.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe:document-title (serious): Documents must have <title> element to aid in navigation; sr: heading announced=\"Opening hours image heading 1 Opening hours image heading 1\", body=\"\" \\n\\t\\t \\n\\t \\n\\t We are open Monday through Friday from 10 to 16 \\n \"\""
+    },
+    {
+      "ruleId": "b49b2e",
+      "criterion": "2.4.6",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/6000a70ba2da9a828fa9c817ae6a0d2c092522fb.html",
+      "expected": "fail",
+      "actual": "inapplicable",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "b49b2e",
+      "criterion": "2.4.6",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/26d71f03f10bc14b28212699eddafe17adafc6b8.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "c4a8a4",
+      "criterion": "2.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/c4a8a4/85469fd266d3e8706f551dcd65261709311123d0.svg",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe: no WCAG violations; sr: title=\"This is a circle\", body preview=\"\" \\n This is a circle \\n \\n \"\""
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/1d5d46b8e4ca30cf0683a417dc4edd57887b9889.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe: no WCAG violations; sr: skip link found in HTML"
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/f937af9c794522e5f421d5cfc3937d34fad2a9e7.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe:html-has-lang (serious): <html> element must have a lang attribute; axe-incomplete:bypass: Page must have means to bypass repeated blocks; sr: found landmarks: navigation List with 2 items List with 2 items 1. Chapter 1. Chapter 1."
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/1370e47918de81be8896117540364bc18930eef4.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe:html-has-lang (serious): <html> element must have a lang attribute; sr: keyboard shortcut has remap/disable mechanism"
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/25d6f835f76fe661574145391bb1286b063a5c84.html",
+      "expected": "inapplicable",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe:html-has-lang (serious): <html> element must have a lang attribute; sr: keyboard shortcut found with no remap/disable mechanism"
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/b12f1f45eef29c30197ca3bda79d793cd90eeadd.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "sr",
+        "screenshot"
+      ],
+      "remarks": "sr: focus moved, 1 entries; sr: no outline:none in inline styles"
+    },
+    {
+      "ruleId": "0va7u6",
+      "criterion": "1.4.5",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/e5e36c1efa1c7d7f350ee94c220b58944a62c1d2.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: image src=\"\", alt=\"\""
+    },
+    {
+      "ruleId": "0va7u6",
+      "criterion": "1.4.5",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/671c8b76af94397191ae1ed8b6fdeacb3658509b.html",
+      "expected": "pass",
+      "actual": "inapplicable",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "0va7u6",
+      "criterion": "1.4.5",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/0va7u6/68dc6c98d514826f67cf700d1a5c7d449061b9ee.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "36b590",
+      "criterion": "3.3.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/36b590/e76345ab4164567a24c0dc9dece56cee1794dc0c.html",
+      "expected": "fail",
+      "actual": "inapplicable",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/771c36b9967faec9926af86041d834b4a108a52e.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe: no WCAG violations; sr: link text=\"this product\""
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/e4f70ef2843c6239d0bebe46b97a682bd901e749.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe-incomplete:bypass: Page must have means to bypass repeated blocks; sr: link text=\"information page\""
+    },
+    {
+      "ruleId": "5effbb",
+      "criterion": "2.4.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/5effbb/43730455b69439980b95151be477ca594e0d7556.html",
+      "expected": "fail",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe-incomplete:bypass: Page must have means to bypass repeated blocks; sr: link text=\"HTML\""
+    },
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/fb76f71a94bf95f5cfef22f3db6655e7b0a57b0c.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: focus moves freely through 4 elements"
+    },
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/d2f5325f3fd5ddde38cd677a5ca36ba0d762fb84.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: keyboard trap detected \u2014 focus cycles between Button1 and Button2"
+    },
+    {
+      "ruleId": "80af7b",
+      "criterion": "2.1.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/16dddd8ac5c419caba2c709b1b1f49cc5759e63c.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "80f0bf",
+      "criterion": "1.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80f0bf/29ea904ef03f14401a7b43a5ffc9b30271697bc7.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "sr"
+      ],
+      "remarks": "sr: audio/video has autoplay without controls"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/e871d671f9e22112d76505e07c6297f1605a844d.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no sensory-only references found"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/d9e9bc689ec574b6788279af9e433a0abd4a2c62.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no sensory-only references found"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/4be9e2292ade4f8d8c3eae6f6765ac365a9eba74.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no sensory-only references found"
+    },
+    {
+      "ruleId": "9bd38c",
+      "criterion": "1.3.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/1527ef77130c2971dc36758bdc903e4f469715a5.html",
+      "expected": "fail",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no sensory-only references found"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/dc170fd015758b62d8e0141e086893a116ee724e.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe:color-contrast (serious): Elements must meet minimum color contrast ratio thresholds; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/c7c09c1019dcf1d1c67183001b4d459dee7a87ff.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe: no WCAG violations; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/41afaa9b33287aba9c608c3466e2b164f57a02ed.html",
+      "expected": "fail",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe-incomplete:color-contrast: Elements must meet minimum color contrast ratio thresholds; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/308839f424ef1d9dbb5aab0cd9079827ecb00895.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe:color-contrast (serious): Elements must meet minimum color contrast ratio thresholds; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/fc92e273e09ad225227f488e3a016fd8d4aad10c.html",
+      "expected": "inapplicable",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe:color-contrast (serious): Elements must meet minimum color contrast ratio thresholds; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/53386f68326a53798e776b48e81b32659424d6d3.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "afw4f7",
+      "criterion": "1.4.3",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/8c33a0af471cc3c1abbb9f709afa6629b13daf3a.html",
+      "expected": "fail",
+      "actual": "fail",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "screenshot"
+      ],
+      "remarks": "axe:color-contrast (serious): Elements must meet minimum color contrast ratio thresholds; screenshot: contrast checked via axe"
+    },
+    {
+      "ruleId": "b33eff",
+      "criterion": "1.3.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/8f341a73c698daf157613c32a521878ed5aa7310.html",
+      "expected": "fail",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: no orientation-locking CSS found"
+    },
+    {
+      "ruleId": "b33eff",
+      "criterion": "1.3.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b33eff/e228ac70387fe286917bce3028ae311269ae2f35.html",
+      "expected": "inapplicable",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "screenshot: orientation restricted via CSS transform: translateX(100px)"
+    },
+    {
+      "ruleId": "b49b2e",
+      "criterion": "2.4.6",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/910c8881245425846a502b38758fff7db5c213ef.html",
+      "expected": "pass",
+      "actual": "inapplicable",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "b49b2e",
+      "criterion": "2.4.6",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/b49b2e/69658c922aa926b0b8e4e1f113620c1dff5d64a9.html",
+      "expected": "inapplicable",
+      "actual": "inapplicable",
+      "correct": true,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "c4a8a4",
+      "criterion": "2.4.2",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/c4a8a4/2f9709573bf080a0feccfb2fd4b4a657383ef235.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe: no WCAG violations; sr: title=\"Clementine harvesting season\", body preview=\"\" \\n\\t \\n\\t\\t Clementine harvesting season \\n\\t\\t \\n\\t\\t\\tClementines will be ready to harvest from late October through February.\\n\\t\\t \\n\\t\\n \"\""
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/9eb0cf411e23f4457a013123e3066e2bfa4652da.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe:html-has-lang (serious): <html> element must have a lang attribute; sr: found landmarks: navigation List with 2 items List with 2 items 1. Chapter 1. Chapter 1."
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/1c8d17ef6a69be1bbc5b28f432d2b7192e0f65c9.html",
+      "expected": "pass",
+      "actual": "pass",
+      "correct": true,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe-incomplete:bypass: Page must have means to bypass repeated blocks; sr: skip link found in HTML"
+    },
+    {
+      "ruleId": "cf77f2",
+      "criterion": "2.4.1",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/ecc29b73e37b6a125b3fd9767068dcaa368d467a.svg",
+      "expected": "inapplicable",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "sr: no bypass mechanism found. Spoken: Passed Example 3, document web No landmark found. No landmark found.; axe-incomplete:color-contrast: Elements must meet minimum color contrast ratio thresholds"
+    },
+    {
+      "ruleId": "ffbc54",
+      "criterion": "2.1.4",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/ffbc54/73674bac916a769bcaeea593a84559a4559d5b9e.html",
+      "expected": "pass",
+      "actual": "fail",
+      "correct": false,
+      "toolsUsed": [
+        "axe",
+        "sr"
+      ],
+      "remarks": "axe:html-has-lang (serious): <html> element must have a lang attribute; sr: keyboard shortcut has remap/disable mechanism"
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/b44aa294df6f0de62f11f6ae732087d92c90b448.html",
+      "expected": "pass",
+      "actual": "inapplicable",
+      "correct": false,
+      "toolsUsed": [
+        "screenshot"
+      ],
+      "remarks": "Page lacks relevant element type for this rule."
+    },
+    {
+      "ruleId": "oj04fd",
+      "criterion": "2.4.7",
+      "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/eb4f387bfa2459fb12dc5b0cbda478238b3eeeda.html",
+      "expected": "inapplicable",
+      "actual": "pass",
+      "correct": false,
+      "toolsUsed": [
+        "sr",
+        "screenshot"
+      ],
+      "remarks": "sr: focus moved, 1 entries; sr: no outline:none in inline styles"
     }
   ]
 }
