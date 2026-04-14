@@ -281,6 +281,94 @@ Check these explicitly — don't assume they pass just because axe didn't flag t
 | 3.2.1 On Focus         | Tab through — does anything unexpected happen on focus alone?         |
 | 3.2.2 On Input         | Change form values — does anything unexpected happen?                 |
 
+### SPA / Async Content (Loading States)
+
+For pages that load data from APIs (React Query, SWR, Apollo, Rails backends, etc.), audit **both** the loading state and the loaded state. The loading state is a real state that real users experience — a screen reader user who hits the page and gets silence or an unlabeled spinner has a 4.1.3 failure.
+
+**Do not** rely on arbitrary sleeps, `networkidle`, or LCP. Use the MutationObserver and targeted loading checks instead.
+
+#### Step 1: Check the loading state immediately
+
+After navigating, immediately check loading state accessibility:
+
+```bash
+bun {sr-driver} navigate <url>
+bun {sr-driver} loading-state           # targeted 4.1.3 check
+```
+
+This checks:
+- `aria-busy="true"` on containers being populated
+- Loading indicators (spinners, skeletons) and whether they have accessible names
+- `aria-live` regions, `role="status"`, `role="progressbar"` presence
+- Whether screen reader users have **any** indication content is loading
+
+Also listen to what the screen reader says during the loading state:
+
+```bash
+bun {sr-driver} transcript --since N    # what was announced?
+```
+
+#### Step 2: Start the DOM observer and wait for content
+
+```bash
+bun {sr-driver} observe                 # start MutationObserver (2s settle default)
+```
+
+Then periodically check if the DOM has settled:
+
+```bash
+bun {sr-driver} observe-status          # SETTLED or MUTATING?
+```
+
+Keep checking every ~5 seconds until settled. If you know what content to expect, you can also wait for a specific element:
+
+```bash
+bun {sr-driver} wait-for-selector ".data-table"            # wait for content to appear
+bun {sr-driver} wait-for-selector ".spinner" --state detached  # wait for spinner to disappear
+```
+
+#### Step 3: Audit the loaded state
+
+Once the DOM has settled:
+
+```bash
+bun {sr-driver} observe-stop            # clean up the observer
+bun {sr-driver} enter                   # re-enter web content
+bun audit.ts                            # full axe audit on loaded content
+bun audit.ts --tags wcag2a,wcag2aa
+```
+
+Then continue with the standard Phase 2–7 workflow on the loaded content.
+
+#### Step 4: Test client-side navigation (SPAs)
+
+For SPAs with client-side routing, test that route changes are accessible:
+
+```bash
+# Trigger a client-side navigation (click a link, etc.)
+agent-browser --cdp 9222 click @ref
+
+# Start observing, wait for content
+bun {sr-driver} observe
+bun {sr-driver} observe-status          # poll until settled
+
+# Check: was the page title updated? Was focus managed?
+bun {sr-driver} item-text
+bun {sr-driver} perform DESCRIBE_KEYBOARD_FOCUS
+
+# Was the route change announced?
+bun {sr-driver} transcript --since N
+```
+
+#### Loading state findings in the report
+
+Document loading state findings separately:
+- What the loading state looks like to AT users
+- Whether `aria-busy` was used correctly (set during load, cleared after)
+- Whether loading indicators had accessible names
+- Whether a live region announced the loading/loaded transition
+- What readiness signal was used (observer settled, selector appeared, etc.)
+
 ## Report Format
 
 Structure your report with these sections. **Every section is required.**
@@ -342,7 +430,7 @@ Every report must include these disclaimers:
 
 1. **Single AT/browser combination.** This audit used a single screen reader (VoiceOver on macOS or Orca on Linux) + Chrome. Results may differ with NVDA, JAWS, or other browser combinations. A conformance claim requires testing with multiple AT/browser pairs.
 2. **Automated checks are not comprehensive.** axe-core catches ~30-40% of WCAG issues. The remaining issues require human judgment.
-3. **Point-in-time snapshot.** Dynamic content, SPAs, and server-rendered differences may produce different results at different times.
+3. **Point-in-time snapshot.** Dynamic content, SPAs, and server-rendered differences may produce different results at different times. For SPAs, both loading and loaded states were tested using the DOM observer, but other intermediate states may exist.
 
 ## Screen Reader Commands Reference
 

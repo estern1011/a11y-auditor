@@ -35,6 +35,13 @@ Commands:
   enter                        Focus browser for ${screenReader}
   navigate <url>               Go to URL
 
+  loading-state                Check loading state a11y (4.1.3 patterns)
+  observe [--settle N]         Start DOM MutationObserver (default settle: 2000ms)
+  observe-status               Check if DOM has settled
+  observe-stop                 Stop observing
+  wait-for-selector <sel> [--state S] [--timeout N]
+                               Wait for CSS selector (visible|attached|detached|hidden)
+
   next                         Move to next item
   previous                     Move to previous item
   act                          Activate current item
@@ -262,6 +269,90 @@ export async function cli(args: string[], driver: ScreenReaderDriver, usage: str
         const url = positional[1];
         if (!url) throw new CliError("Missing URL");
         printVO(await post(port, "/navigate", { url }), jsonMode);
+        break;
+      }
+
+      // ---------------------------------------------------------------
+      // Loading state & DOM observation
+      // ---------------------------------------------------------------
+
+      case "loading-state": {
+        const d = await get(port, "/loading-state");
+        if (jsonMode) {
+          console.log(JSON.stringify(d));
+        } else {
+          console.log(d.summary);
+          if (d.ariaBusyElements.length > 0) {
+            console.log("\naria-busy elements:");
+            d.ariaBusyElements.forEach((e: any) => console.log(`  ${e.selector} (${e.tagName})`));
+          }
+          if (d.loadingIndicators.length > 0) {
+            console.log("\nLoading indicators:");
+            d.loadingIndicators.forEach((e: any) =>
+              console.log(`  ${e.selector} — ${e.hasAccessibleName ? `name: "${e.accessibleName}"` : "NO accessible name"} (${e.detectedBy})`));
+          }
+          if (d.liveRegions.length > 0) {
+            console.log("\nLive regions:");
+            d.liveRegions.forEach((e: any) =>
+              console.log(`  ${e.selector} — aria-live="${e.ariaLive}" ${e.role ? `role="${e.role}"` : ""} "${e.textContent}"`));
+          }
+          if (d.statusRoles.length > 0) {
+            console.log("\nStatus roles:");
+            d.statusRoles.forEach((e: any) =>
+              console.log(`  ${e.selector} — role="${e.role}" ${e.hasAccessibleName ? "✓ named" : "✗ unnamed"}`));
+          }
+        }
+        break;
+      }
+
+      case "observe": {
+        const settleIdx = args.indexOf("--settle");
+        const settleMs = settleIdx >= 0 && args[settleIdx + 1] ? parseInt(args[settleIdx + 1], 10) : undefined;
+        const d = await post(port, "/observe", settleMs ? { settleMs } : {});
+        console.log(`Observer started (settle threshold: ${d.settleMs}ms)`);
+        break;
+      }
+
+      case "observe-status": {
+        const d = await get(port, "/observe");
+        if (jsonMode) {
+          console.log(JSON.stringify(d));
+        } else {
+          const status = d.settled ? "SETTLED" : "MUTATING";
+          console.log(`DOM: ${status} | mutations: ${d.mutationCount} | since last: ${d.msSinceLastMutation}ms | elapsed: ${d.elapsed}ms`);
+        }
+        if (d.settled) process.exit(0);
+        else process.exit(2); // exit 2 = not settled yet (distinguishable from error)
+        break;
+      }
+
+      case "observe-stop": {
+        const d = await fetch(`http://127.0.0.1:${port}/observe`, {
+          method: "DELETE",
+          signal: AbortSignal.timeout(driver.cliTimeoutMs),
+        }).then(r => r.json());
+        if (jsonMode) {
+          console.log(JSON.stringify(d));
+        } else {
+          console.log(`Observer stopped. Total mutations: ${d.mutationCount}, settled: ${d.settled}`);
+        }
+        break;
+      }
+
+      case "wait-for-selector": {
+        const selector = positional[1];
+        if (!selector) throw new CliError("Missing CSS selector");
+        const stateIdx = args.indexOf("--state");
+        const state = stateIdx >= 0 && args[stateIdx + 1] ? args[stateIdx + 1] : undefined;
+        const timeoutIdx = args.indexOf("--timeout");
+        const timeout = timeoutIdx >= 0 && args[timeoutIdx + 1] ? parseInt(args[timeoutIdx + 1], 10) : undefined;
+        const d = await post(port, "/wait-for-selector", { selector, state, timeout }, timeout ? timeout + 5000 : 35_000);
+        if (jsonMode) {
+          console.log(JSON.stringify(d));
+        } else {
+          console.log(d.success ? `OK: ${d.detail}` : `Timeout: ${d.detail}`);
+        }
+        if (!d.success) process.exit(1);
         break;
       }
 
