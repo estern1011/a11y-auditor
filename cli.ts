@@ -348,7 +348,17 @@ export async function cli(args: string[], driver: ScreenReaderDriver, usage: str
         const state = stateIdx >= 0 && args[stateIdx + 1] ? args[stateIdx + 1] : undefined;
         const timeoutIdx = args.indexOf("--timeout");
         const timeout = timeoutIdx >= 0 && args[timeoutIdx + 1] ? parseInt(args[timeoutIdx + 1], 10) : undefined;
-        const d = await post(port, "/wait-for-selector", { selector, state, timeout }, timeout ? timeout + 5000 : 35_000);
+        const httpTimeout = timeout ? timeout + 5000 : 35_000;
+        // Use raw fetch — server returns 408 for expected selector timeouts,
+        // which post() would throw on. We want the structured response.
+        const r = await fetch(`http://127.0.0.1:${port}/wait-for-selector`, {
+          method: "POST",
+          signal: AbortSignal.timeout(httpTimeout),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ selector, state, timeout }),
+        });
+        const d = await r.json();
+        if (!r.ok && r.status !== 408) throw new CliError(d?.error || `HTTP ${r.status}`);
         if (jsonMode) {
           console.log(JSON.stringify(d));
         } else {

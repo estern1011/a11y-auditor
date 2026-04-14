@@ -83,10 +83,14 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
       role: el.getAttribute("role"),
     }));
 
-    // aria-live regions
+    // aria-live regions (exclude aria-live="off" and non-announcing roles
+    // like marquee/timer that don't communicate loading state)
     const liveEls = Array.from(document.querySelectorAll(
-      '[aria-live], [role="status"], [role="alert"], [role="log"], [role="marquee"], [role="timer"]'
-    ));
+      '[aria-live], [role="status"], [role="alert"], [role="log"]'
+    )).filter(el => {
+      const live = el.getAttribute("aria-live");
+      return live !== "off";
+    });
     const liveRegions = liveEls.map(el => ({
       selector: selectorFor(el),
       tagName: el.tagName.toLowerCase(),
