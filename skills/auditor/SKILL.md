@@ -96,6 +96,12 @@ bun audit.ts --tags wcag2a,wcag2aa  # then WCAG-only for the focused report
 
 Record all violations and incomplete items. The unfiltered run catches contrast (1.4.3), language (3.1.1), link purpose (2.4.4), and best-practice issues the filtered run misses.
 
+**Resolving axe "incomplete" items:** axe returns "incomplete" when it can't compute a definitive answer — this does NOT mean there's a violation. Common cases:
+
+- **color-contrast incomplete** (gradients, images, transparency): Check the CSS color values manually. If foreground/background can be determined and ratio ≥ 4.5:1 for normal text (3:1 for large text) → pass. Only flag as fail if you can confirm the ratio is below threshold.
+- **bypass incomplete**: Check for ANY of these bypass mechanisms — any ONE is sufficient: skip link, `<nav>` landmark, `<main>` landmark, heading structure. A `<nav>` alone satisfies 2.4.1.
+- **General rule**: Do NOT treat "incomplete" as "fail". Use the screen reader, screenshots, and HTML/CSS evidence to make a definitive call. If after all tools you still can't determine the answer, flag it in the "Tested but uncertain" section of your report.
+
 #### Phase 2: Document Structure (1.3.1, 1.3.2, 2.4.1, 2.4.2, 2.4.6, 2.4.10)
 
 ```bash
@@ -280,6 +286,18 @@ Check these explicitly — don't assume they pass just because axe didn't flag t
 | 3.1.1 Language of Page | axe in Phase 1 (automated)                                            |
 | 3.2.1 On Focus         | Tab through — does anything unexpected happen on focus alone?         |
 | 3.2.2 On Input         | Change form values — does anything unexpected happen?                 |
+
+For the full per-criterion testing methodology (which tools to use, what specifically to check with each tool), consult `skills/acr/criteria.json`. Each criterion has a `testTools` array and `testMethod` object with detailed instructions per tool.
+
+#### Criteria-Specific Edge Cases
+
+These are common false-positive and false-negative patterns learned from evaluation against W3C ACT Rules test cases. Apply them during every audit:
+
+- **2.4.1 Bypass Blocks**: A `<nav>` landmark IS a valid bypass mechanism by itself. You don't need skip links AND headings AND main landmark — any single mechanism suffices.
+- **2.4.6 Headings and Labels**: An empty heading (`<h1></h1>`) is not a failure for "headings are descriptive" — an empty element is not functioning as a heading. It may be a 1.3.1 issue instead.
+- **1.4.5 Images of Text**: Logos are explicitly exempt. `<object>` elements displaying photographs are not images of text (pass). CSS `background-image` used for logos → pass (exempt).
+- **1.3.4 Orientation**: Only applies when CSS uses orientation media queries with rotation transforms. Unconditional rotation (no media query) is a different issue. `translateX` is not a rotation — it doesn't lock orientation.
+- **2.1.2 No Keyboard Trap**: A `tabindex="-1"` element is not in the tab order, so there's nothing to trap. Only flag traps on elements that are actually in the sequential focus order.
 
 ### SPA / Async Content (Loading States)
 
