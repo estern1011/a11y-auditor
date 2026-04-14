@@ -21,7 +21,7 @@
     "automation",
     "playwright"
   ],
-  "author": "",
+  "author": "estern1011",
   "license": "MIT",
   "dependencies": {
     "@axe-core/playwright": "^4.11.1",

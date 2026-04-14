@@ -37,7 +37,7 @@ WCAG 2.2 AA accessibility auditing for Claude Code. Combines a real VoiceOver sc
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/your-org/a11y-auditor.git
+git clone https://github.com/estern1011/a11y-auditor.git
 cd a11y-auditor
 bun install
 bunx playwright install chromium
@@ -66,7 +66,7 @@ npx skills add /path/to/a11y-auditor --skill vo-driver
 Or, once published to GitHub:
 
 ```bash
-npx skills add https://github.com/your-org/a11y-auditor --skill auditor
+npx skills add https://github.com/estern1011/a11y-auditor --skill auditor
 ```
 
 ## Skills
