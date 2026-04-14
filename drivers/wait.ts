@@ -70,6 +70,20 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
       return `${tag}${cls}`;
     }
 
+    function resolveAccessibleName(el: Element): string {
+      const label = el.getAttribute("aria-label");
+      if (label) return label;
+      const labelledBy = el.getAttribute("aria-labelledby");
+      if (labelledBy) {
+        const resolved = labelledBy.split(/\s+/)
+          .map(id => document.getElementById(id)?.textContent?.trim() || "")
+          .filter(Boolean)
+          .join(" ");
+        if (resolved) return resolved;
+      }
+      return el.getAttribute("title") || "";
+    }
+
     function truncate(s: string, max = 80): string {
       const t = s.trim().replace(/\s+/g, " ");
       return t.length > max ? t.slice(0, max) + "…" : t;
@@ -106,18 +120,7 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
       '[role="status"], [role="alert"], [role="progressbar"], [role="log"]'
     ));
     const statusRoles = statusEls.map(el => {
-      // Resolve aria-labelledby to actual text content of referenced elements
-      let name = el.getAttribute("aria-label") || "";
-      if (!name) {
-        const labelledBy = el.getAttribute("aria-labelledby");
-        if (labelledBy) {
-          name = labelledBy.split(/\s+/)
-            .map(id => document.getElementById(id)?.textContent?.trim() || "")
-            .filter(Boolean)
-            .join(" ");
-        }
-      }
-      if (!name) name = el.getAttribute("title") || "";
+      const name = resolveAccessibleName(el);
       return {
         selector: selectorFor(el),
         tagName: el.tagName.toLowerCase(),
@@ -154,16 +157,14 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
 
     // Check by role=progressbar
     document.querySelectorAll('[role="progressbar"]').forEach(el => {
-      const name = el.getAttribute("aria-label") || el.getAttribute("title") || "";
-      addIndicator(el, name, "role=progressbar");
+      addIndicator(el, resolveAccessibleName(el), "role=progressbar");
     });
 
     // Check by class names
     document.querySelectorAll("*").forEach(el => {
       const cls = el.className && typeof el.className === "string" ? el.className : "";
       if (loadingPatterns.test(cls)) {
-        const name = el.getAttribute("aria-label") || el.getAttribute("title") || "";
-        addIndicator(el, name, `class="${cls.trim().split(/\s+/).find(c => loadingPatterns.test(c)) || ""}"`);
+        addIndicator(el, resolveAccessibleName(el), `class="${cls.trim().split(/\s+/).find(c => loadingPatterns.test(c)) || ""}"`);
       }
     });
 
@@ -381,11 +382,17 @@ export async function waitForSelector(
       elapsed: Date.now() - start,
       detail: `${selector} reached state "${state}"`,
     };
-  } catch {
-    return {
-      success: false,
-      elapsed: Date.now() - start,
-      detail: `Timeout: ${selector} did not reach "${state}" within ${timeout}ms`,
-    };
+  } catch (e) {
+    // Only treat Playwright timeout errors as expected timeouts.
+    // Other errors (malformed selector, closed page, invalid state) should propagate.
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("Timeout") || msg.includes("exceeded")) {
+      return {
+        success: false,
+        elapsed: Date.now() - start,
+        detail: `Timeout: ${selector} did not reach "${state}" within ${timeout}ms`,
+      };
+    }
+    throw e;
   }
 }
