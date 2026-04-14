@@ -327,10 +327,12 @@ export async function cli(args: string[], driver: ScreenReaderDriver, usage: str
       }
 
       case "observe-stop": {
-        const d = await fetch(`http://127.0.0.1:${port}/observe`, {
+        const r = await fetch(`http://127.0.0.1:${port}/observe`, {
           method: "DELETE",
           signal: AbortSignal.timeout(driver.cliTimeoutMs),
-        }).then(r => r.json());
+        });
+        const d = await r.json();
+        if (!r.ok) throw new CliError(d?.error || `HTTP ${r.status}`);
         if (jsonMode) {
           console.log(JSON.stringify(d));
         } else {

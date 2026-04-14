@@ -102,10 +102,18 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
       '[role="status"], [role="alert"], [role="progressbar"], [role="log"]'
     ));
     const statusRoles = statusEls.map(el => {
-      const name = el.getAttribute("aria-label")
-        || el.getAttribute("aria-labelledby")
-        || el.getAttribute("title")
-        || "";
+      // Resolve aria-labelledby to actual text content of referenced elements
+      let name = el.getAttribute("aria-label") || "";
+      if (!name) {
+        const labelledBy = el.getAttribute("aria-labelledby");
+        if (labelledBy) {
+          name = labelledBy.split(/\s+/)
+            .map(id => document.getElementById(id)?.textContent?.trim() || "")
+            .filter(Boolean)
+            .join(" ");
+        }
+      }
+      if (!name) name = el.getAttribute("title") || "";
       return {
         selector: selectorFor(el),
         tagName: el.tagName.toLowerCase(),
@@ -117,51 +125,41 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
 
     // Loading indicators — heuristic detection
     const loadingIndicators: LoadingStateResult["loadingIndicators"] = [];
+    const seenElements = new Set<Element>();
     const loadingPatterns = /loading|spinner|skeleton|progress|fetching|waiting/i;
+
+    function addIndicator(el: Element, name: string, detectedBy: string) {
+      if (seenElements.has(el)) return;
+      seenElements.add(el);
+      loadingIndicators.push({
+        selector: selectorFor(el),
+        tagName: el.tagName.toLowerCase(),
+        hasAccessibleName: name.length > 0,
+        accessibleName: name,
+        detectedBy,
+      });
+    }
 
     // Check by aria-label
     document.querySelectorAll("[aria-label]").forEach(el => {
       const label = el.getAttribute("aria-label") || "";
       if (loadingPatterns.test(label)) {
-        loadingIndicators.push({
-          selector: selectorFor(el),
-          tagName: el.tagName.toLowerCase(),
-          hasAccessibleName: true,
-          accessibleName: label,
-          detectedBy: "aria-label",
-        });
+        addIndicator(el, label, "aria-label");
       }
     });
 
     // Check by role=progressbar
     document.querySelectorAll('[role="progressbar"]').forEach(el => {
       const name = el.getAttribute("aria-label") || el.getAttribute("title") || "";
-      if (!loadingIndicators.some(li => li.selector === selectorFor(el))) {
-        loadingIndicators.push({
-          selector: selectorFor(el),
-          tagName: el.tagName.toLowerCase(),
-          hasAccessibleName: name.length > 0,
-          accessibleName: name,
-          detectedBy: "role=progressbar",
-        });
-      }
+      addIndicator(el, name, "role=progressbar");
     });
 
     // Check by class names
     document.querySelectorAll("*").forEach(el => {
       const cls = el.className && typeof el.className === "string" ? el.className : "";
       if (loadingPatterns.test(cls)) {
-        const sel = selectorFor(el);
-        if (!loadingIndicators.some(li => li.selector === sel)) {
-          const name = el.getAttribute("aria-label") || el.getAttribute("title") || "";
-          loadingIndicators.push({
-            selector: sel,
-            tagName: el.tagName.toLowerCase(),
-            hasAccessibleName: name.length > 0,
-            accessibleName: name,
-            detectedBy: `class="${cls.trim().split(/\s+/).find(c => loadingPatterns.test(c)) || ""}"`,
-          });
-        }
+        const name = el.getAttribute("aria-label") || el.getAttribute("title") || "";
+        addIndicator(el, name, `class="${cls.trim().split(/\s+/).find(c => loadingPatterns.test(c)) || ""}"`);
       }
     });
 
