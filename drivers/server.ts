@@ -10,6 +10,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import { writeFileSync } from "fs";
 import type { ScreenReaderDriver } from "./interface.ts";
 import { runAxeAudit } from "../audit.ts";
+import {
+  checkLoadingState,
+  startObserver,
+  waitForSelector,
+  type ObserverHandle,
+} from "./wait.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,6 +70,9 @@ function parseBody(body: string): Record<string, unknown> | null {
 // ---------------------------------------------------------------------------
 
 export function createHandler(driver: ScreenReaderDriver) {
+  // Server-level observer handle — persists across requests
+  let observer: ObserverHandle | null = null;
+
   return async function handle(req: IncomingMessage, res: ServerResponse) {
     const { method } = req;
     const url = new URL(req.url || "/", "http://localhost");
@@ -164,6 +173,79 @@ export function createHandler(driver: ScreenReaderDriver) {
         const body = parseBody(await readBody(req, driver.maxRequestBody));
         const result = await runAxeAudit(page, body || {});
         json(res, 200, result);
+        return;
+      }
+
+      // -------------------------------------------------------------------
+      // Loading state & DOM observation
+      // -------------------------------------------------------------------
+
+      if (path === "/loading-state" && method === "GET") {
+        const page = driver.getPage();
+        if (!page) {
+          json(res, 400, { error: "No browser page open" });
+          return;
+        }
+        const result = await checkLoadingState(page);
+        json(res, 200, result);
+        return;
+      }
+
+      if (path === "/observe" && method === "POST") {
+        const page = driver.getPage();
+        if (!page) {
+          json(res, 400, { error: "No browser page open" });
+          return;
+        }
+        // Stop any existing observer
+        if (observer) {
+          await observer.stop();
+        }
+        const body = parseBody(await readBody(req, driver.maxRequestBody));
+        const settleMs = typeof body?.settleMs === "number" ? body.settleMs : undefined;
+        observer = await startObserver(page, { settleMs });
+        json(res, 200, { started: true, settleMs: settleMs ?? 2000 });
+        return;
+      }
+
+      if (path === "/observe" && method === "GET") {
+        if (!observer) {
+          json(res, 400, { error: "No observer running. POST /observe to start." });
+          return;
+        }
+        const status = await observer.status();
+        json(res, 200, status);
+        return;
+      }
+
+      if (path === "/observe" && method === "DELETE") {
+        if (!observer) {
+          json(res, 400, { error: "No observer running" });
+          return;
+        }
+        const status = await observer.stop();
+        observer = null;
+        json(res, 200, status);
+        return;
+      }
+
+      if (path === "/wait-for-selector" && method === "POST") {
+        const page = driver.getPage();
+        if (!page) {
+          json(res, 400, { error: "No browser page open" });
+          return;
+        }
+        const body = parseBody(await readBody(req, driver.maxRequestBody));
+        if (!body?.selector || typeof body.selector !== "string") {
+          json(res, 400, { error: "Missing 'selector' in request body" });
+          return;
+        }
+        const result = await waitForSelector(page, {
+          selector: body.selector,
+          state: typeof body.state === "string" ? (body.state as any) : undefined,
+          timeout: typeof body.timeout === "number" ? body.timeout : undefined,
+        });
+        json(res, result.success ? 200 : 408, result);
         return;
       }
 
