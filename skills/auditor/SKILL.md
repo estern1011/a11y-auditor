@@ -23,7 +23,7 @@ This skill uses `{sr-driver}` as a placeholder for the screen reader driver path
 
 The command interface is identical — `start`, `next`, `previous`, `act`, `press`, `perform`, `transcript`, `item-text`, `enter`, `stop` all work the same way. Replace `{sr-driver}` with the correct path in every command below.
 
-## Your Three Tools
+## Your Four Tools
 
 ### 1. Screen Reader Driver
 
@@ -64,11 +64,49 @@ Returns JSON with violations, incomplete items, pass count, and accessibility tr
 Connects to the screen reader driver's browser via CDP for clicking, typing, screenshots, and DOM snapshots.
 
 ```bash
-agent-browser --cdp 9222 snapshot -i      # interactive accessibility snapshot
-agent-browser --cdp 9222 click @e3        # click element by ref
-agent-browser --cdp 9222 type @e5 "text"  # type into element
-agent-browser --cdp 9222 screenshot       # capture screenshot
-agent-browser --cdp 9222 press Escape     # press key
+agent-browser --cdp 9222 snapshot -i          # interactive accessibility snapshot
+agent-browser --cdp 9222 snapshot -i -c -u    # compact + include link URLs
+agent-browser --cdp 9222 click @e3            # click element by ref
+agent-browser --cdp 9222 type @e5 "text"      # type into element
+agent-browser --cdp 9222 screenshot           # capture screenshot
+agent-browser --cdp 9222 screenshot --annotate  # screenshot with numbered element overlays
+agent-browser --cdp 9222 press Escape         # press key
+agent-browser --cdp 9222 hover @e4            # hover over element
+agent-browser --cdp 9222 eval "JS here"       # run JavaScript, returns result
+agent-browser --cdp 9222 set viewport 320 800 # resize viewport (e.g. for reflow testing)
+agent-browser --cdp 9222 get title            # get page title
+agent-browser --cdp 9222 get url              # get current URL
+agent-browser --cdp 9222 find role button click --name "Submit"  # semantic element find
+```
+
+**Command chaining with `&&`:** The browser persists via a daemon, so chaining is safe and more efficient than separate calls:
+
+```bash
+agent-browser --cdp 9222 set viewport 320 800 && agent-browser --cdp 9222 screenshot
+agent-browser --cdp 9222 hover @e4 && agent-browser --cdp 9222 screenshot
+```
+
+**Batch DOM queries with `eval`:** Use a single `eval` to collect multiple pieces of information at once instead of separate commands:
+
+```bash
+# Collect page metadata in one shot
+agent-browser --cdp 9222 eval "JSON.stringify({
+  title: document.title,
+  lang: document.documentElement.lang || '(missing)',
+  hasSkipNav: !!document.querySelector('a[href^=\"#main\"],a[href^=\"#content\"]'),
+  videoCount: document.querySelectorAll('video').length,
+  iframeCount: document.querySelectorAll('iframe').length
+})"
+
+# Audit all form label associations in one shot
+agent-browser --cdp 9222 eval "JSON.stringify({
+  orphanedLabels: Array.from(document.querySelectorAll('label[for]'))
+    .filter(l => !document.getElementById(l.htmlFor))
+    .map(l => l.textContent.trim()),
+  unlabeledInputs: Array.from(document.querySelectorAll('input:not([type=hidden]),select,textarea'))
+    .filter(el => !el.labels?.length && !el.getAttribute('aria-label') && !el.getAttribute('aria-labelledby') && !el.getAttribute('title') && !el.getAttribute('placeholder'))
+    .map(el => el.outerHTML.substring(0, 100))
+})"
 ```
 
 ### 4. collect.ts — Baseline Evidence Sweep
@@ -141,7 +179,15 @@ bun {sr-driver} perform FIND_NEXT_LANDMARK   # repeat — check regions
 # Images and alt text
 bun {sr-driver} perform GO_TO_BEGINNING
 bun {sr-driver} perform FIND_NEXT_IMAGE      # repeat — check each image's name
+```
 
+**For each image found:** verify alt text is *accurate*, not just present. Compare the announced name against what is visually depicted in a screenshot. Flag:
+- Alt text that looks like a filename (e.g. `alt="img_3847.jpg"`)
+- Alt text that is clearly wrong (e.g. `alt="icecream.jpg"` on a space station photo)
+- Alt text that is nonsensical or unrelated to the image content
+- Decorative images with non-empty alt text (should be `alt=""`)
+
+```bash
 # Page stats overview
 bun {sr-driver} perform READ_PAGE_STATS
 
@@ -151,7 +197,63 @@ bun {sr-driver} next                         # repeat through entire page
 bun {sr-driver} transcript                   # review for logical sequence
 ```
 
-#### Phase 3: Keyboard Navigation (2.1.1, 2.1.2, 2.4.3, 2.4.7)
+#### Phase 3: Time-Based Media & Timed Content (1.2.1, 1.2.2, 1.2.3, 1.2.5, 2.2.1)
+
+##### Step 1: Inventory media elements
+
+```bash
+agent-browser --cdp 9222 eval "JSON.stringify({
+  videos: Array.from(document.querySelectorAll('video')).map((v, i) => ({
+    index: i,
+    src: v.src || v.currentSrc || '(none)',
+    hasCaptionTrack: Array.from(v.textTracks).some(t => t.kind === 'captions' || t.kind === 'subtitles'),
+    tracks: Array.from(v.textTracks).map(t => ({kind: t.kind, label: t.label, mode: t.mode}))
+  })),
+  youtubeIframes: Array.from(document.querySelectorAll('iframe[src*=\"youtube\"]')).map((f, i) => ({
+    index: i,
+    src: f.src,
+    hasTitle: !!f.title
+  })),
+  audioElements: Array.from(document.querySelectorAll('audio')).map((a, i) => ({
+    index: i,
+    src: a.src || a.currentSrc
+  }))
+})"
+```
+
+For each video/audio found:
+- **1.2.2 Captions:** Does a captions track exist for the `<video>`? For YouTube iframes, check if CC is available/enabled. Note: caption *accuracy* requires human verification via playback.
+- **1.2.1 Transcript:** Look for a text transcript linked near the media element — check surrounding DOM for `<a>` or `<details>` elements containing a transcript.
+- **1.2.3 / 1.2.5 Audio Description:** Check for a second video track with audio description, or a link to an audio-described version. This generally cannot be verified programmatically — flag for human review.
+
+##### Step 2: Check for auto-advancing / timed content (2.2.1)
+
+```bash
+agent-browser --cdp 9222 eval "JSON.stringify({
+  carousels: Array.from(document.querySelectorAll('[class*=carousel],[class*=slider],[data-ride],[data-interval]')).map(el => ({
+    tag: el.tagName,
+    classes: el.className,
+    interval: el.dataset.interval || el.dataset.autoplay || '(check JS)'
+  })),
+  autoplayMedia: Array.from(document.querySelectorAll('[autoplay]')).map(el => ({
+    tag: el.tagName,
+    src: el.src || el.currentSrc
+  }))
+})"
+```
+
+Take a screenshot, wait ~5 seconds, take another screenshot. Compare to determine if content advances automatically:
+
+```bash
+agent-browser --cdp 9222 screenshot && sleep 5 && agent-browser --cdp 9222 screenshot
+```
+
+If content auto-advances:
+- Is there a pause, stop, or hide mechanism? Check for a visible pause button.
+- Does the mechanism actually work? Click it and re-check.
+- Content that moves for more than 5 seconds with no pause = 2.2.1 violation.
+
+#### Phase 4: Keyboard Navigation (2.1.1, 2.1.2, 2.4.3, 2.4.7)
 
 ```bash
 bun {sr-driver} perform GO_TO_BEGINNING
@@ -161,31 +263,96 @@ bun {sr-driver} transcript                   # review tab order
 
 Check:
 
-- All interactive elements reachable by Tab?
-- No keyboard traps (can always Tab away)?
-- Logical tab order?
-- Take a screenshot while focused on key elements to check visible focus indicator (2.4.7)
+- **All interactive elements reachable?** Tab through the complete page. Every button, link, form field, and custom widget must receive focus. Keep a running list of every element that gets focus — compare against a screenshot of all visible interactive elements.
+- **No keyboard traps?** At each interactive element, verify you can Tab away or press Escape to exit.
+- **Logical tab order?** Compare sequence against visual reading order.
+- **Positive tabindex values?** If some elements receive focus first regardless of position, check for `tabindex` > 0. This nearly always breaks natural tab order.
+- **Invisible focus recipients?** Elements that receive focus but are not visible are a 2.4.7 violation. Note each occurrence.
+- **After activating a widget, are all sub-elements reachable?** Test menus, dropdowns, modals, accordions — can you Tab through their children?
+
+Take screenshots at each focus stop to check visible focus indicators (2.4.7):
 
 ```bash
-agent-browser --cdp 9222 screenshot           # capture focus state
+bun {sr-driver} press Tab
+agent-browser --cdp 9222 screenshot     # capture focus state
+bun {sr-driver} item-text              # what does the screen reader announce?
 ```
 
-#### Phase 4: Forms (1.3.1, 3.3.1, 3.3.2, 3.3.3, 4.1.2)
+Check for `outline: none` or `outline: 0` applied broadly — this suppresses focus indicators sitewide:
 
 ```bash
-# Tab through form fields — check each label
+agent-browser --cdp 9222 eval "
+  const suppressed = Array.from(document.querySelectorAll('*')).filter(el => {
+    const s = getComputedStyle(el);
+    return s.outlineStyle === 'none' && el.tagName.match(/A|BUTTON|INPUT|SELECT|TEXTAREA/);
+  }).length;
+  'Interactive elements with outline:none: ' + suppressed
+"
+```
+
+#### Phase 5: Forms (1.3.1, 3.3.1, 3.3.2, 3.3.3, 4.1.2)
+
+##### Step 1: Label associations
+
+```bash
+# Check for missing, orphaned, and placeholder-only labels in one eval
+agent-browser --cdp 9222 eval "JSON.stringify({
+  orphanedLabels: Array.from(document.querySelectorAll('label[for]'))
+    .filter(l => !document.getElementById(l.htmlFor))
+    .map(l => ({for: l.htmlFor, text: l.textContent.trim()})),
+  unlabeledControls: Array.from(document.querySelectorAll('input:not([type=hidden]),select,textarea'))
+    .filter(el => {
+      const hasLabel = el.labels && el.labels.length > 0;
+      const hasAria = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby');
+      const hasTitle = el.getAttribute('title');
+      return !hasLabel && !hasAria && !hasTitle;
+    })
+    .map(el => el.outerHTML.substring(0, 120)),
+  placeholderOnly: Array.from(document.querySelectorAll('input[placeholder]:not([type=hidden]),textarea[placeholder]'))
+    .filter(el => {
+      const hasLabel = el.labels && el.labels.length > 0;
+      const hasAria = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby');
+      return !hasLabel && !hasAria;
+    })
+    .map(el => ({placeholder: el.placeholder, tag: el.outerHTML.substring(0, 80)}))
+})"
+```
+
+For each found issue:
+- **Orphaned label:** the `for` attribute points to an ID that doesn't exist — the label is not associated with any control.
+- **Unlabeled control:** no label, no aria-label, no aria-labelledby, no title — invisible to AT.
+- **Placeholder-only:** placeholder disappears on typing and is not a substitute for a label.
+
+Also check fieldsets:
+
+```bash
+agent-browser --cdp 9222 eval "JSON.stringify(
+  Array.from(document.querySelectorAll('fieldset')).map(f => ({
+    hasLegend: !!f.querySelector('legend'),
+    legendText: f.querySelector('legend')?.textContent.trim() || '(none)',
+    inputCount: f.querySelectorAll('input,select,textarea').length
+  }))
+)"
+```
+
+##### Step 2: Tab through form fields
+
+```bash
 bun {sr-driver} press Tab                    # for each field
 bun {sr-driver} item-text                    # is label announced?
+```
 
-# Test error handling — submit empty/invalid form
-agent-browser --cdp 9222 click @e3             # click submit button by ref
+##### Step 3: Error handling
+
+```bash
+# Submit empty/invalid form
+agent-browser --cdp 9222 click @e3           # click submit button by ref
 bun {sr-driver} transcript --since N         # are errors announced?
-# Are error messages associated with fields?
 bun {sr-driver} press Tab                    # tab to errored field
 bun {sr-driver} item-text                    # does it mention the error?
 ```
 
-#### Phase 5: Interactive Components (4.1.2, 4.1.3)
+#### Phase 6: Interactive Components (4.1.2, 4.1.3)
 
 For each custom widget (accordions, tabs, modals, menus, dialogs):
 
@@ -213,15 +380,23 @@ bun {sr-driver} item-text                    # where did focus go on close?
 bun audit.ts "#widget-selector"
 ```
 
-#### Phase 6: Visual + Cross-Reference Review (1.4.1, 1.4.3, 1.4.4, 1.4.10, 1.4.11, 1.4.12, 1.4.13)
+**Menu/dropdown dismiss behavior (2.4.3, 2.4.7):** After opening any custom menu or dropdown:
+1. Press Escape — does it close?
+2. Press Tab — does it close, or does it trap focus?
+3. Take a screenshot — does the closed menu leave a visible overlay covering content beneath?
+4. Tab past the menu trigger — does the previously-open menu cover the newly-focused element?
+
+If a menu stays open and covers content, it's a 2.4.3 / 2.4.7 failure regardless of keyboard trap.
+
+#### Phase 7: Visual + Cross-Reference Review (1.4.1, 1.4.3, 1.4.4, 1.4.10, 1.4.11, 1.4.12, 1.4.13)
 
 This phase is where you catch what automated tools miss. You systematically compare what's **visible** in screenshots against what's **exposed** in the a11y tree and automated findings, then reason about every element.
 
 ##### Step 1: Gather evidence
 
 ```bash
-# Full page screenshot
-agent-browser --cdp 9222 screenshot
+# Annotated screenshot — numbered overlays map to a11y tree refs
+agent-browser --cdp 9222 screenshot --annotate
 
 # A11y tree + automated findings (if not already captured in Phase 1)
 bun audit.ts
@@ -229,12 +404,26 @@ bun audit.ts
 
 ##### Step 2: Cross-reference screenshot vs a11y tree
 
-Look at the screenshot and a11y tree side by side. For **every visible element**, ask:
+Look at the annotated screenshot and a11y tree side by side. For **every visible element**, ask:
 
-- **Is it in the a11y tree?** A visible interactive element with no tree node means it's invisible to AT.
+- **Is it in the a11y tree?** A visible element with no tree node means it's invisible to AT. Common causes: CSS background images, `aria-hidden`, `display:none` on a meaningful element.
 - **Does its tree name match its visual label?** A button that says "Submit" visually but "btn-3" to AT is a mismatch.
-- **Is information conveyed visually also conveyed non-visually?** Color-coded status (green/red), icon-only buttons, priority indicators — do they have text alternatives in the tree?
-- **Are custom widgets exposing the right role + state?** A visual checkbox should have `role=checkbox` + `checked/unchecked` state. An expanded accordion should have `expanded=true`. Compare what you see in the screenshot to what the tree exposes.
+- **Is information conveyed visually also conveyed non-visually?** Color-coded status (green/red), icon-only buttons, priority indicators — do they have text alternatives?
+- **Are custom widgets exposing the right role + state?** A visual checkbox needs `role=checkbox` + `checked/unchecked`. An expanded accordion needs `expanded=true`. A tooltip trigger needs `aria-describedby`.
+- **Are meaningful images implemented as CSS backgrounds?** CSS background images don't appear in the a11y tree at all. Scan the screenshot for logos, icons, decorative-but-semantic imagery that looks like content but produces no a11y tree node. Verify with:
+
+```bash
+agent-browser --cdp 9222 eval "JSON.stringify(
+  Array.from(document.querySelectorAll('*')).filter(el => {
+    const bg = getComputedStyle(el).backgroundImage;
+    return bg && bg !== 'none' && !['SCRIPT','STYLE','HEAD'].includes(el.tagName);
+  }).filter(el => el.offsetWidth > 20 && el.offsetHeight > 20)
+  .map(el => ({tag: el.tagName, class: el.className, bg: getComputedStyle(el).backgroundImage.substring(0, 80), hasText: !!el.textContent.trim(), role: el.getAttribute('role')}))
+  .slice(0, 30)
+)"
+```
+
+Flag any element that conveys meaningful information visually via a background image but has no accessible text equivalent.
 
 Flag every mismatch. These are the bugs automated tools don't catch.
 
@@ -264,20 +453,25 @@ For each focused element, check:
 ##### Step 5: Reflow at 320px (1.4.10)
 
 ```bash
-# Resize viewport to 320px width
-agent-browser --cdp 9222 execute "window.innerWidth" # note current width
-agent-browser --cdp 9222 execute "document.documentElement.style.maxWidth='320px'"
-agent-browser --cdp 9222 screenshot
+# Resize viewport to 320px, screenshot, then restore
+agent-browser --cdp 9222 set viewport 320 800 && agent-browser --cdp 9222 screenshot
+agent-browser --cdp 9222 set viewport 1280 800   # restore
 ```
 
-Check: is there horizontal scrolling? Is content cut off or overlapping?
+Check: is there horizontal scrolling? Is content cut off or overlapping? Do fixed-width layouts break the flow?
 
 ##### Step 6: Text spacing (1.4.12)
 
 ```bash
 # Inject WCAG text spacing overrides
-agent-browser --cdp 9222 execute "document.body.style.lineHeight='1.5'; document.body.style.letterSpacing='0.12em'; document.body.style.wordSpacing='0.16em'; document.querySelectorAll('p').forEach(p => p.style.marginBottom='2em')"
-agent-browser --cdp 9222 screenshot
+agent-browser --cdp 9222 eval "
+  const s = document.body.style;
+  s.lineHeight = '1.5';
+  s.letterSpacing = '0.12em';
+  s.wordSpacing = '0.16em';
+  document.querySelectorAll('p').forEach(p => p.style.marginBottom = '2em');
+  'applied'
+" && agent-browser --cdp 9222 screenshot
 ```
 
 Check: is content still readable? No clipping, overlapping, or disappearing text?
@@ -287,27 +481,51 @@ Check: is content still readable? No clipping, overlapping, or disappearing text
 For any tooltips, popovers, or hover-triggered content:
 
 ```bash
-agent-browser --cdp 9222 hover @ref    # hover over trigger element
-agent-browser --cdp 9222 screenshot     # capture hover state
+agent-browser --cdp 9222 hover @ref && agent-browser --cdp 9222 screenshot
 ```
 
-Check: can the hover content be dismissed (Escape)? Can you hover over the tooltip itself? Does it persist until dismissed?
+Check:
+- Can the hover content be dismissed with Escape? (`bun {sr-driver} press Escape` then screenshot)
+- Can you move the mouse over the tooltip itself without it disappearing?
+- Does it persist until dismissed (not on a short timer)?
 
-#### Phase 7: Remaining Criteria Checklist
+Also check whether tooltip triggers are implemented as pseudo-links or `<span>` elements with only mouse events — these are 2.1.1 failures (keyboard unreachable) in addition to any 1.4.13 issues.
+
+#### Phase 8: Remaining Criteria Checklist
 
 Check these explicitly — don't assume they pass just because axe didn't flag them:
 
-| Criterion              | How to Check                                                          |
-| ---------------------- | --------------------------------------------------------------------- |
-| 1.1.1 Non-text Content | `FIND_NEXT_IMAGE` loop — every image needs alt text or is decorative  |
-| 1.4.3 Contrast         | axe in Phase 1 (automated)                                            |
-| 2.4.1 Bypass Blocks    | Check for skip nav link at top of page                                |
-| 2.4.2 Page Titled      | Check browser title is descriptive                                    |
-| 2.4.4 Link Purpose     | `FIND_NEXT_LINK` loop — each link text meaningful in context?         |
-| 2.4.5 Multiple Ways    | Is there more than one way to reach this page? (nav, search, sitemap) |
-| 3.1.1 Language of Page | axe in Phase 1 (automated)                                            |
-| 3.2.1 On Focus         | Tab through — does anything unexpected happen on focus alone?         |
-| 3.2.2 On Input         | Change form values — does anything unexpected happen?                 |
+| Criterion              | How to Check                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| 1.1.1 Non-text Content | `FIND_NEXT_IMAGE` loop — verify alt text is **accurate**, not just present                        |
+| 1.2.2 Captions         | Phase 3 — check caption tracks; flag YouTube iframes for human review                            |
+| 1.2.3 Audio Desc.      | Phase 3 — check for audio description track or alternate version; human review required           |
+| 1.4.3 Contrast         | axe in Phase 1 (automated); check incomplete items manually                                       |
+| 2.1.1 Keyboard         | Phase 4 — enumerate every interactive element; verify each is Tab-reachable                       |
+| 2.2.1 Timing           | Phase 3 — check for auto-advancing carousels, auto-playing media; verify pause mechanism          |
+| 2.4.1 Bypass Blocks    | Check for skip nav link at top of page                                                            |
+| 2.4.2 Page Titled      | Check browser title is descriptive                                                                |
+| 2.4.4 Link Purpose     | `FIND_NEXT_LINK` loop — each link text meaningful in context? Check for repeated links to same URL |
+| 2.4.5 Multiple Ways    | Is there more than one way to reach this page? (nav, search, sitemap)                            |
+| 3.1.1 Language of Page | axe in Phase 1 (automated); verify `lang` attribute is present *and* correct                      |
+| 3.2.1 On Focus         | Tab through — does anything unexpected happen on focus alone?                                     |
+| 3.2.2 On Input         | Change form values — does anything unexpected happen?                                             |
+
+**2.4.4 duplicate links check:**
+
+```bash
+agent-browser --cdp 9222 eval "JSON.stringify(
+  Object.entries(
+    Array.from(document.querySelectorAll('a[href]')).reduce((acc, a) => {
+      acc[a.href] = (acc[a.href] || 0) + 1;
+      return acc;
+    }, {})
+  ).filter(([href, count]) => count > 1)
+  .map(([href, count]) => ({href, count}))
+)"
+```
+
+Multiple adjacent links to the same destination are a 2.4.4 issue — screen reader users must tab through each one unnecessarily.
 
 For the full per-criterion testing methodology (which tools to use, what specifically to check with each tool), consult `skills/acr/criteria.json`. Each criterion has a `testTools` array and `testMethod` object with detailed instructions per tool.
 
@@ -443,7 +661,7 @@ Criteria you verified as passing, with brief evidence.
 
 **Could not test:**
 
-- Criteria that require visual judgment you can't make from screenshots alone
+- Caption/audio description *accuracy* — requires media playback. Flag which videos had tracks present vs. absent; human must verify correctness.
 - Multi-page flows you didn't navigate
 - States you couldn't trigger (specific error conditions, edge cases)
 - Cross-AT verification (you only tested one screen reader + browser combination)
@@ -471,6 +689,7 @@ Every report must include these disclaimers:
 1. **Single AT/browser combination.** This audit used a single screen reader (VoiceOver on macOS or Orca on Linux) + Chrome. Results may differ with NVDA, JAWS, or other browser combinations. A conformance claim requires testing with multiple AT/browser pairs.
 2. **Automated checks are not comprehensive.** axe-core catches ~30-40% of WCAG issues. The remaining issues require human judgment.
 3. **Point-in-time snapshot.** Dynamic content, SPAs, and server-rendered differences may produce different results at different times. For SPAs, both loading and loaded states were tested using the DOM observer, but other intermediate states may exist.
+4. **Media content not played.** Caption accuracy, audio description quality, and transcript completeness require human verification via actual media playback.
 
 ## Screen Reader Commands Reference
 
