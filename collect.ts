@@ -92,7 +92,10 @@ async function driverGet(path: string): Promise<any> {
 }
 
 async function navigate(u: string): Promise<void> {
-  await driverPost("/navigate", { url: u });
+  const result = await driverPost("/navigate", { url: u });
+  if (result?.error) {
+    throw new Error(`Navigation failed for ${u}: ${result.error}`);
+  }
   await Bun.sleep(2500);
 }
 
@@ -127,7 +130,11 @@ async function agentBrowser(...args: string[]): Promise<string> {
     stderr: "pipe",
   });
   const text = await new Response(proc.stdout).text();
-  await proc.exited;
+  const stderr = await new Response(proc.stderr).text();
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    throw new Error(`agent-browser ${args.join(" ")} failed (exit ${exitCode}): ${stderr.trim()}`);
+  }
   return text.trim();
 }
 
