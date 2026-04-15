@@ -1,7 +1,7 @@
 ---
 name: auditor
 description: |
-  Perform WCAG 2.2 AA accessibility audits using three tools: screen reader driver (VoiceOver on macOS, Orca on Linux), audit.ts (axe-core automated checks), and agent-browser (page interaction + screenshots). Use this skill when the user asks to audit a website for accessibility, QA a feature for a11y issues, or evaluate WCAG conformance. Also trigger when the user mentions accessibility audit, WCAG compliance testing, or wants to systematically check a page or flow for accessibility. After the audit, use the /acr skill to generate a formal Accessibility Conformance Report (ACR/VPAT).
+  Perform WCAG 2.2 AA accessibility audits using screen reader driver (VoiceOver on macOS, Orca on Linux), audit.ts (axe-core automated checks), agent-browser (page interaction + screenshots), and collect.ts (baseline evidence sweep). Use this skill when the user asks to audit a website for accessibility, QA a feature for a11y issues, or evaluate WCAG conformance. Also trigger when the user mentions accessibility audit, WCAG compliance testing, or wants to systematically check a page or flow for accessibility. After the audit, use the /acr skill to generate a formal Accessibility Conformance Report (ACR/VPAT).
 ---
 
 # Accessibility Auditor
@@ -71,15 +71,28 @@ agent-browser --cdp 9222 screenshot       # capture screenshot
 agent-browser --cdp 9222 press Escape     # press key
 ```
 
+### 4. collect.ts — Baseline Evidence Sweep
+
+Runs a single command that collects a standard set of evidence from a page: HTML, accessibility snapshot, axe results, SR transcripts (on-load announcements, tab sequence, landmarks, headings, links), and a screenshot. Returns everything as structured JSON.
+
+```bash
+bun collect.ts <url>                              # all tools, default settings
+bun collect.ts <url> --tools axe,sr               # specific tools only
+bun collect.ts <url> --tabs 20                    # more tabs for complex pages
+bun collect.ts <url> --port 7484 --cdp-port 9223  # Orca defaults (Linux)
+```
+
+Use `collect.ts` to get a fast, comprehensive baseline before diving into detailed manual testing. It replaces the 15+ individual tool calls of Phases 1–3 with a single command. You still need to interpret the output — the evidence requires AI reasoning to produce accurate findings.
+
 ## Audit Workflow
 
 ### For QA (quick check of a feature)
 
 1. `bun {sr-driver} start <url>` — launch browser + screen reader
-2. `bun audit.ts` — full automated baseline (no tag filter)
-3. Address violations. For "incomplete" items, verify with screen reader.
-4. Test keyboard: `bun {sr-driver} press Tab` through interactive elements
-5. Test screen reader on custom widgets: navigate, activate, check announcements
+2. `bun collect.ts <url>` — baseline sweep (axe + SR + screenshot in one shot)
+3. Review the JSON output: check axe violations and incomplete items, read the SR transcripts, examine the screenshot
+4. For "incomplete" items, do targeted follow-up with the screen reader
+5. Test custom widgets: navigate, activate, check announcements
 6. Report findings with confidence levels
 
 ### For ACR/VPAT (systematic audit)
@@ -88,13 +101,28 @@ For each representative page/flow, work through ALL phases below. Do not skip ph
 
 #### Phase 1: Automated Baseline
 
+Start the driver, then collect baseline evidence:
+
 ```bash
 bun {sr-driver} start <url>
+
+# Option A: single-command baseline (recommended — covers Phases 1-3 in one shot)
+bun collect.ts <url> --tabs 15
+
+# Option B: manual baseline (use when you need scoped audits or tag filtering)
 bun audit.ts                        # full check — no tag filter
 bun audit.ts --tags wcag2a,wcag2aa  # then WCAG-only for the focused report
 ```
 
-Record all violations and incomplete items. The unfiltered run catches contrast (1.4.3), language (3.1.1), link purpose (2.4.4), and best-practice issues the filtered run misses.
+If you used `collect.ts`, its output already includes axe results, SR transcripts (tab sequence, landmarks, headings, links), and a screenshot. Review this before proceeding — Phases 2 and 3 may already be covered. Focus your manual Phase 2–3 work on areas that need deeper investigation (e.g., walking the full reading order, checking more elements than the default tab count).
+
+Record all violations and incomplete items. The unfiltered axe run catches contrast (1.4.3), language (3.1.1), link purpose (2.4.4), and best-practice issues the filtered run misses.
+
+**Resolving axe "incomplete" items:** axe returns "incomplete" when it can't compute a definitive answer — this does NOT mean there's a violation. Common cases:
+
+- **color-contrast incomplete** (gradients, images, transparency): Check the CSS color values manually. If foreground/background can be determined and ratio ≥ 4.5:1 for normal text (3:1 for large text) → pass. Only flag as fail if you can confirm the ratio is below threshold.
+- **bypass incomplete**: Check for ANY of these bypass mechanisms — any ONE is sufficient: skip link, `<nav>` landmark, `<main>` landmark, heading structure. A `<nav>` alone satisfies 2.4.1.
+- **General rule**: Do NOT treat "incomplete" as "fail". Use the screen reader, screenshots, and HTML/CSS evidence to make a definitive call. If after all tools you still can't determine the answer, flag it in the "Tested but uncertain" section of your report.
 
 #### Phase 2: Document Structure (1.3.1, 1.3.2, 2.4.1, 2.4.2, 2.4.6, 2.4.10)
 
@@ -280,6 +308,18 @@ Check these explicitly — don't assume they pass just because axe didn't flag t
 | 3.1.1 Language of Page | axe in Phase 1 (automated)                                            |
 | 3.2.1 On Focus         | Tab through — does anything unexpected happen on focus alone?         |
 | 3.2.2 On Input         | Change form values — does anything unexpected happen?                 |
+
+For the full per-criterion testing methodology (which tools to use, what specifically to check with each tool), consult `skills/acr/criteria.json`. Each criterion has a `testTools` array and `testMethod` object with detailed instructions per tool.
+
+#### Criteria-Specific Edge Cases
+
+These are common false-positive and false-negative patterns learned from evaluation against W3C ACT Rules test cases. Apply them during every audit:
+
+- **2.4.1 Bypass Blocks**: A `<nav>` landmark IS a valid bypass mechanism by itself. You don't need skip links AND headings AND main landmark — any single mechanism suffices.
+- **2.4.6 Headings and Labels**: An empty heading (`<h1></h1>`) is not a failure for "headings are descriptive" — an empty element is not functioning as a heading. It may be a 1.3.1 issue instead.
+- **1.4.5 Images of Text**: Logos are explicitly exempt. `<object>` elements displaying photographs are not images of text (pass). CSS `background-image` used for logos → pass (exempt).
+- **1.3.4 Orientation**: Only applies when CSS uses orientation media queries with rotation transforms. Unconditional rotation (no media query) is a different issue. `translateX` is not a rotation — it doesn't lock orientation.
+- **2.1.2 No Keyboard Trap**: A `tabindex="-1"` element is not in the tab order, so there's nothing to trap. Only flag traps on elements that are actually in the sequential focus order.
 
 ### SPA / Async Content (Loading States)
 

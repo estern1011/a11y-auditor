@@ -1,6 +1,11 @@
 #!/usr/bin/env bun
 /**
- * On-sprite evidence collector — navigates to a URL, runs tools, returns raw data.
+ * On-sprite evidence collector for evals — navigates to a URL, runs tools,
+ * returns raw data with answer redaction for blind evaluation.
+ *
+ * For general-purpose evidence collection (real audits), use collect.ts instead.
+ * This file adds eval-specific behavior: page title redaction to prevent bias
+ * when evaluating against W3C ACT test cases.
  *
  * Runs on the sprite (not locally). Called by agents via sprite exec:
  *   sprite exec -s SPRITE -- bash -c '... && bun eval/queue-collect.ts URL TOOLS'
