@@ -120,7 +120,10 @@ async function perform(command: string): Promise<any> {
 }
 
 async function enterPage(): Promise<void> {
-  await driverPost("/enter");
+  const result = await driverPost("/enter");
+  if (result?.error) {
+    throw new Error(`Failed to enter web content: ${result.error}`);
+  }
   await Bun.sleep(1000);
 }
 
@@ -179,6 +182,9 @@ async function collect(): Promise<Evidence> {
   // Axe
   if (tools.includes("axe")) {
     const result = await runAxe();
+    if (result?.error) {
+      throw new Error(`Axe audit failed: ${result.error}`);
+    }
     evidence.axe = {
       violations: result?.axe?.violations || [],
       incomplete: result?.axe?.incomplete || [],
