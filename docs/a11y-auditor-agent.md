@@ -101,7 +101,7 @@ bun {sr-driver} press <key> [mods]   # raw keystroke (Tab, Return, Escape, arrow
 bun {sr-driver} perform <COMMAND>    # any screen reader command
 ```
 
-Uses platform-standard command names (FIND_NEXT_HEADING, START_INTERACTING, etc.).
+Uses platform-standard command names (FIND_NEXT_HEADING, GO_TO_BEGINNING, etc.). Some commands are platform-specific (e.g., START_INTERACTING is VoiceOver-only). Run `bun {sr-driver} commands` to list available commands.
 
 ### Queries
 

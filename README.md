@@ -80,6 +80,8 @@ Or, once published to GitHub:
 ```bash
 npx skills add https://github.com/estern1011/a11y-auditor --skill auditor
 npx skills add https://github.com/estern1011/a11y-auditor --skill acr
+npx skills add https://github.com/estern1011/a11y-auditor --skill vo-driver
+npx skills add https://github.com/estern1011/a11y-auditor --skill orca-driver
 ```
 
 ## Skills
@@ -154,29 +156,32 @@ bun audit.ts --no-tree                # skip accessibility tree
 
 ## Quick start
 
-Default ports differ by platform: macOS uses HTTP 7483 / CDP 9222, Linux uses HTTP 7484 / CDP 9223. The commands below use macOS defaults — on Linux, add `--port 7484` to `audit.ts`/`collect.ts` and `--cdp 9223` to `agent-browser`.
+Pick your platform, then use the matching driver and ports throughout:
+
+| | `{sr-driver}` | CDP port | HTTP port |
+|---|---|---|---|
+| macOS | `drivers/voiceover/driver.ts` | 9222 | 7483 |
+| Linux | `drivers/orca/driver.ts` | 9223 | 7484 |
 
 ```bash
-# Terminal 1: start a session (macOS)
-bun drivers/voiceover/driver.ts start https://example.com
-
-# Terminal 1: start a session (Linux)
-bun drivers/orca/driver.ts start https://example.com
+# Terminal 1: start a session
+bun {sr-driver} start https://example.com
 
 # Terminal 2: run baseline evidence sweep
 bun collect.ts https://example.com
 
 # Terminal 2: run automated checks only
-bun audit.ts
+bun audit.ts                                  # macOS (default port)
+bun audit.ts --port 7484                      # Linux
 
 # Terminal 2: interact via agent-browser
-agent-browser --cdp 9222 snapshot -i
-agent-browser --cdp 9222 screenshot
+agent-browser --cdp {cdp-port} snapshot -i
+agent-browser --cdp {cdp-port} screenshot
 
 # Terminal 2: test with screen reader
-bun drivers/voiceover/driver.ts perform FIND_NEXT_HEADING
-bun drivers/voiceover/driver.ts press Tab
-bun drivers/voiceover/driver.ts transcript
+bun {sr-driver} perform FIND_NEXT_HEADING
+bun {sr-driver} press Tab
+bun {sr-driver} transcript
 ```
 
 Or just tell Claude:
