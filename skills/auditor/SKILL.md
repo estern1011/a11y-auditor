@@ -130,16 +130,16 @@ Each CLI call spawns a process and makes an HTTP round trip. Batch when you can 
 
 ```bash
 # Instead of 3 separate calls:
-agent-browser --cdp 9222 batch "click @e3" "wait 500" "screenshot"
+agent-browser --cdp {cdp-port} batch "click @e3" "wait 500" "screenshot"
 
 # Resize + screenshot in one shot:
-agent-browser --cdp 9222 batch "set viewport 320 800" "screenshot"
+agent-browser --cdp {cdp-port} batch "set viewport 320 800" "screenshot"
 
 # Navigate + snapshot + screenshot:
-agent-browser --cdp 9222 batch "open https://example.com/page2" "snapshot -i" "screenshot"
+agent-browser --cdp {cdp-port} batch "open https://example.com/page2" "snapshot -i" "screenshot"
 
 # With --bail to stop on first error:
-agent-browser --cdp 9222 batch --bail "click @e3" "wait .modal" "screenshot"
+agent-browser --cdp {cdp-port} batch --bail "click @e3" "wait .modal" "screenshot"
 ```
 
 **Shell chaining** — combine sr-driver calls with `&&`:
