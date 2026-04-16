@@ -122,6 +122,41 @@ bun collect.ts <url> --port 7484 --cdp-port 9223  # Orca defaults (Linux)
 
 Use `collect.ts` to get a fast, comprehensive baseline before diving into detailed manual testing. It replaces the 15+ individual tool calls of Phases 1–3 with a single command. You still need to interpret the output — the evidence requires AI reasoning to produce accurate findings.
 
+## Batching Commands
+
+Each CLI call spawns a process and makes an HTTP round trip. Batch when you can predict multiple steps ahead.
+
+**agent-browser batch** — chain multiple browser actions into one call:
+
+```bash
+# Instead of 3 separate calls:
+agent-browser --cdp 9222 batch "click @e3" "wait 500" "screenshot"
+
+# Resize + screenshot in one shot:
+agent-browser --cdp 9222 batch "set viewport 320 800" "screenshot"
+
+# Navigate + snapshot + screenshot:
+agent-browser --cdp 9222 batch "open https://example.com/page2" "snapshot -i" "screenshot"
+
+# With --bail to stop on first error:
+agent-browser --cdp 9222 batch --bail "click @e3" "wait .modal" "screenshot"
+```
+
+**Shell chaining** — combine sr-driver calls with `&&`:
+
+```bash
+# Tab and immediately check what's focused:
+bun {sr-driver} press Tab && bun {sr-driver} item-text
+
+# Navigate headings and grab the transcript:
+bun {sr-driver} perform FIND_NEXT_HEADING && bun {sr-driver} perform FIND_NEXT_HEADING && bun {sr-driver} transcript --since 0
+
+# Enter web content then start navigating:
+bun {sr-driver} enter && bun {sr-driver} perform GO_TO_BEGINNING && bun {sr-driver} next
+```
+
+**When NOT to batch:** Don't batch when you need to read the output of one command before deciding what to do next (e.g., checking if a heading was found before looking for another).
+
 ## Audit Workflow
 
 ### For QA (quick check of a feature)
