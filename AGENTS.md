@@ -62,10 +62,11 @@ drivers/
     atspi.ts     # AT-SPI2 D-Bus client
     speech.ts    # Speech capture
     driver.test.ts
-  server.ts      # Shared HTTP server
+  server.ts      # Shared HTTP server (same API for both drivers)
   types.ts       # Shared types
   errors.ts      # Error translation
-  interface.ts   # Driver interface
+  interface.ts   # ScreenReaderDriver interface (both drivers implement this)
+  wait.ts        # DOM observation and waiting utilities
   driver.ts      # Platform auto-detection entry
 
 platform/
@@ -75,11 +76,13 @@ platform/
 
 skills/
   auditor/       # Full audit methodology skill
+  acr/           # ACR/VPAT 2.5 report generator skill
   vo-driver/     # VoiceOver driver skill
   orca-driver/   # Orca driver skill
 
 audit.ts         # axe-core automated checks
-cli.ts           # Shared CLI utilities
+collect.ts       # Baseline evidence collector (axe + sr + screenshot)
+cli.ts           # Shared CLI client
 ```
 
 ## Testing
