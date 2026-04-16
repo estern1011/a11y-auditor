@@ -36,6 +36,8 @@ Four tools sharing one browser via CDP:
 
 The agent explores with agent-browser. When it encounters new states, it runs audit.ts for automated checks and uses the screen reader driver to verify behavior.
 
+Default ports differ by platform: macOS uses HTTP 7483 / CDP 9222, Linux uses HTTP 7484 / CDP 9223. Examples below use `{cdp-port}` alongside `{sr-driver}`.
+
 ```bash
 # 1. Agent starts the screen reader driver
 bun {sr-driver} start https://app.com
@@ -44,10 +46,10 @@ bun {sr-driver} start https://app.com
 bun collect.ts https://app.com
 
 # 3. Agent connects agent-browser to same browser
-agent-browser --cdp 9222 snapshot -i
+agent-browser --cdp {cdp-port} snapshot -i
 
 # 4. Agent interacts via agent-browser
-agent-browser --cdp 9222 click @e3        # open modal
+agent-browser --cdp {cdp-port} click @e3        # open modal
 
 # 5. Agent audits the modal
 bun audit.ts ".modal-dialog"
@@ -59,7 +61,7 @@ bun {sr-driver} press Tab               # test keyboard nav
 bun {sr-driver} transcript --since 12   # what did the SR say?
 
 # 7. Agent closes modal via agent-browser, checks focus return
-agent-browser --cdp 9222 press Escape
+agent-browser --cdp {cdp-port} press Escape
 bun {sr-driver} item-text               # where did focus land?
 ```
 
@@ -147,7 +149,7 @@ bun collect.ts <url> --tabs 15                        # tab through 15 elements
 
 ## audit.ts
 
-Runs axe-core in the driver's process via the `/audit` HTTP endpoint (avoids CDP multi-connection issues with Playwright). CLI wrapper sends requests to the driver.
+Runs axe-core in the driver's process via the `/audit` HTTP endpoint (avoids CDP multi-connection issues with Playwright). CLI wrapper sends requests to the driver. Defaults to VoiceOver's port (7483) — on Linux, pass `--port 7484`.
 
 ```bash
 bun audit.ts                               # full page

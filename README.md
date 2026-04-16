@@ -70,6 +70,7 @@ The Orca driver auto-detects virtual desktop environments and starts Xvfb + open
 ```bash
 # From any project where you want to use the auditor:
 npx skills add /path/to/a11y-auditor --skill auditor
+npx skills add /path/to/a11y-auditor --skill acr
 npx skills add /path/to/a11y-auditor --skill vo-driver
 npx skills add /path/to/a11y-auditor --skill orca-driver
 ```
@@ -78,6 +79,7 @@ Or, once published to GitHub:
 
 ```bash
 npx skills add https://github.com/estern1011/a11y-auditor --skill auditor
+npx skills add https://github.com/estern1011/a11y-auditor --skill acr
 ```
 
 ## Skills
@@ -151,6 +153,8 @@ bun audit.ts --no-tree                # skip accessibility tree
 ```
 
 ## Quick start
+
+Default ports differ by platform: macOS uses HTTP 7483 / CDP 9222, Linux uses HTTP 7484 / CDP 9223. The commands below use macOS defaults — on Linux, add `--port 7484` to `audit.ts`/`collect.ts` and `--cdp 9223` to `agent-browser`.
 
 ```bash
 # Terminal 1: start a session (macOS)
