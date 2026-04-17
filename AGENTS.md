@@ -80,6 +80,11 @@ skills/
   vo-driver/     # VoiceOver driver skill
   orca-driver/   # Orca driver skill
 
+.claude/agents/        # Claude Code sub-agents (delegated by the auditor skill)
+  baseline-collector.md       # Phase 1-3 baseline + axe incomplete resolution
+  visual-cross-referencer.md  # Phase 7 visual vs. a11y tree mismatches
+  keyboard-walker.md          # Phase 4 + 6 tab walk + widget ARIA patterns
+
 audit.ts         # axe-core automated checks
 collect.ts       # Baseline evidence collector (axe + sr + screenshot)
 cli.ts           # Shared CLI client

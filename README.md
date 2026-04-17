@@ -84,6 +84,10 @@ npx skills add https://github.com/estern1011/a11y-auditor --skill vo-driver
 npx skills add https://github.com/estern1011/a11y-auditor --skill orca-driver
 ```
 
+### Sub-agents
+
+The auditor skill delegates heavy phases to three Claude Code sub-agents in `.claude/agents/` — `baseline-collector`, `visual-cross-referencer`, and `keyboard-walker`. They are discovered automatically when Claude Code runs inside this repo. If you're using the plugin in another project, the auditor skill will fall back to running each phase inline (slower, more context noise, but functionally equivalent).
+
 ## Skills
 
 ### `auditor`
