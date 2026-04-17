@@ -44,7 +44,9 @@ for (const t of groundTruth) {
 // Load agent verdicts
 const resultsDir = join(dir, "results");
 const resultFiles = existsSync(resultsDir)
-  ? readdirSync(resultsDir).filter(f => f.endsWith(".json")).sort()
+  ? readdirSync(resultsDir)
+      .filter((f) => f.endsWith(".json"))
+      .sort()
   : [];
 
 interface Verdict {
@@ -65,10 +67,10 @@ for (const f of resultFiles) {
 
 // Pending and claimed counts
 const pendingCount = existsSync(join(dir, "pending"))
-  ? readdirSync(join(dir, "pending")).filter(f => f.endsWith(".json")).length
+  ? readdirSync(join(dir, "pending")).filter((f) => f.endsWith(".json")).length
   : 0;
 const claimedCount = existsSync(join(dir, "claimed"))
-  ? readdirSync(join(dir, "claimed")).filter(f => f.endsWith(".json")).length
+  ? readdirSync(join(dir, "claimed")).filter((f) => f.endsWith(".json")).length
   : 0;
 
 // Match verdicts to ground truth and classify
@@ -84,7 +86,10 @@ interface CaseResult {
 }
 
 const cases: CaseResult[] = [];
-let tp = 0, tn = 0, fp = 0, fn = 0;
+let tp = 0,
+  tn = 0,
+  fp = 0,
+  fn = 0;
 
 for (const v of verdicts) {
   const truth = truthByUrl.get(v.url);
@@ -139,7 +144,11 @@ for (const [, s] of Object.entries(byCriterion)) {
 // each tool that was used, not the tool's individual contribution. A case
 // using ["axe", "sr"] that the agent gets wrong counts as a miss for both
 // tools, even if one tool was correct and the other caused the error.
-const byTool: Record<string, any> = { axe: { tp: 0, tn: 0, fp: 0, fn: 0 }, sr: { tp: 0, tn: 0, fp: 0, fn: 0 }, screenshot: { tp: 0, tn: 0, fp: 0, fn: 0 } };
+const byTool: Record<string, any> = {
+  axe: { tp: 0, tn: 0, fp: 0, fn: 0 },
+  sr: { tp: 0, tn: 0, fp: 0, fn: 0 },
+  screenshot: { tp: 0, tn: 0, fp: 0, fn: 0 },
+};
 for (const c of cases) {
   for (const tool of c.toolsUsed) {
     if (!byTool[tool]) continue;
@@ -180,7 +189,7 @@ const correct = tp + tn;
 console.log(`\n=== Eval Results: ${values.run} (blind) ===\n`);
 console.log(`Total cases:    ${total} evaluated, ${pendingCount} pending, ${claimedCount} claimed`);
 console.log(`Ground truth:   ${groundTruth.length} cases`);
-console.log(`Accuracy:       ${correct}/${total} (${(correct / total * 100).toFixed(1)}%)`);
+console.log(`Accuracy:       ${correct}/${total} (${((correct / total) * 100).toFixed(1)}%)`);
 console.log(`Precision:      ${precision.toFixed(2)}`);
 console.log(`Recall:         ${recall.toFixed(2)}`);
 console.log(`TP=${tp}  TN=${tn}  FP=${fp}  FN=${fn}\n`);
@@ -195,7 +204,7 @@ for (const [crit, s] of Object.entries(byCriterion).sort()) {
 }
 
 // Errors
-const errors = cases.filter(c => !c.correct);
+const errors = cases.filter((c) => !c.correct);
 if (errors.length > 0) {
   console.log(`\nErrors (${errors.length}):`);
   for (const e of errors.slice(0, 20)) {

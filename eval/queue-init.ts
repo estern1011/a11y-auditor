@@ -104,9 +104,8 @@ for (const rule of data.rules) {
     });
 
     // Ground truth: only used by scorer, never seen by agents
-    const expected = tc.expected === "passed" ? "pass"
-                   : tc.expected === "failed" ? "fail"
-                   : tc.expected;
+    const expected =
+      tc.expected === "passed" ? "pass" : tc.expected === "failed" ? "fail" : tc.expected;
     groundTruth.push({
       id,
       url: tc.url,
@@ -122,16 +121,16 @@ for (const rule of data.rules) {
 const dir = values.dir!;
 if (existsSync(dir)) {
   const existingPending = existsSync(join(dir, "pending"))
-    ? readdirSync(join(dir, "pending")).filter(f => f.endsWith(".json"))
+    ? readdirSync(join(dir, "pending")).filter((f) => f.endsWith(".json"))
     : [];
   const existingResults = existsSync(join(dir, "results"))
-    ? readdirSync(join(dir, "results")).filter(f => f.endsWith(".json"))
+    ? readdirSync(join(dir, "results")).filter((f) => f.endsWith(".json"))
     : [];
 
   if ((existingPending.length > 0 || existingResults.length > 0) && !values.clean) {
     console.error(
       `Queue already exists at ${dir} (${existingPending.length} pending, ${existingResults.length} results).\n` +
-      `Use --clean to reset, or choose a different --dir.`
+        `Use --clean to reset, or choose a different --dir.`,
     );
     process.exit(1);
   }
@@ -165,8 +164,8 @@ writeFileSync(join(dir, "ground-truth.json"), JSON.stringify(groundTruth, null, 
 console.log(`Queue initialized: ${dir}`);
 console.log(`  ${queueCases.length} cases in pending/`);
 console.log(`  ${groundTruth.length} ground truth entries`);
-console.log(`  ${new Set(queueCases.map(c => c.criterion)).size} criteria`);
-console.log(`  ${new Set(queueCases.map(c => c.ruleId)).size} rules`);
+console.log(`  ${new Set(queueCases.map((c) => c.criterion)).size} criteria`);
+console.log(`  ${new Set(queueCases.map((c) => c.ruleId)).size} rules`);
 
 // Summary by criterion
 const byCrit = new Map<string, number>();

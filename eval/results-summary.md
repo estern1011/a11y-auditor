@@ -7,55 +7,57 @@
 
 ## 1. Headline Metrics
 
-| Metric | Overall | AI-evaluated | Script-evaluated |
-|--------|---------|--------------|------------------|
-| Total cases | 156 | 58 | 98 |
-| True Positives | 29 | 13 | 16 |
-| True Negatives | 95 | 45 | 50 |
-| False Positives | 18 | 0 | 18 |
-| False Negatives | 14 | 0 | 14 |
-| **Precision** | **0.62** | **1.00** | **0.47** |
-| **Recall** | **0.67** | **1.00** | **0.53** |
-| **Accuracy** | **79.5%** | **100%** | **47%** |
+| Metric          | Overall   | AI-evaluated | Script-evaluated |
+| --------------- | --------- | ------------ | ---------------- |
+| Total cases     | 156       | 58           | 98               |
+| True Positives  | 29        | 13           | 16               |
+| True Negatives  | 95        | 45           | 50               |
+| False Positives | 18        | 0            | 18               |
+| False Negatives | 14        | 0            | 14               |
+| **Precision**   | **0.62**  | **1.00**     | **0.47**         |
+| **Recall**      | **0.67**  | **1.00**     | **0.53**         |
+| **Accuracy**    | **79.5%** | **100%**     | **47%**          |
 
 **Key finding:** The a11y-auditor tools + AI reasoning achieve perfect accuracy (58/58). The heuristic batch script (`eval/run-batch.ts`) used for the remaining 98 cases only achieves 47% — demonstrating that AI interpretation of tool outputs is essential, not just the tools themselves.
 
 ## 2. Evaluation Methods
 
 ### AI-evaluated (58 cases, 100% accuracy)
+
 - **26 cases** evaluated manually by the orchestrating agent (sample-test-cases.json, 1 pass + 1 fail per rule)
 - **32 cases** evaluated by a Sonnet sub-agent on the env-2 sprite (extended ACT cases with pass/fail/inapplicable)
 
 ### Script-evaluated (98 cases, 47% accuracy)
+
 - Processed by `eval/run-batch.ts` running on 3 sprites (smoke-v1, orca-test, env-3)
 - Uses regex/heuristic-based verdict determination
 - Primary failure modes: can't resolve axe "incomplete" results, CSS regex too simple, can't determine semantic mismatches
 
 ## 3. Per-Criterion Breakdown (AI-evaluated only)
 
-| Criterion | Name | TP | TN | FP | FN | Precision | Recall |
-|-----------|------|----|----|----|----|-----------|--------|
-| 1.3.3 | Sensory Characteristics | 1 | 4 | 0 | 0 | 1.00 | 1.00 |
-| 1.3.4 | Orientation | 1 | 2 | 0 | 0 | 1.00 | 1.00 |
-| 1.4.2 | Audio Control | 1 | 2 | 0 | 0 | 1.00 | 1.00 |
-| 1.4.3 | Contrast (Minimum) | 3 | 5 | 0 | 0 | 1.00 | 1.00 |
-| 1.4.5 | Images of Text | 1 | 1 | 0 | 0 | 1.00 | 1.00 |
-| 2.1.2 | No Keyboard Trap | 2 | 2 | 0 | 0 | 1.00 | 1.00 |
-| 2.1.4 | Character Key Shortcuts | 1 | 2 | 0 | 0 | 1.00 | 1.00 |
-| 2.4.1 | Bypass Blocks | 1 | 3 | 0 | 0 | 1.00 | 1.00 |
-| 2.4.2 | Page Titled | 2 | 1 | 0 | 0 | 1.00 | 1.00 |
-| 2.4.4 | Link Purpose (In Context) | 1 | 3 | 0 | 0 | 1.00 | 1.00 |
-| 2.4.6 | Headings and Labels | 1 | 3 | 0 | 0 | 1.00 | 1.00 |
-| 2.4.7 | Focus Visible | 1 | 2 | 0 | 0 | 1.00 | 1.00 |
-| 3.3.1 | Error Identification | 1 | 2 | 0 | 0 | 1.00 | 1.00 |
+| Criterion | Name                      | TP  | TN  | FP  | FN  | Precision | Recall |
+| --------- | ------------------------- | --- | --- | --- | --- | --------- | ------ |
+| 1.3.3     | Sensory Characteristics   | 1   | 4   | 0   | 0   | 1.00      | 1.00   |
+| 1.3.4     | Orientation               | 1   | 2   | 0   | 0   | 1.00      | 1.00   |
+| 1.4.2     | Audio Control             | 1   | 2   | 0   | 0   | 1.00      | 1.00   |
+| 1.4.3     | Contrast (Minimum)        | 3   | 5   | 0   | 0   | 1.00      | 1.00   |
+| 1.4.5     | Images of Text            | 1   | 1   | 0   | 0   | 1.00      | 1.00   |
+| 2.1.2     | No Keyboard Trap          | 2   | 2   | 0   | 0   | 1.00      | 1.00   |
+| 2.1.4     | Character Key Shortcuts   | 1   | 2   | 0   | 0   | 1.00      | 1.00   |
+| 2.4.1     | Bypass Blocks             | 1   | 3   | 0   | 0   | 1.00      | 1.00   |
+| 2.4.2     | Page Titled               | 2   | 1   | 0   | 0   | 1.00      | 1.00   |
+| 2.4.4     | Link Purpose (In Context) | 1   | 3   | 0   | 0   | 1.00      | 1.00   |
+| 2.4.6     | Headings and Labels       | 1   | 3   | 0   | 0   | 1.00      | 1.00   |
+| 2.4.7     | Focus Visible             | 1   | 2   | 0   | 0   | 1.00      | 1.00   |
+| 3.3.1     | Error Identification      | 1   | 2   | 0   | 0   | 1.00      | 1.00   |
 
 ## 4. Per-Tool Breakdown
 
-| Tool | TP | TN | FP | FN |
-|------|----|----|----|----|
-| axe | 8 | 32 | 5 | 13 |
-| sr | 18 | 42 | 9 | 5 |
-| screenshot | 14 | 43 | 7 | 3 |
+| Tool       | TP  | TN  | FP  | FN  |
+| ---------- | --- | --- | --- | --- |
+| axe        | 8   | 32  | 5   | 13  |
+| sr         | 18  | 42  | 9   | 5   |
+| screenshot | 14  | 43  | 7   | 3   |
 
 Note: these include script-evaluated cases with lower accuracy. Tool-level accuracy would be higher with AI evaluation.
 
@@ -63,16 +65,17 @@ Note: these include script-evaluated cases with lower accuracy. Tool-level accur
 
 The batch script (`eval/run-batch.ts`) failed on 52 of 98 cases. Top error patterns:
 
-| Error Pattern | Count | Root Cause |
-|---------------|-------|------------|
-| inapplicable → pass | 14 | Script's inapplicable detection too narrow (misses CSS background images, SVG, canvas, role changes) |
-| pass → fail | 13 | Script flags non-issues (regex false matches for sensory terms, orientation CSS) |
-| fail → pass | 12 | Script can't resolve axe "incomplete" (contrast on gradients/images), misses semantic mismatches |
-| pass → inapplicable | 6 | Script's element detection too broad (flags pages as lacking elements that do exist) |
-| inapplicable → fail | 5 | Script incorrectly flags issues on pages where the rule doesn't apply |
-| fail → inapplicable | 2 | Script incorrectly dismisses pages with actual violations |
+| Error Pattern       | Count | Root Cause                                                                                           |
+| ------------------- | ----- | ---------------------------------------------------------------------------------------------------- |
+| inapplicable → pass | 14    | Script's inapplicable detection too narrow (misses CSS background images, SVG, canvas, role changes) |
+| pass → fail         | 13    | Script flags non-issues (regex false matches for sensory terms, orientation CSS)                     |
+| fail → pass         | 12    | Script can't resolve axe "incomplete" (contrast on gradients/images), misses semantic mismatches     |
+| pass → inapplicable | 6     | Script's element detection too broad (flags pages as lacking elements that do exist)                 |
+| inapplicable → fail | 5     | Script incorrectly flags issues on pages where the rule doesn't apply                                |
+| fail → inapplicable | 2     | Script incorrectly dismisses pages with actual violations                                            |
 
 Most affected rules:
+
 - **afw4f7 (Contrast)**: 10 errors — axe "incomplete" on complex backgrounds not resolved
 - **b33eff (Orientation)**: 6 errors — CSS regex can't handle all transform variants
 - **0va7u6 (Images of text)**: 5 errors — can't detect CSS background images or inline SVG text

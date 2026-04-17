@@ -2,139 +2,154 @@
 
 ## Architecture
 
-Three tools sharing one browser via CDP:
+Four tools sharing one browser via CDP:
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                  Auditor skill (persona)                  │
-│                                                          │
-│  "You are an accessibility auditor with three tools..."  │
-└────────┬──────────────────┬──────────────────┬───────────┘
-         │                  │                  │
-   ┌─────▼─────┐    ┌──────▼──────┐    ┌──────▼──────┐
-   │ vo-driver  │    │  audit.ts  │    │agent-browser│
-   │            │    │             │    │             │
-   │ Screen     │    │ Automated   │    │ Page        │
-   │ reader     │    │ checks      │    │ interaction │
-   │            │    │             │    │             │
-   │ Owns the   │    │ axe-core +  │    │ click, type │
-   │ browser +  │    │ a11y tree   │    │ screenshot  │
-   │ VoiceOver  │    │             │    │ snapshot    │
-   │            │    │ Connects    │    │             │
-   │ CDP :9222  │◄───│ via CDP     │    │ Connects    │
-   │            │◄───│             │    │ via CDP     │
-   └────────────┘    └─────────────┘    └─────────────┘
+┌──────────────────────────────────────────────────────┐
+│                 Auditor skill (persona)               │
+│                                                      │
+│  "You are an accessibility auditor with four tools"  │
+└───────┬──────────┬──────────────┬──────────┬─────────┘
+        │          │              │          │
+  ┌─────▼─────┐  ┌▼───────────┐  ┌▼────────┐  ┌▼──────────┐
+  │ sr-driver  │  │ collect.ts │  │audit.ts │  │agent-     │
+  │            │  │            │  │         │  │browser    │
+  │ Screen     │  │ Baseline   │  │Automated│  │ Page      │
+  │ reader     │  │ evidence   │  │ checks  │  │ interact  │
+  │            │  │ sweep      │  │(axe-core│  │ (click,   │
+  │ VoiceOver  │  │            │  │ + a11y  │  │ screenshot│
+  │ or Orca    │  │ axe + sr + │  │  tree)  │  │ snapshot) │
+  │ + browser  │  │ screenshot │  │         │  │           │
+  │            │  │ in one cmd │  │ via HTTP│  │ via CDP   │
+  │ CDP :9222  │◄─┴────────────┘  └─────────┘  └───────────┘
+  │ (or :9223) │◄──────────────────┘        ◄──┘
+  └────────────┘
 ```
 
-- **vo-driver** owns the headed browser + VoiceOver, exposes CDP on port 9222
-- **audit.ts** runs in vo-driver's process via the `/audit` HTTP endpoint, runs axe-core + returns accessibility tree
-- **agent-browser** connects via `--cdp 9222` for interaction, screenshots, DOM queries
-- **One skill doc** (auditor persona) teaches the agent to orchestrate all three
+- **sr-driver** (VoiceOver on macOS, Orca on Linux) owns the headed browser + screen reader, exposes CDP
+- **collect.ts** runs a baseline evidence sweep in a single command
+- **audit.ts** runs in the driver's process via the `/audit` HTTP endpoint, runs axe-core + returns accessibility tree
+- **agent-browser** connects via CDP for interaction, screenshots, DOM queries
+- **One skill doc** (auditor persona) teaches the agent to orchestrate all four
 
 ## How It Works
 
-The agent explores with agent-browser. When it encounters new states, it runs audit.ts for automated checks and uses vo-driver to verify screen reader behavior.
+The agent explores with agent-browser. When it encounters new states, it runs audit.ts for automated checks and uses the screen reader driver to verify behavior.
+
+Default ports differ by platform: macOS uses HTTP 7483 / CDP 9222, Linux uses HTTP 7484 / CDP 9223. Examples below use `{cdp-port}` alongside `{sr-driver}`.
 
 ```bash
-# 1. Agent starts vo-driver (browser + VoiceOver + CDP)
-bun drivers/voiceover/driver.ts start https://app.com
+# 1. Agent starts the screen reader driver
+bun {sr-driver} start https://app.com
 
-# 2. Agent connects agent-browser to same browser
-agent-browser --cdp 9222 snapshot -i
+# 2. Agent runs baseline evidence sweep
+bun collect.ts https://app.com
 
-# 3. Agent runs automated checks (hits vo-driver's /audit endpoint)
-bun audit.ts
+# 3. Agent connects agent-browser to same browser
+agent-browser --cdp {cdp-port} snapshot -i
 
 # 4. Agent interacts via agent-browser
-agent-browser --cdp 9222 click @e3        # open modal
+agent-browser --cdp {cdp-port} click @e3        # open modal
 
 # 5. Agent audits the modal
 bun audit.ts ".modal-dialog"
 
-# 6. Agent verifies with VoiceOver
-bun drivers/voiceover/driver.ts enter                   # re-enter web content
-bun drivers/voiceover/driver.ts perform FIND_NEXT_HEADING
-bun drivers/voiceover/driver.ts press Tab               # test keyboard nav
-bun drivers/voiceover/driver.ts transcript --since 12   # what did VO say?
+# 6. Agent verifies with screen reader
+bun {sr-driver} enter                   # re-enter web content
+bun {sr-driver} perform FIND_NEXT_HEADING
+bun {sr-driver} press Tab               # test keyboard nav
+bun {sr-driver} transcript --since 12   # what did the SR say?
 
 # 7. Agent closes modal via agent-browser, checks focus return
-agent-browser --cdp 9222 press Escape
-bun drivers/voiceover/driver.ts item-text               # where did focus land?
+agent-browser --cdp {cdp-port} press Escape
+bun {sr-driver} item-text               # where did focus land?
 ```
 
-## vo-driver Command Surface
+## Screen Reader Driver Command Surface
+
+Both drivers expose identical commands. `{sr-driver}` is a placeholder — substitute `drivers/voiceover/driver.ts` (macOS) or `drivers/orca/driver.ts` (Linux).
 
 ### Session
 
 ```bash
-bun drivers/voiceover/driver.ts start <url>           # launch browser + VoiceOver + CDP
-bun drivers/voiceover/driver.ts start <url> --cdp-port 9333  # custom CDP port
-bun drivers/voiceover/driver.ts stop                  # graceful shutdown
-bun drivers/voiceover/driver.ts kill                  # force kill
-bun drivers/voiceover/driver.ts status               # check state
-bun drivers/voiceover/driver.ts enter                # navigate into web content (auto on start/navigate)
-bun drivers/voiceover/driver.ts navigate <url>       # go to new URL + re-enter web content
+bun {sr-driver} start <url>           # launch browser + screen reader + CDP
+bun {sr-driver} start <url> --cdp-port 9333  # custom CDP port
+bun {sr-driver} stop                  # graceful shutdown
+bun {sr-driver} kill                  # force kill
+bun {sr-driver} status               # check state
+bun {sr-driver} enter                # navigate into web content (auto on start/navigate)
+bun {sr-driver} navigate <url>       # go to new URL + re-enter web content
 ```
 
 ### Movement
 
 ```bash
-bun drivers/voiceover/driver.ts next                 # VO+Right
-bun drivers/voiceover/driver.ts previous             # VO+Left
+bun {sr-driver} next                 # next item
+bun {sr-driver} previous             # previous item
 ```
 
 ### Interaction
 
 ```bash
-bun drivers/voiceover/driver.ts act                  # VO+Space (activate current item)
-bun drivers/voiceover/driver.ts press <key> [mods]   # raw keystroke (Tab, Return, Escape, arrows, etc.)
+bun {sr-driver} act                  # activate current item
+bun {sr-driver} press <key> [mods]   # raw keystroke (Tab, Return, Escape, arrows, etc.)
 ```
 
-### VoiceOver Commands
+### Screen Reader Commands
 
 ```bash
-bun drivers/voiceover/driver.ts perform <COMMAND>    # any VoiceOver command
+bun {sr-driver} perform <COMMAND>    # any screen reader command
 ```
 
-Uses VoiceOver-standard command names (FIND_NEXT_HEADING, START_INTERACTING, etc.) so agents with existing VoiceOver knowledge feel at home.
+Uses platform-standard command names (FIND_NEXT_HEADING, GO_TO_BEGINNING, etc.). Some commands are platform-specific (e.g., START_INTERACTING is VoiceOver-only). Run `bun {sr-driver} commands` to list available commands.
 
 ### Queries
 
 ```bash
-bun drivers/voiceover/driver.ts transcript                # full session transcript
-bun drivers/voiceover/driver.ts transcript --since 42     # entries after index 42
-bun drivers/voiceover/driver.ts transcript --clear        # clear and return
-bun drivers/voiceover/driver.ts item-text                 # current focused item
-bun drivers/voiceover/driver.ts commands [filter]         # list available perform commands
+bun {sr-driver} transcript                # full session transcript
+bun {sr-driver} transcript --since 42     # entries after index 42
+bun {sr-driver} transcript --clear        # clear and return
+bun {sr-driver} item-text                 # current focused item
+bun {sr-driver} commands [filter]         # list available perform commands
 ```
 
 ### Flags
 
 ```bash
 --json          # structured JSON output (default: human-readable)
---cdp-port N    # CDP port (default: 9222)
+--cdp-port N    # CDP port (default: 9222 macOS, 9223 Linux)
 ```
 
 ### Response Format
 
 ```
-$ bun drivers/voiceover/driver.ts next
+$ bun {sr-driver} next
 Spoken: "heading level 1 Example Domain"
 Name: "Example Domain"
 Role: "heading level 1"
 
-$ bun drivers/voiceover/driver.ts next --json
+$ bun {sr-driver} next --json
 {"spoken":"heading level 1 Example Domain","name":"Example Domain","role":"heading level 1"}
 ```
 
 ### Exit Codes
 
 - **0** — command succeeded (including "Heading not found" — that's useful info)
-- **1** — actual error (VoiceOver not running, daemon not started, timeout)
+- **1** — actual error (screen reader not running, daemon not started, timeout)
+
+## collect.ts
+
+Baseline evidence collector. Runs axe-core, screen reader navigation, and screenshots in a single command against a running driver session.
+
+```bash
+bun collect.ts <url>                                  # full sweep
+bun collect.ts <url> --tools axe,sr,screenshot        # select tools
+bun collect.ts <url> --tabs 15                        # tab through 15 elements
+```
 
 ## audit.ts
 
-Runs axe-core in vo-driver's process via the `/audit` HTTP endpoint (avoids CDP multi-connection issues with Playwright). CLI wrapper sends requests to vo-driver.
+Runs axe-core in the driver's process via the `/audit` HTTP endpoint (avoids CDP multi-connection issues with Playwright). CLI wrapper sends requests to the driver. Defaults to VoiceOver's port (7483) — on Linux, pass `--port 7484`.
 
 ```bash
 bun audit.ts                               # full page
@@ -169,28 +184,28 @@ The skill doc is an agent persona:
 ```
 You are an accessibility auditor performing WCAG 2.2 AA evaluations.
 
-You have three tools:
-- vo-driver: your screen reader (start it first — it owns the browser)
+You have four tools:
+- sr-driver: your screen reader (start it first — it owns the browser)
+- collect.ts: your baseline evidence sweep (one command)
 - audit.ts: your automated checker (axe-core + accessibility tree)
 - agent-browser: your hands on the page (interaction, screenshots)
 
-Connect agent-browser to vo-driver's browser via --cdp 9222. audit.ts talks to vo-driver's HTTP endpoint (defaults to the same port).
-
 Workflow:
-1. Start vo-driver (launches browser + VoiceOver)
-2. Explore with agent-browser (click, type, navigate)
-3. Run audit.ts on each new state (pages, modals, error states)
-4. Use vo-driver to verify findings that need screen reader confirmation
-5. Collect evidence (screenshots, VO transcripts, axe results)
+1. Start the screen reader driver (launches browser + screen reader)
+2. Run collect.ts for a baseline evidence sweep
+3. Explore with agent-browser (click, type, navigate)
+4. Run audit.ts on each new state (pages, modals, error states)
+5. Use sr-driver to verify findings that need screen reader confirmation
 6. Report findings per WCAG criterion
 
 When to use each tool:
+- collect.ts: "give me a full baseline" (axe + sr + screenshot in one command)
 - audit.ts: "does this page have a11y issues?" (fast, automated)
 - agent-browser: "let me interact with this page" (click, type, screenshot)
-- vo-driver: "what does a screen reader actually say/do here?" (targeted verification)
+- sr-driver: "what does a screen reader actually say/do here?" (targeted verification)
 
-Use vo-driver for:
-- Custom widget operation (Tab in, arrow keys, does VO announce changes?)
+Use sr-driver for:
+- Custom widget operation (Tab in, arrow keys, does the SR announce changes?)
 - Focus management (modal open/close, SPA navigation)
 - Live region announcements (form submit, status updates)
 - Form flows (Tab through, submit with errors, hear error messages)
@@ -201,26 +216,29 @@ Use vo-driver for:
 
 ### QA an individual piece of work
 
-Agent explores the feature with agent-browser, runs audit.ts on the states it encounters, uses vo-driver to spot-check interactive components. Fast, focused, integrated into dev workflow.
+Agent explores the feature with agent-browser, runs audit.ts on the states it encounters, uses the screen reader driver to spot-check interactive components. Fast, focused, integrated into dev workflow.
 
 ### Conduct an accessibility audit (ACR/VPAT)
 
 Agent systematically tests representative pages/flows. For each page:
 
-1. audit.ts for automated baseline
-2. agent-browser for screenshots and interaction testing
-3. vo-driver for screen reader verification of complex components
+1. collect.ts for baseline evidence sweep
+2. audit.ts for targeted automated checks on specific states
+3. agent-browser for screenshots and interaction testing
+4. sr-driver for screen reader verification of complex components
 
-Page auditor outputs structured findings. Separate report builder agent (future) synthesizes multi-page findings into VPAT 2.5 format.
+Page auditor outputs structured findings. The `acr` skill synthesizes findings into VPAT 2.5 format.
 
 ## Screen Reader Abstraction
 
-vo-driver is the VoiceOver/macOS implementation. The command interface (next, previous, act, press, enter, transcript, perform) is generic. Future backends:
+Both drivers implement the `ScreenReaderDriver` interface (`drivers/interface.ts`). The command surface (next, previous, act, press, enter, transcript, perform) is identical. Current backends:
 
-- nvda-driver (Windows)
-- orca-driver (Linux)
+- **vo-driver** — VoiceOver on macOS
+- **orca-driver** — Orca on Linux (works headless with Xvfb)
 
-The auditor skill programs against the interface. Swap implementations per OS.
+Future: nvda-driver (Windows).
+
+The auditor skill programs against the interface using `{sr-driver}` as a placeholder. Platform detection (`platform/detect.ts`) auto-selects the right driver.
 
 ## What to Build
 
@@ -250,13 +268,27 @@ The auditor skill programs against the interface. Swap implementations per OS.
 ### Phase 3: Auditor skill doc ✓
 
 - [x] Agent persona (expert WCAG 2.2 AA auditor)
-- [x] Three-tool orchestration instructions
+- [x] Four-tool orchestration instructions
 - [x] WCAG criterion testing guide (which tool for which check)
 - [x] Evidence collection guidance
 - [x] QA workflow and ACR/VPAT workflow
 
-### Phase 4: Report builder (future)
+### Phase 4: ACR/VPAT report builder ✓
 
-- [ ] Separate agent/skill
-- [ ] Takes structured findings from page auditors
-- [ ] Produces VPAT 2.5 format ACR
+- [x] `acr` skill (generates VPAT 2.5 format ACR from audit findings)
+- [x] Criteria mapping in `skills/acr/criteria.json`
+- [x] Takes structured findings from auditor skill output
+
+### Phase 5: Orca driver (Linux) ✓
+
+- [x] AT-SPI2 D-Bus client (`drivers/orca/atspi.ts`)
+- [x] Speech capture (`drivers/orca/speech.ts`)
+- [x] Common `ScreenReaderDriver` interface (`drivers/interface.ts`)
+- [x] Unified HTTP server (`drivers/server.ts`)
+- [x] Platform auto-detection (`platform/detect.ts`)
+- [x] Setup script for headless/remote environments (`drivers/orca/setup.sh`)
+
+### Phase 6: Baseline evidence collector ✓
+
+- [x] `collect.ts` — axe + screen reader + screenshot in one command
+- [x] `eval/queue-collect.ts` — eval-specific variant with answer redaction

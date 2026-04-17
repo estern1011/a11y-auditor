@@ -289,17 +289,26 @@ export async function cli(args: string[], driver: ScreenReaderDriver, usage: str
           if (d.loadingIndicators.length > 0) {
             console.log("\nLoading indicators:");
             d.loadingIndicators.forEach((e: any) =>
-              console.log(`  ${e.selector} — ${e.hasAccessibleName ? `name: "${e.accessibleName}"` : "NO accessible name"} (${e.detectedBy})`));
+              console.log(
+                `  ${e.selector} — ${e.hasAccessibleName ? `name: "${e.accessibleName}"` : "NO accessible name"} (${e.detectedBy})`,
+              ),
+            );
           }
           if (d.liveRegions.length > 0) {
             console.log("\nLive regions:");
             d.liveRegions.forEach((e: any) =>
-              console.log(`  ${e.selector} — aria-live="${e.ariaLive}" ${e.role ? `role="${e.role}"` : ""} "${e.textContent}"`));
+              console.log(
+                `  ${e.selector} — aria-live="${e.ariaLive}" ${e.role ? `role="${e.role}"` : ""} "${e.textContent}"`,
+              ),
+            );
           }
           if (d.statusRoles.length > 0) {
             console.log("\nStatus roles:");
             d.statusRoles.forEach((e: any) =>
-              console.log(`  ${e.selector} — role="${e.role}" ${e.hasAccessibleName ? "✓ named" : "✗ unnamed"}`));
+              console.log(
+                `  ${e.selector} — role="${e.role}" ${e.hasAccessibleName ? "✓ named" : "✗ unnamed"}`,
+              ),
+            );
           }
         }
         break;
@@ -307,7 +316,8 @@ export async function cli(args: string[], driver: ScreenReaderDriver, usage: str
 
       case "observe": {
         const settleIdx = args.indexOf("--settle");
-        const settleMs = settleIdx >= 0 && args[settleIdx + 1] ? parseInt(args[settleIdx + 1], 10) : undefined;
+        const settleMs =
+          settleIdx >= 0 && args[settleIdx + 1] ? parseInt(args[settleIdx + 1], 10) : undefined;
         const d = await post(port, "/observe", settleMs ? { settleMs } : {});
         console.log(`Observer started (settle threshold: ${d.settleMs}ms)`);
         break;
@@ -319,7 +329,9 @@ export async function cli(args: string[], driver: ScreenReaderDriver, usage: str
           console.log(JSON.stringify(d));
         } else {
           const status = d.settled ? "SETTLED" : "MUTATING";
-          console.log(`DOM: ${status} | mutations: ${d.mutationCount} | since last: ${d.msSinceLastMutation}ms | elapsed: ${d.elapsed}ms`);
+          console.log(
+            `DOM: ${status} | mutations: ${d.mutationCount} | since last: ${d.msSinceLastMutation}ms | elapsed: ${d.elapsed}ms`,
+          );
         }
         if (d.settled) process.exit(0);
         else process.exit(2); // exit 2 = not settled yet (distinguishable from error)
@@ -336,7 +348,9 @@ export async function cli(args: string[], driver: ScreenReaderDriver, usage: str
         if (jsonMode) {
           console.log(JSON.stringify(d));
         } else {
-          console.log(`Observer stopped. Total mutations: ${d.mutationCount}, settled: ${d.settled}`);
+          console.log(
+            `Observer stopped. Total mutations: ${d.mutationCount}, settled: ${d.settled}`,
+          );
         }
         break;
       }
@@ -347,7 +361,8 @@ export async function cli(args: string[], driver: ScreenReaderDriver, usage: str
         const stateIdx = args.indexOf("--state");
         const state = stateIdx >= 0 && args[stateIdx + 1] ? args[stateIdx + 1] : undefined;
         const timeoutIdx = args.indexOf("--timeout");
-        const timeout = timeoutIdx >= 0 && args[timeoutIdx + 1] ? parseInt(args[timeoutIdx + 1], 10) : undefined;
+        const timeout =
+          timeoutIdx >= 0 && args[timeoutIdx + 1] ? parseInt(args[timeoutIdx + 1], 10) : undefined;
         const httpTimeout = timeout ? timeout + 5000 : 35_000;
         // Use raw fetch — server returns 408 for expected selector timeouts,
         // which post() would throw on. We want the structured response.
