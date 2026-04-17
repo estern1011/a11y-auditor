@@ -106,13 +106,13 @@ bun test --listTests
 
 We enforce consistent naming conventions via ESLint (`@typescript-eslint/naming-convention`):
 
-| Element | Format | Example |
-|---------|--------|---------|
-| Variables | `camelCase`, `UPPER_CASE` for constants | `const userName`, `const MAX_RETRIES = 3` |
-| Functions | `camelCase` or `PascalCase` | `function getUser()`, `class VoiceOverDriver` |
-| Types/Interfaces | `PascalCase` | `interface DriverState`, `type VoResult` |
-| Enum members | `PascalCase` | `enum Status { Active, Inactive }` |
-| Private/internal | Leading underscore allowed | `_internalHelper()`, `_tempValue` |
+| Element          | Format                                  | Example                                       |
+| ---------------- | --------------------------------------- | --------------------------------------------- |
+| Variables        | `camelCase`, `UPPER_CASE` for constants | `const userName`, `const MAX_RETRIES = 3`     |
+| Functions        | `camelCase` or `PascalCase`             | `function getUser()`, `class VoiceOverDriver` |
+| Types/Interfaces | `PascalCase`                            | `interface DriverState`, `type VoResult`      |
+| Enum members     | `PascalCase`                            | `enum Status { Active, Inactive }`            |
+| Private/internal | Leading underscore allowed              | `_internalHelper()`, `_tempValue`             |
 
 ### General Style
 

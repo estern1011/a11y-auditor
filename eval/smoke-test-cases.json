@@ -6,9 +6,7 @@
     {
       "ruleId": "80af7b",
       "ruleName": "Focusable element has no keyboard trap",
-      "wcagCriteria": [
-        "2.1.2"
-      ],
+      "wcagCriteria": ["2.1.2"],
       "testCases": [
         {
           "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/80af7b/96eb4b26010e8c598cb659108dbc34ca0abd82f9.html",
@@ -25,9 +23,7 @@
     {
       "ruleId": "9bd38c",
       "ruleName": "Content has alternative for visual reference",
-      "wcagCriteria": [
-        "1.3.3"
-      ],
+      "wcagCriteria": ["1.3.3"],
       "testCases": [
         {
           "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/9bd38c/6edd8b8ec9bb14d8f35763e549f01cc21b3ef161.html",
@@ -44,9 +40,7 @@
     {
       "ruleId": "cf77f2",
       "ruleName": "Bypass Blocks of Repeated Content",
-      "wcagCriteria": [
-        "2.4.1"
-      ],
+      "wcagCriteria": ["2.4.1"],
       "testCases": [
         {
           "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/cf77f2/fa30de1d9c2d3a313f7f18bc4e2cf6843ea10a89.html",
@@ -63,9 +57,7 @@
     {
       "ruleId": "oj04fd",
       "ruleName": "Element in sequential focus order has visible focus",
-      "wcagCriteria": [
-        "2.4.7"
-      ],
+      "wcagCriteria": ["2.4.7"],
       "testCases": [
         {
           "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/oj04fd/52be6331dc0978990a8b806a9a4a84bf738a43e1.html",
@@ -82,9 +74,7 @@
     {
       "ruleId": "afw4f7",
       "ruleName": "Text has minimum contrast",
-      "wcagCriteria": [
-        "1.4.3"
-      ],
+      "wcagCriteria": ["1.4.3"],
       "testCases": [
         {
           "url": "https://www.w3.org/WAI/content-assets/wcag-act-rules/testcases/afw4f7/fd406bedf0bb3bdc4c2a718f49a3dd0f7aaa7556.html",

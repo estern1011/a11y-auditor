@@ -56,6 +56,7 @@ The bootstrap installs the repo to `$HOME/a11y-auditor` on the sprite
 node global bin directories to `~/.bashrc`.
 
 All commands on the sprite need this PATH prefix:
+
 ```bash
 sprite exec -s <name> -- bash -c 'export PATH="$HOME/.bun/bin:/.sprite/languages/node/nvm/versions/node/v22.20.0/bin:$PATH" && cd $HOME/a11y-auditor && COMMAND'
 ```
@@ -88,6 +89,7 @@ bun eval/queue-init.ts --cases eval/sample-test-cases.json
 ```
 
 This creates:
+
 ```
 /tmp/eval-queue/
   pending/     ← case files (URL + criterion, NO expected values)
@@ -100,6 +102,7 @@ This creates:
 ```
 
 Each case file contains only what the agent needs to audit:
+
 ```json
 {
   "id": 42,
@@ -132,17 +135,21 @@ Wait for `Server ready on http://127.0.0.1:7484` before proceeding.
 Launch one sub-agent per sprite. Each agent loops:
 
 1. **Claim** a case from the queue:
+
    ```bash
    f=$(ls /tmp/eval-queue/pending/ | head -1) \
      && mv /tmp/eval-queue/pending/$f /tmp/eval-queue/claimed/$f \
      && cat /tmp/eval-queue/claimed/$f
    ```
+
    If `pending/` is empty → done, exit.
 
 2. **Collect** evidence on the sprite:
+
    ```bash
    sprite exec -s <sprite> -- bash -c '... && bun eval/queue-collect.ts "URL" "axe,sr,screenshot"'
    ```
+
    This returns JSON with: redacted HTML, accessibility snapshot,
    axe results, SR transcripts (tab sequence, landmarks, headings,
    links). Page titles are automatically redacted to prevent bias.
@@ -156,6 +163,7 @@ Launch one sub-agent per sprite. Each agent loops:
      that the criterion governs (see applicability guide below)
 
 4. **Save** the verdict:
+
    ```json
    // /tmp/eval-queue/results/0042.json
    {
@@ -272,6 +280,7 @@ echo "Done:    $(ls /tmp/eval-queue/results/ | wc -l)"
 
 **Failure recovery:** If an agent dies, sweep stale claimed files
 back to pending:
+
 ```bash
 # Move anything in claimed/ back to pending/
 mv /tmp/eval-queue/claimed/*.json /tmp/eval-queue/pending/ 2>/dev/null
@@ -354,14 +363,14 @@ single tool to flag an issue.
 
 For each test case, compare our verdict against the expected outcome:
 
-| Our Verdict | Expected | Classification |
-|-------------|----------|----------------|
-| fail        | fail     | True Positive  |
-| pass        | pass     | True Negative  |
-| fail        | pass     | False Positive |
-| pass        | fail     | False Negative |
-| inapplicable | inapplicable | True Negative |
-| not_evaluated | any    | Not Evaluated  |
+| Our Verdict   | Expected     | Classification |
+| ------------- | ------------ | -------------- |
+| fail          | fail         | True Positive  |
+| pass          | pass         | True Negative  |
+| fail          | pass         | False Positive |
+| pass          | fail         | False Negative |
+| inapplicable  | inapplicable | True Negative  |
+| not_evaluated | any          | Not Evaluated  |
 
 #### Step 5: Produce results
 

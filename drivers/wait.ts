@@ -64,9 +64,10 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
     function selectorFor(el: Element): string {
       if (el.id) return `#${el.id}`;
       const tag = el.tagName.toLowerCase();
-      const cls = el.className && typeof el.className === "string"
-        ? `.${el.className.trim().split(/\s+/).slice(0, 2).join(".")}`
-        : "";
+      const cls =
+        el.className && typeof el.className === "string"
+          ? `.${el.className.trim().split(/\s+/).slice(0, 2).join(".")}`
+          : "";
       return `${tag}${cls}`;
     }
 
@@ -75,8 +76,9 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
       if (label) return label;
       const labelledBy = el.getAttribute("aria-labelledby");
       if (labelledBy) {
-        const resolved = labelledBy.split(/\s+/)
-          .map(id => document.getElementById(id)?.textContent?.trim() || "")
+        const resolved = labelledBy
+          .split(/\s+/)
+          .map((id) => document.getElementById(id)?.textContent?.trim() || "")
           .filter(Boolean)
           .join(" ");
         if (resolved) return resolved;
@@ -91,7 +93,7 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
 
     // aria-busy="true" elements
     const busyEls = Array.from(document.querySelectorAll('[aria-busy="true"]'));
-    const ariaBusyElements = busyEls.map(el => ({
+    const ariaBusyElements = busyEls.map((el) => ({
       selector: selectorFor(el),
       tagName: el.tagName.toLowerCase(),
       role: el.getAttribute("role"),
@@ -99,27 +101,29 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
 
     // aria-live regions (exclude aria-live="off" and non-announcing roles
     // like marquee/timer that don't communicate loading state)
-    const liveEls = Array.from(document.querySelectorAll(
-      '[aria-live], [role="status"], [role="alert"], [role="log"]'
-    )).filter(el => {
+    const liveEls = Array.from(
+      document.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"]'),
+    ).filter((el) => {
       const live = el.getAttribute("aria-live");
       return live !== "off";
     });
-    const liveRegions = liveEls.map(el => ({
+    const liveRegions = liveEls.map((el) => ({
       selector: selectorFor(el),
       tagName: el.tagName.toLowerCase(),
-      ariaLive: el.getAttribute("aria-live") || (
-        el.getAttribute("role") === "alert" ? "assertive" : "polite"
-      ),
+      ariaLive:
+        el.getAttribute("aria-live") ||
+        (el.getAttribute("role") === "alert" ? "assertive" : "polite"),
       role: el.getAttribute("role"),
       textContent: truncate(el.textContent || ""),
     }));
 
     // Status/progress roles
-    const statusEls = Array.from(document.querySelectorAll(
-      '[role="status"], [role="alert"], [role="progressbar"], [role="log"]'
-    ));
-    const statusRoles = statusEls.map(el => {
+    const statusEls = Array.from(
+      document.querySelectorAll(
+        '[role="status"], [role="alert"], [role="progressbar"], [role="log"]',
+      ),
+    );
+    const statusRoles = statusEls.map((el) => {
       const name = resolveAccessibleName(el);
       return {
         selector: selectorFor(el),
@@ -148,7 +152,7 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
     }
 
     // Check by aria-label
-    document.querySelectorAll("[aria-label]").forEach(el => {
+    document.querySelectorAll("[aria-label]").forEach((el) => {
       const label = el.getAttribute("aria-label") || "";
       if (loadingPatterns.test(label)) {
         addIndicator(el, label, "aria-label");
@@ -156,15 +160,24 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
     });
 
     // Check by role=progressbar
-    document.querySelectorAll('[role="progressbar"]').forEach(el => {
+    document.querySelectorAll('[role="progressbar"]').forEach((el) => {
       addIndicator(el, resolveAccessibleName(el), "role=progressbar");
     });
 
     // Check by class names
-    document.querySelectorAll("*").forEach(el => {
+    document.querySelectorAll("*").forEach((el) => {
       const cls = el.className && typeof el.className === "string" ? el.className : "";
       if (loadingPatterns.test(cls)) {
-        addIndicator(el, resolveAccessibleName(el), `class="${cls.trim().split(/\s+/).find(c => loadingPatterns.test(c)) || ""}"`);
+        addIndicator(
+          el,
+          resolveAccessibleName(el),
+          `class="${
+            cls
+              .trim()
+              .split(/\s+/)
+              .find((c) => loadingPatterns.test(c)) || ""
+          }"`,
+        );
       }
     });
 
@@ -174,11 +187,11 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
       issues.push(`${busyEls.length} element(s) with aria-busy="true"`);
     }
     if (loadingIndicators.length > 0) {
-      const unlabeled = loadingIndicators.filter(li => !li.hasAccessibleName);
+      const unlabeled = loadingIndicators.filter((li) => !li.hasAccessibleName);
       if (unlabeled.length > 0) {
         issues.push(`${unlabeled.length} loading indicator(s) WITHOUT accessible names`);
       }
-      const labeled = loadingIndicators.filter(li => li.hasAccessibleName);
+      const labeled = loadingIndicators.filter((li) => li.hasAccessibleName);
       if (labeled.length > 0) {
         issues.push(`${labeled.length} loading indicator(s) with accessible names`);
       }
@@ -189,9 +202,10 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
       issues.push("No aria-live regions to announce loading state to screen readers");
     }
 
-    const summary = issues.length > 0
-      ? `Loading state detected: ${issues.join("; ")}`
-      : "No loading indicators detected — page may be fully loaded or missing loading a11y";
+    const summary =
+      issues.length > 0
+        ? `Loading state detected: ${issues.join("; ")}`
+        : "No loading indicators detected — page may be fully loaded or missing loading a11y";
 
     return {
       hasAriaBusy: busyEls.length > 0,
@@ -302,7 +316,11 @@ export async function startObserver(
 
   // Re-inject after every navigation
   const onLoad = async () => {
-    try { await inject(); } catch { /* page may be closing */ }
+    try {
+      await inject();
+    } catch {
+      /* page may be closing */
+    }
   };
   page.on("load", onLoad);
 
@@ -328,9 +346,7 @@ export async function startObserver(
         active: state.active,
         settled: state.settled,
         mutationCount: state.mutationCount,
-        msSinceLastMutation: state.lastMutationTime > 0
-          ? now - state.lastMutationTime
-          : 0,
+        msSinceLastMutation: state.lastMutationTime > 0 ? now - state.lastMutationTime : 0,
         elapsed: now - state.startTime,
         settleMs: state.settleMs,
       };

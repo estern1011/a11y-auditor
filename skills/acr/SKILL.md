@@ -44,13 +44,13 @@ For each of the 55 WCAG 2.2 A+AA criteria in criteria.json:
 3. **If `testTools` is empty**, the criterion requires multi-page testing or input modalities we can't test — assign "Not Evaluated" and cite the `note` field.
 4. **Assign a conformance level:**
 
-| Conformance Level | When to Use |
-|---|---|
-| **Supports** | All related axe rules pass AND SR/manual testing confirms conformance. No known defects. |
-| **Partially Supports** | Some functionality meets the criterion but there are specific failures. |
-| **Does Not Support** | Majority of relevant functionality fails. |
-| **Not Applicable** | The criterion is not relevant to this product (e.g., no video content → 1.2.x N/A). |
-| **Not Evaluated** | The criterion was not tested. Be honest — this is better than a false "Supports". |
+| Conformance Level      | When to Use                                                                              |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| **Supports**           | All related axe rules pass AND SR/manual testing confirms conformance. No known defects. |
+| **Partially Supports** | Some functionality meets the criterion but there are specific failures.                  |
+| **Does Not Support**   | Majority of relevant functionality fails.                                                |
+| **Not Applicable**     | The criterion is not relevant to this product (e.g., no video content → 1.2.x N/A).      |
+| **Not Evaluated**      | The criterion was not tested. Be honest — this is better than a false "Supports".        |
 
 **Rules for assigning conformance levels:**
 
@@ -72,6 +72,7 @@ The "Remarks and Explanations" column is where the value lives. For each criteri
 - **Not Evaluated**: What would be needed. "Requires testing across multiple pages to verify consistent navigation order. Only one page was audited."
 
 **Remarks must cite evidence:**
+
 - axe rule IDs and violation counts
 - Screen reader transcript excerpts (quote the announcement)
 - Screenshot observations (describe what you saw)
@@ -100,48 +101,51 @@ Generate the ACR as a markdown file. Use this exact structure:
 ## Applicable Standards/Guidelines
 
 | Standard/Guideline | Included in Report |
-|---|---|
-| WCAG 2.2 Level A | Yes |
-| WCAG 2.2 Level AA | Yes |
-| WCAG 2.2 Level AAA | No |
+| ------------------ | ------------------ |
+| WCAG 2.2 Level A   | Yes                |
+| WCAG 2.2 Level AA  | Yes                |
+| WCAG 2.2 Level AAA | No                 |
 
 ## Terms
 
-| Term | Definition |
-|---|---|
-| Supports | The functionality of the product has at least one method that meets the criterion without known defects or meets with equivalent facilitation. |
-| Partially Supports | Some functionality of the product does not meet the criterion. |
-| Does Not Support | The majority of product functionality does not meet the criterion. |
-| Not Applicable | The criterion is not relevant to the product. |
-| Not Evaluated | The product has not been evaluated against the criterion. This can only be used in WCAG Level AAA criteria. |
+| Term               | Definition                                                                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Supports           | The functionality of the product has at least one method that meets the criterion without known defects or meets with equivalent facilitation. |
+| Partially Supports | Some functionality of the product does not meet the criterion.                                                                                 |
+| Does Not Support   | The majority of product functionality does not meet the criterion.                                                                             |
+| Not Applicable     | The criterion is not relevant to the product.                                                                                                  |
+| Not Evaluated      | The product has not been evaluated against the criterion. This can only be used in WCAG Level AAA criteria.                                    |
 
 ## WCAG 2.2 Report
 
 ### Table 1: Level A
 
-| Criteria | Conformance Level | Remarks and Explanations |
-|---|---|---|
-| [1.1.1 Non-text Content](https://www.w3.org/WAI/WCAG22/Understanding/non-text-content) | [level] | [remarks] |
-| ... | ... | ... |
+| Criteria                                                                               | Conformance Level | Remarks and Explanations |
+| -------------------------------------------------------------------------------------- | ----------------- | ------------------------ |
+| [1.1.1 Non-text Content](https://www.w3.org/WAI/WCAG22/Understanding/non-text-content) | [level]           | [remarks]                |
+| ...                                                                                    | ...               | ...                      |
 
 ### Table 2: Level AA
 
-| Criteria | Conformance Level | Remarks and Explanations |
-|---|---|---|
-| [1.2.4 Captions (Live)](https://www.w3.org/WAI/WCAG22/Understanding/captions-live) | [level] | [remarks] |
-| ... | ... | ... |
+| Criteria                                                                           | Conformance Level | Remarks and Explanations |
+| ---------------------------------------------------------------------------------- | ----------------- | ------------------------ |
+| [1.2.4 Captions (Live)](https://www.w3.org/WAI/WCAG22/Understanding/captions-live) | [level]           | [remarks]                |
+| ...                                                                                | ...               | ...                      |
 
 ## Summary
 
 **Overall Conformance:** [X of Y criteria Support, X Partially Support, X Do Not Support, X Not Applicable, X Not Evaluated]
 
 **Key Strengths:**
+
 - [What the product does well]
 
 **Key Issues:**
+
 - [Critical barriers, ordered by impact]
 
 **Recommendations:**
+
 - [Prioritized fixes]
 
 ## Limitations and Caveats
@@ -159,11 +163,11 @@ When the user has a previous ACR for the same product, generate a diff summary:
 ```markdown
 ## Changes Since Last Report ([Previous Date])
 
-| Criteria | Previous | Current | Change |
-|---|---|---|---|
-| 1.1.1 Non-text Content | Partially Supports | Supports | Improved |
-| 2.4.7 Focus Visible | Does Not Support | Partially Supports | Improved |
-| 4.1.2 Name, Role, Value | Supports | Partially Supports | Regressed |
+| Criteria                | Previous           | Current            | Change    |
+| ----------------------- | ------------------ | ------------------ | --------- |
+| 1.1.1 Non-text Content  | Partially Supports | Supports           | Improved  |
+| 2.4.7 Focus Visible     | Does Not Support   | Partially Supports | Improved  |
+| 4.1.2 Name, Role, Value | Supports           | Partially Supports | Regressed |
 
 **Improvements:** X criteria improved
 **Regressions:** X criteria regressed

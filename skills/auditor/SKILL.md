@@ -16,10 +16,10 @@ All commands run from the `a11y-auditor` project directory.
 
 This skill uses `{sr-driver}` as a placeholder for the screen reader driver path. Choose based on your OS:
 
-| OS    | `{sr-driver}`                  | Default CDP Port |
-|-------|--------------------------------|------------------|
-| macOS | `drivers/voiceover/driver.ts`  | 9222             |
-| Linux | `drivers/orca/driver.ts`       | 9223             |
+| OS    | `{sr-driver}`                 | Default CDP Port |
+| ----- | ----------------------------- | ---------------- |
+| macOS | `drivers/voiceover/driver.ts` | 9222             |
+| Linux | `drivers/orca/driver.ts`      | 9223             |
 
 The command interface is identical — `start`, `next`, `previous`, `act`, `press`, `perform`, `transcript`, `item-text`, `enter`, `stop` all work the same way. Replace `{sr-driver}` with the correct path in every command below.
 
@@ -216,7 +216,8 @@ bun {sr-driver} perform GO_TO_BEGINNING
 bun {sr-driver} perform FIND_NEXT_IMAGE      # repeat — check each image's name
 ```
 
-**For each image found:** verify alt text is *accurate*, not just present. Compare the announced name against what is visually depicted in a screenshot. Flag:
+**For each image found:** verify alt text is _accurate_, not just present. Compare the announced name against what is visually depicted in a screenshot. Flag:
+
 - Alt text that looks like a filename (e.g. `alt="img_3847.jpg"`)
 - Alt text that is clearly wrong (e.g. `alt="icecream.jpg"` on a space station photo)
 - Alt text that is nonsensical or unrelated to the image content
@@ -257,7 +258,8 @@ agent-browser --cdp 9222 eval "JSON.stringify({
 ```
 
 For each video/audio found:
-- **1.2.2 Captions:** Does a captions track exist for the `<video>`? For YouTube iframes, check if CC is available/enabled. Note: caption *accuracy* requires human verification via playback.
+
+- **1.2.2 Captions:** Does a captions track exist for the `<video>`? For YouTube iframes, check if CC is available/enabled. Note: caption _accuracy_ requires human verification via playback.
 - **1.2.1 Transcript:** Look for a text transcript linked near the media element — check surrounding DOM for `<a>` or `<details>` elements containing a transcript.
 - **1.2.3 / 1.2.5 Audio Description:** Check for a second video track with audio description, or a link to an audio-described version. This generally cannot be verified programmatically — flag for human review.
 
@@ -284,6 +286,7 @@ agent-browser --cdp 9222 screenshot && sleep 5 && agent-browser --cdp 9222 scree
 ```
 
 If content auto-advances:
+
 - Is there a pause, stop, or hide mechanism? Check for a visible pause button.
 - Does the mechanism actually work? Click it and re-check.
 - Content that moves for more than 5 seconds with no pause = 2.2.1 violation.
@@ -354,6 +357,7 @@ agent-browser --cdp 9222 eval "JSON.stringify({
 ```
 
 For each found issue:
+
 - **Orphaned label:** the `for` attribute points to an ID that doesn't exist — the label is not associated with any control.
 - **Unlabeled control:** no label, no aria-label, no aria-labelledby, no title — invisible to AT.
 - **Placeholder-only:** placeholder disappears on typing and is not a substitute for a label.
@@ -416,6 +420,7 @@ bun audit.ts "#widget-selector"
 ```
 
 **Menu/dropdown dismiss behavior (2.4.3, 2.4.7):** After opening any custom menu or dropdown:
+
 1. Press Escape — does it close?
 2. Press Tab — does it close, or does it trap focus?
 3. Take a screenshot — does the closed menu leave a visible overlay covering content beneath?
@@ -520,6 +525,7 @@ agent-browser --cdp 9222 hover @ref && agent-browser --cdp 9222 screenshot
 ```
 
 Check:
+
 - Can the hover content be dismissed with Escape? (`bun {sr-driver} press Escape` then screenshot)
 - Can you move the mouse over the tooltip itself without it disappearing?
 - Does it persist until dismissed (not on a short timer)?
@@ -530,21 +536,21 @@ Also check whether tooltip triggers are implemented as pseudo-links or `<span>` 
 
 Check these explicitly — don't assume they pass just because axe didn't flag them:
 
-| Criterion              | How to Check                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------- |
-| 1.1.1 Non-text Content | `FIND_NEXT_IMAGE` loop — verify alt text is **accurate**, not just present                        |
-| 1.2.2 Captions         | Phase 3 — check caption tracks; flag YouTube iframes for human review                            |
-| 1.2.3 Audio Desc.      | Phase 3 — check for audio description track or alternate version; human review required           |
-| 1.4.3 Contrast         | axe in Phase 1 (automated); check incomplete items manually                                       |
-| 2.1.1 Keyboard         | Phase 4 — enumerate every interactive element; verify each is Tab-reachable                       |
-| 2.2.1 Timing           | Phase 3 — check for auto-advancing carousels, auto-playing media; verify pause mechanism          |
-| 2.4.1 Bypass Blocks    | Check for skip nav link at top of page                                                            |
-| 2.4.2 Page Titled      | Check browser title is descriptive                                                                |
+| Criterion              | How to Check                                                                                       |
+| ---------------------- | -------------------------------------------------------------------------------------------------- |
+| 1.1.1 Non-text Content | `FIND_NEXT_IMAGE` loop — verify alt text is **accurate**, not just present                         |
+| 1.2.2 Captions         | Phase 3 — check caption tracks; flag YouTube iframes for human review                              |
+| 1.2.3 Audio Desc.      | Phase 3 — check for audio description track or alternate version; human review required            |
+| 1.4.3 Contrast         | axe in Phase 1 (automated); check incomplete items manually                                        |
+| 2.1.1 Keyboard         | Phase 4 — enumerate every interactive element; verify each is Tab-reachable                        |
+| 2.2.1 Timing           | Phase 3 — check for auto-advancing carousels, auto-playing media; verify pause mechanism           |
+| 2.4.1 Bypass Blocks    | Check for skip nav link at top of page                                                             |
+| 2.4.2 Page Titled      | Check browser title is descriptive                                                                 |
 | 2.4.4 Link Purpose     | `FIND_NEXT_LINK` loop — each link text meaningful in context? Check for repeated links to same URL |
-| 2.4.5 Multiple Ways    | Is there more than one way to reach this page? (nav, search, sitemap)                            |
-| 3.1.1 Language of Page | axe in Phase 1 (automated); verify `lang` attribute is present *and* correct                      |
-| 3.2.1 On Focus         | Tab through — does anything unexpected happen on focus alone?                                     |
-| 3.2.2 On Input         | Change form values — does anything unexpected happen?                                             |
+| 2.4.5 Multiple Ways    | Is there more than one way to reach this page? (nav, search, sitemap)                              |
+| 3.1.1 Language of Page | axe in Phase 1 (automated); verify `lang` attribute is present _and_ correct                       |
+| 3.2.1 On Focus         | Tab through — does anything unexpected happen on focus alone?                                      |
+| 3.2.2 On Input         | Change form values — does anything unexpected happen?                                              |
 
 **2.4.4 duplicate links check:**
 
@@ -590,6 +596,7 @@ bun {sr-driver} loading-state           # targeted 4.1.3 check
 ```
 
 This checks:
+
 - `aria-busy="true"` on containers being populated
 - Loading indicators (spinners, skeletons) and whether they have accessible names
 - `aria-live` regions, `role="status"`, `role="progressbar"` presence
@@ -656,6 +663,7 @@ bun {sr-driver} transcript --since N
 #### Loading state findings in the report
 
 Document loading state findings separately:
+
 - What the loading state looks like to AT users
 - Whether `aria-busy` was used correctly (set during load, cleared after)
 - Whether loading indicators had accessible names
@@ -696,7 +704,7 @@ Criteria you verified as passing, with brief evidence.
 
 **Could not test:**
 
-- Caption/audio description *accuracy* — requires media playback. Flag which videos had tracks present vs. absent; human must verify correctness.
+- Caption/audio description _accuracy_ — requires media playback. Flag which videos had tracks present vs. absent; human must verify correctness.
 - Multi-page flows you didn't navigate
 - States you couldn't trigger (specific error conditions, edge cases)
 - Cross-AT verification (you only tested one screen reader + browser combination)

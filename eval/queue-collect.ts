@@ -100,17 +100,15 @@ function redactAnswers(html: string): string {
   // 2. <h1>-<h6> tags
   // 3. Any visible text that matches the pattern
   // This prevents answer leakage from page content.
-  return html
-    .replace(ANSWER_PATTERN, "Test Page")
-    .replace(ANSWER_PATTERN_SHORT, "Test Page");
+  return html.replace(ANSWER_PATTERN, "Test Page").replace(ANSWER_PATTERN_SHORT, "Test Page");
 }
 
 // --- Main collection ---
 
 interface Evidence {
   url: string;
-  html: string;        // full page HTML with title redacted
-  snapshot: string;     // agent-browser accessibility snapshot
+  html: string; // full page HTML with title redacted
+  snapshot: string; // agent-browser accessibility snapshot
   axe?: {
     violations: any[];
     incomplete: any[];
@@ -118,11 +116,11 @@ interface Evidence {
     inapplicable: number;
   };
   sr?: {
-    onLoad: any[];      // what was announced on page load
-    tabSequence: any[];  // transcript after tabbing through page
-    landmarks: any[];    // FIND_NEXT_LANDMARK results
-    headings: any[];     // FIND_NEXT_HEADING results
-    links: any[];        // FIND_NEXT_LINK results
+    onLoad: any[]; // what was announced on page load
+    tabSequence: any[]; // transcript after tabbing through page
+    landmarks: any[]; // FIND_NEXT_LANDMARK results
+    headings: any[]; // FIND_NEXT_HEADING results
+    links: any[]; // FIND_NEXT_LINK results
   };
 }
 
@@ -211,10 +209,12 @@ try {
   console.log(JSON.stringify(evidence));
 } catch (err: any) {
   console.error(`Collection error: ${err.message}`);
-  console.log(JSON.stringify({
-    url,
-    html: "",
-    snapshot: "",
-    error: err.message,
-  }));
+  console.log(
+    JSON.stringify({
+      url,
+      html: "",
+      snapshot: "",
+      error: err.message,
+    }),
+  );
 }

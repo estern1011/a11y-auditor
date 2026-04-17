@@ -158,10 +158,10 @@ bun audit.ts --no-tree                # skip accessibility tree
 
 Pick your platform, then use the matching driver and ports throughout:
 
-| | `{sr-driver}` | CDP port | HTTP port |
-|---|---|---|---|
-| macOS | `drivers/voiceover/driver.ts` | 9222 | 7483 |
-| Linux | `drivers/orca/driver.ts` | 9223 | 7484 |
+|       | `{sr-driver}`                 | CDP port | HTTP port |
+| ----- | ----------------------------- | -------- | --------- |
+| macOS | `drivers/voiceover/driver.ts` | 9222     | 7483      |
+| Linux | `drivers/orca/driver.ts`      | 9223     | 7484      |
 
 ```bash
 # Terminal 1: start a session
@@ -209,15 +209,15 @@ The auditor skill prompt teaches Claude the methodology — which tool to use fo
 
 ## Troubleshooting
 
-| Problem                     | Fix                                                                           |
-| --------------------------- | ----------------------------------------------------------------------------- |
-| VoiceOver won't start       | Run `bunx @guidepup/setup` and restart terminal                               |
-| Orca won't start            | Run `bash drivers/orca/setup.sh check` to verify deps                         |
-| Stuck in browser chrome     | `bun {sr-driver} enter`                                                       |
-| Commands timing out         | Wake display (macOS), then `bun {sr-driver} kill` + `start`                   |
-| Daemon won't stop           | `bun {sr-driver} kill`                                                        |
-| CDP connection refused      | Check `bun {sr-driver} status` for the port                                   |
-| agent-browser can't connect | Use `--cdp 9222` (macOS) or `--cdp 9223` (Linux), or check driver status      |
+| Problem                     | Fix                                                                      |
+| --------------------------- | ------------------------------------------------------------------------ |
+| VoiceOver won't start       | Run `bunx @guidepup/setup` and restart terminal                          |
+| Orca won't start            | Run `bash drivers/orca/setup.sh check` to verify deps                    |
+| Stuck in browser chrome     | `bun {sr-driver} enter`                                                  |
+| Commands timing out         | Wake display (macOS), then `bun {sr-driver} kill` + `start`              |
+| Daemon won't stop           | `bun {sr-driver} kill`                                                   |
+| CDP connection refused      | Check `bun {sr-driver} status` for the port                              |
+| agent-browser can't connect | Use `--cdp 9222` (macOS) or `--cdp 9223` (Linux), or check driver status |
 
 Logs: `/tmp/vo-driver.log` (macOS), `/tmp/orca-driver.log` (Linux)
 
@@ -257,12 +257,12 @@ To evaluate a specific branch, tell the agent which branch to use.
 
 ### Eval tools
 
-| File                    | Purpose                                                    |
-| ----------------------- | ---------------------------------------------------------- |
-| `eval/queue-init.ts`    | Initialize eval queue from test cases                      |
-| `eval/queue-collect.ts` | On-sprite evidence collector with answer redaction          |
-| `eval/queue-score.ts`   | Score results against ground truth                         |
-| `eval/results-summary.md` | Summary of latest eval run                              |
+| File                      | Purpose                                            |
+| ------------------------- | -------------------------------------------------- |
+| `eval/queue-init.ts`      | Initialize eval queue from test cases              |
+| `eval/queue-collect.ts`   | On-sprite evidence collector with answer redaction |
+| `eval/queue-score.ts`     | Score results against ground truth                 |
+| `eval/results-summary.md` | Summary of latest eval run                         |
 
 ## Development
 

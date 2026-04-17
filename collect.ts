@@ -265,11 +265,13 @@ try {
   console.log(JSON.stringify(evidence, null, 2));
 } catch (err: any) {
   console.error(`Collection error: ${err.message}`);
-  console.log(JSON.stringify({
-    url,
-    html: "",
-    snapshot: "",
-    error: err.message,
-  }));
+  console.log(
+    JSON.stringify({
+      url,
+      html: "",
+      snapshot: "",
+      error: err.message,
+    }),
+  );
   process.exit(1);
 }

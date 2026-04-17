@@ -10,12 +10,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import { writeFileSync } from "fs";
 import type { ScreenReaderDriver } from "./interface.ts";
 import { runAxeAudit } from "../audit.ts";
-import {
-  checkLoadingState,
-  startObserver,
-  waitForSelector,
-  type ObserverHandle,
-} from "./wait.ts";
+import { checkLoadingState, startObserver, waitForSelector, type ObserverHandle } from "./wait.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
