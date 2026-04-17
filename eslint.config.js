@@ -86,7 +86,7 @@ export default ts.config(
     },
   },
   {
-    ignores: ["node_modules/**", "dist/**", "*.lock", "eslint.config.js"],
+    ignores: ["node_modules/**", "dist/**", "*.lock", "eslint.config.js", ".claude/**"],
   },
   prettier,
 );
