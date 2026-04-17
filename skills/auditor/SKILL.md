@@ -157,6 +157,39 @@ bun {sr-driver} enter && bun {sr-driver} perform GO_TO_BEGINNING && bun {sr-driv
 
 **When NOT to batch:** Don't batch when you need to read the output of one command before deciding what to do next (e.g., checking if a heading was found before looking for another).
 
+## Using sub-agents for heavy phases
+
+Three specialized sub-agents live at `.claude/agents/` for phases where the raw tool output — axe JSON, annotated screenshots, per-stop transcripts — would dominate your context. Delegate to them and work from their digest, not the raw evidence.
+
+| Phase                          | Sub-agent                | When to delegate                                                                           |
+| ------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------ |
+| Phase 1 (baseline) + 2–3 input | `baseline-collector`     | Every ACR page. One shot: runs `collect.ts` + second-pass `audit.ts`, returns a digest.    |
+| Phase 7 (visual vs. a11y tree) | `visual-cross-referencer`| Every ACR page after baseline is in. Returns mismatches only, not a full element listing.  |
+| Phase 4 (keyboard) + 6 (widgets)| `keyboard-walker`       | Every ACR page. Returns focus-order table + widget interaction results, screenshots saved. |
+
+**Invocation.** Use the `Agent` tool with `subagent_type` set to the agent name (if available in your session's enum) or `general-purpose` with the agent's SKILL file referenced inline. Pass `model: "sonnet"` unless the page is unusually complex. You are responsible for passing the inputs each agent's SKILL file specifies:
+
+- URL, sr-driver path, CDP port, HTTP port (every agent)
+- `stateful: true` for `baseline-collector` when you've set up DOM state (open modal, expanded accordion, SPA route reached by clicks, post-login view). The default is `false` and reloads the URL — which wipes the state you wanted audited.
+- `scope` (CSS selector) for `baseline-collector` and `visual-cross-referencer` when auditing a specific component
+- `widgets` list for `keyboard-walker` when you want widget-interaction coverage (disclosure / menu / dialog / tabs / accordion / combobox patterns)
+
+See each agent's SKILL file at `.claude/agents/` for the full input shape.
+
+**Delegate when**: a phase generates > ~5 KB of raw tool output that you'd otherwise have to hold in context while doing other work. Don't delegate iterative exploration — each sub-agent run is a fresh context, it can't resume.
+
+### Orchestrator verification — required before accepting a digest
+
+Sub-agent digests are *summaries*, not *verdicts*. They are often confidently wrong in ways that are invisible in the digest text. Before relaying a sub-agent's claim to the user or writing it into an ACR, run this checklist:
+
+1. **Diff the digest's URL against the input URL.** Each sub-agent now cites an "actual URL at capture" in its header. If that differs from the URL you passed in, the findings apply to the *actual* URL — not what you asked about. Marketing pages redirect, A/B features swap domains, `enter` can trigger lazy-load navigation. Never write a report under a URL the page didn't render.
+2. **Open at least one artifact per major claim.** A digest that says "axe found 7 violations" → `jq '.axe.violations | length' /tmp/baseline-*.json` to confirm the count. A digest claiming a visible/invisible focus indicator → Read the actual screenshot. A digest citing a specific element's outerHTML → grep it out of the snapshot. Don't trust the summary.
+3. **Know what each tool can't see.** Computed-style `outline:none` checks cannot see `:focus-visible` styles and will over-report suppression. axe-core misses ~60% of WCAG issues. Interactive-only a11y snapshots (`snapshot -i`) miss images, headings, landmarks. Discount sub-agent confidence accordingly.
+4. **Watch for extrapolation.** If a sub-agent walked 25 of 415 tab stops and concluded about "the page", clamp its conclusion to the walked region and note the gap. Same for any `aria-*` eval that only examined a subset.
+5. **If you can't verify a claim, don't restate it.** Say "I couldn't verify X — screenshot unreadable / artifact missing / tool limitation" and escalate to the user. A hedged finding is better than a confident wrong one.
+
+**This checklist is not optional.** The failure mode it prevents — orchestrator relays a sub-agent's wrong claim as a verdict — is exactly the way sub-agent-based audits produce reports that look thorough but are attribution-broken.
+
 ## Audit Workflow
 
 ### For QA (quick check of a feature)
@@ -171,6 +204,14 @@ bun {sr-driver} enter && bun {sr-driver} perform GO_TO_BEGINNING && bun {sr-driv
 ### For ACR/VPAT (systematic audit)
 
 For each representative page/flow, work through ALL phases below. Do not skip phases.
+
+**Where to delegate:**
+
+- Phase 1 (+ the structural slice of Phase 2) → `baseline-collector` sub-agent
+- Phase 4 + Phase 6 → `keyboard-walker` sub-agent
+- Phase 7 → `visual-cross-referencer` sub-agent
+
+Phases 3 (media), 5 (forms), 8 (criteria checklist), and any SPA loading-state work stay inline — they're iterative or too page-specific for a one-shot sub-agent. After each delegation, run the verification checklist in "Using sub-agents for heavy phases" above *before* incorporating the digest into your notes.
 
 #### Phase 1: Automated Baseline
 

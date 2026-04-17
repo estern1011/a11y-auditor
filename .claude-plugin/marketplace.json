@@ -16,7 +16,17 @@
         "axe-core",
         "audit"
       ],
-      "skills": ["./skills/vo-driver", "./skills/auditor"]
+      "skills": [
+        "./skills/auditor",
+        "./skills/acr",
+        "./skills/vo-driver",
+        "./skills/orca-driver"
+      ],
+      "agents": [
+        "./.claude/agents/baseline-collector.md",
+        "./.claude/agents/visual-cross-referencer.md",
+        "./.claude/agents/keyboard-walker.md"
+      ]
     }
   ]
 }
