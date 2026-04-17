@@ -120,10 +120,11 @@ For each widget:
 
    ```bash
    agent-browser --cdp <cdp-port> eval "document.querySelector('<widget.selector>').focus(); document.activeElement.tagName"
-   bun <sr-driver> --port <http-port> enter
    ```
 
    This sets DOM focus on the trigger but never dispatches a click. Confirm the `tagName` echo matches the expected element type.
+
+   **Do not call `bun <sr-driver> enter` here.** It may look like a harmless "make sure SR is in web content" step, but it isn't a no-op: Orca's `enter` does a real center-screen click via `focusBrowser()`, and VoiceOver's does a tab-walk to re-enter web content. Either will move DOM focus away from the element you just focused, so the subsequent `act` / arrow-key probes measure the wrong target. The orchestrator is documented as having called `enter` at session start; that's sufficient. Only re-run `enter` if a driver response explicitly reports `notInWebContent` or announces browser chrome — both are rare after a recent page load.
 
    Only fall back to SR navigation (`perform FIND_NEXT_BUTTON` etc.) if the selector doesn't resolve. Check supported `perform` commands for the current driver with `bun <sr-driver> --port <http-port> commands` if unsure.
 
