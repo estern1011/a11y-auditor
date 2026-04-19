@@ -194,10 +194,16 @@ Goal: Configure → Start in the UI actually launches an Orca run without the us
 - `server/dispatch.ts` implements `dispatchSprite(run)`:
   1. `sprite create <name> --skip-console`
   2. `cat eval/sprite-bootstrap.sh | sprite exec -s <name> -- bash -s -- <branch>`
-  3. `sprite exec -s <name> --dir ~/a11y-auditor -- env A11Y_RUN_ID=<id> A11Y_RUNS_DIR=<shared> bun run audit <url> ...`
+  3. `sprite exec -s <name> --dir ~/a11y-auditor -- env A11Y_RUNS_DIR=<shared> bun run audit <url> --run-id <id> ...`
   4. Optional: stream NDJSON back by tailing the sprite's run dir via `sprite exec ... tail -f`.
+- **Run ID contract.** `--run-id <id>` is the single canonical way to correlate a run with what `POST /api/runs` returned — used identically by local, sprite dispatch, and resume. No env-var alternative; the runner does not read `A11Y_RUN_ID`.
 - Run dir sharing: simplest first pass is "write inside the sprite, rsync back on completion." Upgrade to a live fuse mount or S3-backed runs dir later if needed.
-- Auth: for private URLs, `meta.json` carries optional headers/cookies the runner forwards to the driver's `start` command.
+- **Auth for private URLs.** Credentials (headers/cookies) **never** land in `meta.json` or any file served by the run-read endpoints, because `GET /api/runs/:id` exposes metadata to clients. Instead:
+  - UI submits credentials on `POST /api/runs` over HTTPS.
+  - Server holds them in-memory only for the duration of dispatch.
+  - For local runs: server writes them to a short-lived `.auth.env` in a mode-600 tmpdir, hands the user a `bun run audit <url> --auth-env <path>` command; runner reads the env on boot, unlinks the file, and passes headers to the driver's `start` command. Never written to `meta.json`.
+  - For sprite runs: server pipes them as `sprite exec ... env A11Y_AUTH_HEADERS=<json> ...` — only in the sprite process environment, not persisted.
+  - `meta.json` records `{ authProvided: true }` at most; transcripts, screenshots, and event logs must be scrubbed for header/cookie values before write.
 
 ## Phase C — live observer
 
@@ -249,7 +255,7 @@ To resolve before or during Phase A:
 - **Driver port allocation.** Default ports are 9222 (VoiceOver) and 9223 (Orca) — concurrent runs on one host will collide. Proposal: the runner picks a free port at boot, writes it to `meta.json`, and passes it to the driver as `--cdp-port`. Requires adding a `--cdp-port` flag to both driver scripts.
 - **Cancel / timeout.** No user-triggered cancel from the UI and no per-node timeout. LangGraph runs can hang on a stuck agent. Proposal: `DELETE /api/runs/:id` sends SIGTERM (local) / `sprite exec … kill` (sprite); each node carries a `timeoutMs` that the runner enforces via `AbortSignal`.
 - **Cost envelope.** Each run fans out to ~3 Agent SDK sessions plus the `auth` session when triggered. No per-run token cap or cost estimate. Proposal: runner accumulates usage into state, emits a `budget` event line, and aborts above a configurable ceiling.
-- **Auth node security.** The plan currently describes the `auth` node as "Claude Agent SDK session to complete a login flow" — that's hand-wavy for credential handling. Needs a dedicated design note before it ships: where credentials come from, how they're scoped, whether the session records them in `transcript.json`, how they're scrubbed from screenshots.
+- **Auth node security (interactive login).** Phase B's auth handling covers static headers/cookies. The `auth` *node* is a different case: a Claude Agent SDK session that *types* into a login form. Needs a dedicated design note: where the password comes from (same in-memory channel as Phase B headers?), how the agent is prevented from logging it into `transcript.json` or emitting it in a tool-call argument event, and how screenshots taken mid-login are scrubbed.
 
 ## Risks
 
