@@ -49,7 +49,7 @@ A Claude Design bundle was fetched from the provided `api.anthropic.com/v1/desig
                  │                                 │
      ┌───────────▼──────────────┐     ┌────────────▼─────────────┐
      │  Local runner (macOS)    │     │  Sprite runner (Linux)   │
-     │  bun runner/index.ts     │     │  sprite exec ... bun     │
+     │  bun run audit <url>     │     │  sprite exec ... bun     │
      │  VoiceOver + Chromium    │     │  Orca + Xvfb + Chromium  │
      └───────────┬──────────────┘     └────────────┬─────────────┘
                  │                                 │
@@ -146,7 +146,7 @@ Goal: full UI reads from on-disk run dirs. Runner replaces the "SKILL.md read by
 
 ### Runner (new `runner/`)
 
-- `runner/index.ts` — CLI: `bun runner/index.ts <url> [--wcag AA] [--viewport 1440x900] [--sr voiceover|orca] [--run-id <id>]`. Creates a run dir, writes `meta.json`, compiles + invokes the LangGraph graph, streams events to `events.ndjson`.
+- `runner/index.ts` — CLI behind `bun run audit`: `bun run audit <url> [--wcag AA] [--viewport 1440x900] [--sr voiceover|orca] [--run-id <id>]`. Creates a run dir, writes `meta.json`, compiles + invokes the LangGraph graph, streams events to `events.ndjson`. The `package.json` `audit` script is the only user-facing entrypoint; `bun runner/index.ts` is an implementation detail.
 - `runner/graph.ts` — LangGraph `StateGraph` definition (see above).
 - `runner/state.ts` — typed `Annotation.Root` state schema.
 - `runner/nodes/` — one file per node: `boot.ts`, `discover.ts`, `auth.ts`, `baseline.ts`, `keyboard.ts`, `visual.ts`, `report.ts`.
@@ -162,7 +162,7 @@ Goal: full UI reads from on-disk run dirs. Runner replaces the "SKILL.md read by
   - `GET /api/runs/:id/{events,findings,markers,transcript}`
   - `GET /api/runs/:id/artifacts/*`
   - `POST /api/runs` → dispatch. Body: `{ url, sr: 'voiceover'|'orca', ... }`.
-    - If `sr === 'orca'`: spawn `sprite exec -s <name> ... bun runner/index.ts <url> --run-id <id>`. Returns run-id.
+    - If `sr === 'orca'`: spawn `sprite exec -s <name> ... bun run audit <url> --run-id <id>`. Returns run-id.
     - If `sr === 'voiceover'`: returns run-id + a copy-pasteable launch command for the user's local Mac. (Can't drive the Mac remotely.)
   - Static fallback → `web/dist`.
 - `server/runs.ts` — run-dir helpers.
@@ -180,7 +180,7 @@ Vite + React + TS. Ports the prototype verbatim then swaps mock data for API cal
 
 ### Claude Code skill entry point
 
-- `skills/auditor/SKILL.md` — reduced to a short instruction: "To audit `<url>`: run `bun runner/index.ts <url>` from the repo. Report the run-id. The UI shows progress." Preserves the familiar `/auditor` affordance but delegates to the runner.
+- `skills/auditor/SKILL.md` — reduced to a short instruction: "To audit `<url>`: run `bun run audit <url>` from the repo. Report the run-id. The UI shows progress." Preserves the familiar `/auditor` affordance but delegates to the runner.
 
 ### De-scoping (Phase A)
 
@@ -194,7 +194,7 @@ Goal: Configure → Start in the UI actually launches an Orca run without the us
 - `server/dispatch.ts` implements `dispatchSprite(run)`:
   1. `sprite create <name> --skip-console`
   2. `cat eval/sprite-bootstrap.sh | sprite exec -s <name> -- bash -s -- <branch>`
-  3. `sprite exec -s <name> --dir ~/a11y-auditor -- env A11Y_RUN_ID=<id> A11Y_RUNS_DIR=<shared> bun runner/index.ts <url> ...`
+  3. `sprite exec -s <name> --dir ~/a11y-auditor -- env A11Y_RUN_ID=<id> A11Y_RUNS_DIR=<shared> bun run audit <url> ...`
   4. Optional: stream NDJSON back by tailing the sprite's run dir via `sprite exec ... tail -f`.
 - Run dir sharing: simplest first pass is "write inside the sprite, rsync back on completion." Upgrade to a live fuse mount or S3-backed runs dir later if needed.
 - Auth: for private URLs, `meta.json` carries optional headers/cookies the runner forwards to the driver's `start` command.
@@ -202,9 +202,9 @@ Goal: Configure → Start in the UI actually launches an Orca run without the us
 ## Phase C — live observer
 
 - `GET /api/runs/:id/stream` (SSE) — tails `events.ndjson`, pushes new lines. Closes on `{k:'done'}`.
-- `GET /api/runs/:id/screencast` (WS) — opens CDP on the run's driver port (stored in `meta.json`), calls `Page.startScreencast`, relays frames. Only valid while the run is live.
-  - For local (VoiceOver) runs: the server connects to `localhost:9222` on the same machine.
-  - For sprite (Orca) runs: server connects via a port-forwarded CDP endpoint (`sprite port-forward`).
+- `GET /api/runs/:id/screencast` (WS) — reads `driverPort` from the run's `meta.json`, opens CDP on that port, calls `Page.startScreencast`, relays frames. Only valid while the run is live. Both paths resolve the port from run metadata — no defaults are hardcoded, so the port-allocation scheme proposed under Open Questions works transparently:
+  - For local (VoiceOver) runs: the server connects to `localhost:${driverPort}` on the same machine.
+  - For sprite (Orca) runs: the server establishes `sprite port-forward <name> ${driverPort}` and connects to the forwarded local endpoint.
 - Web switches Run view to SSE when `status === 'running'`; replays history then streams new events. VncViewer becomes a real screencast client.
 
 ## Critical files
