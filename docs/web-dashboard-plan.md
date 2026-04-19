@@ -66,7 +66,9 @@ A Claude Design bundle was fetched from the provided `api.anthropic.com/v1/desig
                     └─────────────────────────┘
 ```
 
-The runner is the same binary in both environments. Local runs are invoked by the user (`bun run audit <url>` or `/auditor <url>` in Claude Code, which delegates); sprite runs are dispatched by the server via `sprite exec`.
+The runner is the same binary in both environments. Sprite runs are dispatched by the server via `sprite exec`. Local (macOS + VoiceOver) runs cannot be dispatched remotely — the server hands the user a copy-pasteable `bun run audit <url>` command, the user runs it on their Mac, and the runner writes into the local `$A11Y_RUNS_DIR` which the same-host server then reads.
+
+Run directories are per-environment: the Mac runner writes to the Mac's filesystem, the sprite runner writes to the sprite's filesystem. For Orca runs the server reconciles the sprite's run dir back (rsync on completion; Phase C may push NDJSON line-by-line).
 
 ## LangGraph graph
 
@@ -80,35 +82,37 @@ boot ──► discover ──► baseline ──► keyboard ──► visual �
 
 ### State schema (`runner/state.ts`)
 
-Typed state channels via `Annotation.Root`. Each node returns a partial update; reducers merge:
+Illustrative shape — actual code is source of truth. Typed state channels via `Annotation.Root`; each node returns a partial update and reducers merge:
 
 ```ts
 export const State = Annotation.Root({
-  url: Annotation<string>,
-  sr: Annotation<'voiceover' | 'orca'>,
-  driverPort: Annotation<number>,
+  url: Annotation<string>({ reducer: (_, b) => b, default: () => '' }),
+  sr: Annotation<'voiceover' | 'orca'>({ reducer: (_, b) => b, default: () => 'orca' }),
+  driverPort: Annotation<number>({ reducer: (_, b) => b, default: () => 0 }),
   findings: Annotation<Finding[]>({ reducer: (a, b) => [...a, ...b], default: () => [] }),
   transcript: Annotation<TranscriptLine[]>({ reducer: (a, b) => [...a, ...b], default: () => [] }),
   artifacts: Annotation<Record<string, string>>({ reducer: (a, b) => ({ ...a, ...b }), default: () => ({}) }),
-  phaseStatus: Annotation<Record<PhaseId, 'pending' | 'running' | 'done' | 'skipped' | 'failed'>>({
+  phaseStatus: Annotation<Record<PhaseId, PhaseStatus>>({
     reducer: (a, b) => ({ ...a, ...b }),
     default: () => ({ boot: 'pending', discover: 'pending', baseline: 'pending', keyboard: 'pending', visual: 'pending', report: 'pending' }),
   }),
   // agent-decided signals used by conditional edges:
-  needsAuth: Annotation<boolean>,
-  hasInteractive: Annotation<boolean>,
-  treeEmpty: Annotation<boolean>,
+  needsAuth: Annotation<boolean>({ reducer: (_, b) => b, default: () => false }),
+  hasInteractive: Annotation<boolean>({ reducer: (_, b) => b, default: () => true }),
+  treeEmpty: Annotation<boolean>({ reducer: (_, b) => b, default: () => false }),
 });
 ```
 
 ### Graph definition (`runner/graph.ts`)
+
+Illustrative — real edges live in code. The "skip" annotations in the ASCII diagram above are upstream branch decisions: `baseline` decides whether `keyboard` runs, and whichever of `{baseline, keyboard}` hands off last decides whether `visual` runs.
 
 ```ts
 const g = new StateGraph(State)
   .addNode('boot', bootNode)           // tool: start SR driver, write meta.json
   .addNode('discover', discoverNode)   // tool: collect.ts → writes state.artifacts + transcript
   .addNode('auth', authNode)           // agent: Claude Agent SDK session to complete a login flow
-  .addNode('baseline', baselineNode)   // agent: baseline-collector (existing .claude/agents file)
+  .addNode('baseline', baselineNode)   // agent: baseline-collector
   .addNode('keyboard', keyboardNode)   // agent: keyboard-walker
   .addNode('visual', visualNode)       // agent: visual-cross-referencer
   .addNode('report', reportNode)       // tool: write findings.json + markers.json
@@ -116,9 +120,10 @@ const g = new StateGraph(State)
   .addEdge('boot', 'discover')
   .addConditionalEdges('discover', s => s.needsAuth ? 'auth' : 'baseline')
   .addEdge('auth', 'baseline')
-  .addConditionalEdges('baseline', s => s.hasInteractive ? 'keyboard' : 'visual')
-  .addEdge('keyboard', 'visual')
-  .addConditionalEdges('visual', s => s.treeEmpty ? 'report' : 'report')
+  .addConditionalEdges('baseline', s =>
+    s.hasInteractive ? 'keyboard' : (s.treeEmpty ? 'report' : 'visual'))
+  .addConditionalEdges('keyboard', s => s.treeEmpty ? 'report' : 'visual')
+  .addEdge('visual', 'report')
   .addEdge('report', END);
 
 export const graph = g.compile({ checkpointer });
@@ -235,6 +240,16 @@ Phase B:
 Phase C:
 - Local VoiceOver run: timeline fills in real time via SSE; VNC tab shows live Chromium at >5fps.
 - Sprite Orca run: same, via port-forwarded CDP.
+
+## Open questions
+
+To resolve before or during Phase A:
+
+- **Secrets flow.** Every agent node needs `ANTHROPIC_API_KEY`. Where does the key live for (a) local Mac runs, (b) sprite runs dispatched by the server, (c) the server itself? Candidates: `.env` read by the runner for local; `sprite` env vars piped through dispatch for cloud; server reads from its own host env, never echoes to the UI.
+- **Driver port allocation.** Default ports are 9222 (VoiceOver) and 9223 (Orca) — concurrent runs on one host will collide. Proposal: the runner picks a free port at boot, writes it to `meta.json`, and passes it to the driver as `--cdp-port`. Requires adding a `--cdp-port` flag to both driver scripts.
+- **Cancel / timeout.** No user-triggered cancel from the UI and no per-node timeout. LangGraph runs can hang on a stuck agent. Proposal: `DELETE /api/runs/:id` sends SIGTERM (local) / `sprite exec … kill` (sprite); each node carries a `timeoutMs` that the runner enforces via `AbortSignal`.
+- **Cost envelope.** Each run fans out to ~3 Agent SDK sessions plus the `auth` session when triggered. No per-run token cap or cost estimate. Proposal: runner accumulates usage into state, emits a `budget` event line, and aborts above a configurable ceiling.
+- **Auth node security.** The plan currently describes the `auth` node as "Claude Agent SDK session to complete a login flow" — that's hand-wavy for credential handling. Needs a dedicated design note before it ships: where credentials come from, how they're scoped, whether the session records them in `transcript.json`, how they're scrubbed from screenshots.
 
 ## Risks
 
