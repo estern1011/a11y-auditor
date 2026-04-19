@@ -66,7 +66,7 @@ A Claude Design bundle was fetched from the provided `api.anthropic.com/v1/desig
                     └─────────────────────────┘
 ```
 
-The runner is the same binary in both environments. Sprite runs are dispatched by the server via `sprite exec`. Local (macOS + VoiceOver) runs cannot be dispatched remotely — the server hands the user a copy-pasteable `bun run audit <url>` command, the user runs it on their Mac, and the runner writes into the local `$A11Y_RUNS_DIR` which the same-host server then reads.
+The runner is the same binary in both environments. Sprite runs are dispatched by the server via `sprite exec`. Local (macOS + VoiceOver) runs cannot be dispatched remotely — the server hands the user a copy-pasteable `bun run audit <url> --run-id <id>` command (with the server-issued run-id already baked in), the user runs it on their Mac, and the runner writes into the local `$A11Y_RUNS_DIR` which the same-host server then reads.
 
 Run directories are per-environment: the Mac runner writes to the Mac's filesystem, the sprite runner writes to the sprite's filesystem. For Orca runs the server reconciles the sprite's run dir back (rsync on completion; Phase C may push NDJSON line-by-line).
 
@@ -163,7 +163,7 @@ Goal: full UI reads from on-disk run dirs. Runner replaces the "SKILL.md read by
   - `GET /api/runs/:id/artifacts/*`
   - `POST /api/runs` → dispatch. Body: `{ url, sr: 'voiceover'|'orca', ... }`.
     - If `sr === 'orca'`: spawn `sprite exec -s <name> ... bun run audit <url> --run-id <id>`. Returns run-id.
-    - If `sr === 'voiceover'`: returns run-id + a copy-pasteable launch command for the user's local Mac. (Can't drive the Mac remotely.)
+    - If `sr === 'voiceover'`: returns `{ runId, launchCommand: "bun run audit <url> --run-id <id> [--auth-env <path>]" }` for the user to paste into a local terminal. (Can't drive the Mac remotely.) `--run-id` is always included so the local run shares the ID the UI is already tracking.
   - Static fallback → `web/dist`.
 - `server/runs.ts` — run-dir helpers.
 - `server/dispatch.ts` — sprite dispatch (wraps `sprite` CLI).
@@ -198,11 +198,11 @@ Goal: Configure → Start in the UI actually launches an Orca run without the us
   4. Optional: stream NDJSON back by tailing the sprite's run dir via `sprite exec ... tail -f`.
 - **Run ID contract.** `--run-id <id>` is the single canonical way to correlate a run with what `POST /api/runs` returned — used identically by local, sprite dispatch, and resume. No env-var alternative; the runner does not read `A11Y_RUN_ID`.
 - Run dir sharing: simplest first pass is "write inside the sprite, rsync back on completion." Upgrade to a live fuse mount or S3-backed runs dir later if needed.
-- **Auth for private URLs.** Credentials (headers/cookies) **never** land in `meta.json` or any file served by the run-read endpoints, because `GET /api/runs/:id` exposes metadata to clients. Instead:
+- **Auth for private URLs.** Credentials (headers/cookies) **never** land in `meta.json` or any file served by the run-read endpoints, because `GET /api/runs/:id` exposes metadata to clients. Both paths use the same shape — a mode-600 secret file that the runner reads once and unlinks — and never expose credentials as command-line args or inline env assignments (both visible via `ps` and typically logged by orchestration layers):
   - UI submits credentials on `POST /api/runs` over HTTPS.
   - Server holds them in-memory only for the duration of dispatch.
-  - For local runs: server writes them to a short-lived `.auth.env` in a mode-600 tmpdir, hands the user a `bun run audit <url> --auth-env <path>` command; runner reads the env on boot, unlinks the file, and passes headers to the driver's `start` command. Never written to `meta.json`.
-  - For sprite runs: server pipes them as `sprite exec ... env A11Y_AUTH_HEADERS=<json> ...` — only in the sprite process environment, not persisted.
+  - For local runs: server writes them to a short-lived `.auth.env` in a mode-600 tmpdir, hands the user a `bun run audit <url> --run-id <id> --auth-env <path>` command. Runner reads the file on boot, unlinks it, and passes headers to the driver's `start` command.
+  - For sprite runs: server streams the secret over stdin into the sprite (`echo "<json>" | sprite exec -s <name> -- sh -c 'umask 077; cat > /run/a11y/.auth.env'`), then separately issues `sprite exec ... bun run audit <url> --run-id <id> --auth-env /run/a11y/.auth.env`. The secret never appears on a command line or in an inline `env VAR=...` assignment, so it stays out of sprite command-audit logs. Runner unlinks the file after reading.
   - `meta.json` records `{ authProvided: true }` at most; transcripts, screenshots, and event logs must be scrubbed for header/cookie values before write.
 
 ## Phase C — live observer
