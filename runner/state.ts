@@ -1,13 +1,6 @@
 import { Annotation } from "@langchain/langgraph";
 
-export type PhaseId =
-  | "boot"
-  | "discover"
-  | "auth"
-  | "baseline"
-  | "keyboard"
-  | "visual"
-  | "report";
+export type PhaseId = "boot" | "discover" | "auth" | "baseline" | "keyboard" | "visual" | "report";
 
 export type PhaseStatus = "pending" | "running" | "ok" | "skip" | "error";
 
@@ -72,7 +65,9 @@ export const State = Annotation.Root({
     reducer: (a, b) => ({ ...a, ...b }),
     default: () => ({}),
   }),
-  phaseStatus: Annotation<Record<PhaseId, PhaseStatus>>({
+  // Update type is Partial so nodes can post single-key updates like
+  // { baseline: "ok" } without having to restate every other phase's status.
+  phaseStatus: Annotation<Record<PhaseId, PhaseStatus>, Partial<Record<PhaseId, PhaseStatus>>>({
     reducer: (a, b) => ({ ...a, ...b }),
     default: () => ({
       boot: "pending",

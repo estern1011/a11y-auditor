@@ -12,12 +12,20 @@
  *   bun collect.ts https://example.com --tools axe,sr,screenshot
  *   bun collect.ts https://example.com --port 7483 --cdp-port 9222
  *   bun collect.ts https://example.com --tabs 15
+ *   bun collect.ts https://example.com --out runs/abc
  *
- * Outputs JSON to stdout with collected evidence.
+ * Outputs:
+ *   Default: JSON to stdout with full evidence envelope.
+ *   With --out <dir>: writes <dir>/evidence.json (thin manifest) and
+ *     <dir>/artifacts/{html.html,snapshot.txt,screenshot.png,axe.json},
+ *     printing only the evidence.json path to stdout. Used by the LangGraph
+ *     runner so large blobs never pass through a pipe.
  * The driver must already be running (bun {sr-driver} start <url>).
  */
 
 import { parseArgs } from "util";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { DEFAULT_PORT as VO_PORT, DEFAULT_CDP_PORT as VO_CDP } from "./drivers/voiceover/core.ts";
 import { DEFAULT_PORT as ORCA_PORT, DEFAULT_CDP_PORT as ORCA_CDP } from "./drivers/orca/core.ts";
 
@@ -40,6 +48,7 @@ const { values, positionals } = parseArgs({
     "cdp-port": { type: "string", default: String(DEFAULT_CDP_PORT) },
     tools: { type: "string", default: "axe,sr,screenshot" },
     tabs: { type: "string", default: "10" },
+    out: { type: "string" },
     help: { type: "boolean", default: false },
   },
 });
@@ -58,10 +67,17 @@ Options:
   --cdp-port <port>       CDP port for agent-browser (default: ${DEFAULT_CDP_PORT})
   --tools <tools>         Comma-separated: axe,sr,screenshot (default: all three)
   --tabs <n>              Number of Tab presses for keyboard nav (default: 10)
+  --out <dir>             Write evidence.json + artifacts/* to dir instead of
+                          printing full evidence JSON to stdout. Only the
+                          evidence.json path is printed on stdout. Used by the
+                          LangGraph runner.
   --help                  Show this help
 
 Output:
-  JSON to stdout with: html, snapshot, axe results, sr transcripts, screenshot.
+  Without --out: JSON to stdout with: html, snapshot, axe results, sr transcripts, screenshot.
+  With --out <dir>: writes <dir>/evidence.json (thin manifest with relative
+    artifact paths, inline SR transcripts, and a needsAuth heuristic) plus
+    <dir>/artifacts/{html.html,snapshot.txt,screenshot.png,axe.json}.
   Designed to give the auditor a complete baseline in one command — interpret
   the evidence with AI reasoning rather than running 15+ individual tool calls.`);
   process.exit(0);
@@ -72,6 +88,7 @@ const port = parseInt(values.port!, 10);
 const cdpPort = parseInt(values["cdp-port"]!, 10);
 const tools = values.tools!.split(",").filter(Boolean);
 const tabCount = parseInt(values.tabs!, 10);
+const outDir = values.out ? resolve(values.out) : undefined;
 
 // ---------------------------------------------------------------------------
 // Driver helpers
@@ -257,21 +274,100 @@ async function collect(): Promise<Evidence> {
 }
 
 // ---------------------------------------------------------------------------
+// Evidence manifest (on-disk shape written with --out)
+// ---------------------------------------------------------------------------
+
+interface EvidenceManifest {
+  url: string;
+  /** Relative-to-outDir paths for the large blobs. */
+  artifacts: Record<string, string>;
+  /** Inline SR transcripts (small, structured). */
+  sr?: Evidence["sr"];
+  /** Cheap heuristics the runner uses to route the graph. */
+  signals: { needsAuth: boolean };
+}
+
+function detectNeedsAuth(ev: Evidence): boolean {
+  // Path-level heuristic: common auth routes.
+  let path = "";
+  try {
+    path = new URL(ev.url).pathname.toLowerCase();
+  } catch {
+    // Non-absolute URL — skip URL check.
+  }
+  if (/(^|\/)(login|signin|sign-in|log-in|auth|authenticate|account\/login)(\/|$)/.test(path)) {
+    return true;
+  }
+  // DOM-level heuristic: a password input signals a login form on the page.
+  if (/<input\b[^>]*\btype\s*=\s*["']?password\b/i.test(ev.html)) return true;
+  return false;
+}
+
+async function writeEvidenceToDir(ev: Evidence, dir: string): Promise<string> {
+  const artDir = join(dir, "artifacts");
+  await mkdir(artDir, { recursive: true });
+
+  const artifacts: Record<string, string> = {};
+
+  await writeFile(join(artDir, "html.html"), ev.html, "utf8");
+  artifacts.html = "artifacts/html.html";
+
+  await writeFile(join(artDir, "snapshot.txt"), ev.snapshot, "utf8");
+  artifacts.snapshot = "artifacts/snapshot.txt";
+
+  if (ev.screenshot) {
+    const m = /^data:image\/png;base64,(.+)$/.exec(ev.screenshot);
+    if (m) {
+      await writeFile(join(artDir, "screenshot.png"), Buffer.from(m[1], "base64"));
+      artifacts.screenshot = "artifacts/screenshot.png";
+    } else {
+      // agent-browser returned something other than a png data URL — persist
+      // the raw string so the failure is inspectable rather than silently lost.
+      await writeFile(join(artDir, "screenshot.txt"), ev.screenshot, "utf8");
+      artifacts.screenshot = "artifacts/screenshot.txt";
+    }
+  }
+
+  if (ev.axe) {
+    await writeFile(join(artDir, "axe.json"), JSON.stringify(ev.axe, null, 2) + "\n", "utf8");
+    artifacts.axe = "artifacts/axe.json";
+  }
+
+  const manifest: EvidenceManifest = {
+    url: ev.url,
+    artifacts,
+    sr: ev.sr,
+    signals: { needsAuth: detectNeedsAuth(ev) },
+  };
+
+  const manifestPath = join(dir, "evidence.json");
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+  return manifestPath;
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 try {
   const evidence = await collect();
-  console.log(JSON.stringify(evidence, null, 2));
+  if (outDir) {
+    const manifestPath = await writeEvidenceToDir(evidence, outDir);
+    process.stdout.write(manifestPath + "\n");
+  } else {
+    console.log(JSON.stringify(evidence, null, 2));
+  }
 } catch (err: any) {
   console.error(`Collection error: ${err.message}`);
-  console.log(
-    JSON.stringify({
-      url,
-      html: "",
-      snapshot: "",
-      error: err.message,
-    }),
-  );
+  if (!outDir) {
+    console.log(
+      JSON.stringify({
+        url,
+        html: "",
+        snapshot: "",
+        error: err.message,
+      }),
+    );
+  }
   process.exit(1);
 }

@@ -9,5 +9,12 @@
     "types": ["bun-types"],
     "skipLibCheck": true
   },
-  "include": ["*.ts", "drivers/**/*.ts", "platform/**/*.ts", "types/**/*.d.ts", "eslint.config.js"]
+  "include": [
+    "*.ts",
+    "drivers/**/*.ts",
+    "platform/**/*.ts",
+    "runner/**/*.ts",
+    "types/**/*.d.ts",
+    "eslint.config.js"
+  ]
 }
