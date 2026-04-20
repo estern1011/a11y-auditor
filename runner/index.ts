@@ -12,6 +12,7 @@ import {
   writeMeta,
 } from "./tools/run-dir.ts";
 import { serialize, now, type RunnerEvent } from "./events.ts";
+import { startDriver, type StartDriverResult } from "./tools/driver.ts";
 
 const SCAFFOLD_BANNER =
   "WARNING: runner/ is scaffold-only. Tool/agent nodes return empty results; " +
@@ -100,12 +101,21 @@ async function main() {
 
   // From here on every exit path emits a terminal `done` event so downstream
   // consumers never see a run dir that was opened but never marked complete.
+  // driverHandle lives outside try so both success and failure paths reap the
+  // spawned daemon — otherwise back-to-back runs would leak ports and zombies.
+  let driverHandle: StartDriverResult | null = null;
   try {
     if (opts.authEnv) {
       // Presence check only; the auth node (pending) is responsible for reading
       // and unlinking the file per plan § Phase B auth handling.
       await access(opts.authEnv);
     }
+
+    driverHandle = await startDriver({
+      sr: opts.sr,
+      url: opts.url,
+      viewport: opts.viewport,
+    });
 
     const graph = buildGraph();
     try {
@@ -123,6 +133,8 @@ async function main() {
       viewport: opts.viewport,
       runDir,
       authEnvPath: opts.authEnv,
+      driverPort: driverHandle.driverPort,
+      cdpPort: driverHandle.cdpPort,
     });
     void finalState;
     await emit({ k: "done", t: now(), ok: true });
@@ -131,8 +143,12 @@ async function main() {
     const message = err instanceof Error ? err.message : String(err);
     await emit({ k: "done", t: now(), ok: false, error: message });
     process.stderr.write(`audit failed: ${message}\n`);
+    await driverHandle?.stop();
     process.exit(1);
   }
+  // Success path: reap the driver before returning. (process.exit in the catch
+  // block skips this, which is why stop() is called inline above.)
+  await driverHandle?.stop();
 }
 
 await main();
