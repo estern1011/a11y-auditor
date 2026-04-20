@@ -7,7 +7,6 @@
   "scripts": {
     "start": "bun drivers/voiceover/driver.ts serve",
     "dev": "bun --watch drivers/voiceover/driver.ts serve",
-    "audit": "bun runner/index.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

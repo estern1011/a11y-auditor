@@ -4,8 +4,17 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { buildGraph } from "./graph.ts";
-import { ensureRunDir, resolveRunDir, appendEvent } from "./tools/run-dir.ts";
+import {
+  ensureRunDir,
+  resolveRunDir,
+  appendEvent,
+  resetEventLog,
+} from "./tools/run-dir.ts";
 import { serialize, now, type RunnerEvent } from "./events.ts";
+
+const SCAFFOLD_BANNER =
+  "WARNING: runner/ is scaffold-only. Tool/agent nodes return empty results; " +
+  "a clean run here does NOT mean the page is accessible.\n";
 
 interface CliOptions {
   url: string;
@@ -57,9 +66,12 @@ function parseCli(argv: string[]): CliOptions {
 }
 
 async function main() {
+  process.stderr.write(SCAFFOLD_BANNER);
+
   const opts = parseCli(process.argv.slice(2));
   const runDir = resolveRunDir(opts.runId);
   await ensureRunDir(runDir);
+  await resetEventLog(runDir);
 
   if (opts.authEnv) {
     // Presence check only; the auth node (pending) is responsible for reading
