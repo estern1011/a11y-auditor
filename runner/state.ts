@@ -55,6 +55,10 @@ export const State = Annotation.Root({
   driverPort: Annotation<number>({ reducer: lastWriteWins<number>(), default: () => 0 }),
   cdpPort: Annotation<number>({ reducer: lastWriteWins<number>(), default: () => 0 }),
   runDir: Annotation<string>({ reducer: lastWriteWins<string>(), default: () => "" }),
+  authEnvPath: Annotation<string | undefined>({
+    reducer: lastWriteWins<string | undefined>(),
+    default: () => undefined,
+  }),
 
   findings: Annotation<Finding[]>({
     reducer: (a, b) => [...a, ...b],

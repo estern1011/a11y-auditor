@@ -61,6 +61,13 @@ async function main() {
   const runDir = resolveRunDir(opts.runId);
   await ensureRunDir(runDir);
 
+  if (opts.authEnv) {
+    // Presence check only; the auth node (pending) is responsible for reading
+    // and unlinking the file per plan § Phase B auth handling.
+    const { access } = await import("node:fs/promises");
+    await access(opts.authEnv);
+  }
+
   const graph = buildGraph();
   // Save the declared graph shape so the UI can render it (plan § LangGraph graph).
   try {
@@ -84,6 +91,7 @@ async function main() {
       wcag: opts.wcag,
       viewport: opts.viewport,
       runDir,
+      authEnvPath: opts.authEnv,
     });
     void finalState;
     await emit({ k: "done", t: now(), ok: true });

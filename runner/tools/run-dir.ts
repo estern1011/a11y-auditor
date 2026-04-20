@@ -20,7 +20,18 @@ async function writeJson(path: string, value: unknown): Promise<void> {
   await writeFile(path, JSON.stringify(value, null, 2) + "\n", "utf8");
 }
 
+const RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+export function assertSafeRunId(runId: string): void {
+  if (!RUN_ID_PATTERN.test(runId)) {
+    throw new Error(
+      `Invalid run-id '${runId}'. Must match ${RUN_ID_PATTERN} (ASCII alnum + '-'/'_', ≤64 chars, no path separators).`,
+    );
+  }
+}
+
 export function resolveRunDir(runId: string): string {
+  assertSafeRunId(runId);
   const root = process.env.A11Y_RUNS_DIR ?? "./runs";
   return join(root, runId);
 }
