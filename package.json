@@ -7,6 +7,7 @@
   "scripts": {
     "start": "bun drivers/voiceover/driver.ts serve",
     "dev": "bun --watch drivers/voiceover/driver.ts serve",
+    "audit": "bun runner/index.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -24,10 +25,14 @@
   "author": "estern1011",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
     "@axe-core/playwright": "^4.11.1",
     "@guidepup/guidepup": "^0.24.0",
+    "@langchain/langgraph": "^0.2.0",
+    "@langchain/langgraph-checkpoint-sqlite": "^0.1.0",
     "dbus-native": "^0.4.0",
-    "playwright": "^1.40.0"
+    "playwright": "^1.40.0",
+    "zod": "^3.23.0"
   },
   "engines": {
     "bun": ">=1.0.0",

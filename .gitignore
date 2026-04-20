@@ -18,6 +18,9 @@ eval/results.json
 # Dogfood session output (process artifacts, not durable docs)
 dogfood-output/
 
+# Runner output (per-run artifacts)
+runs/
+
 # Keep these config files
 !.prettierrc
 !.lintstagedrc.json
