@@ -26,6 +26,10 @@ A Claude Design bundle was fetched from the provided `api.anthropic.com/v1/desig
 6. **Agent judgment at nodes:** nodes that need an LLM invoke Claude via **Agent SDK**, not via a nested Claude Code session.
 7. **Sandbox layer:** stays as sprites.dev (already working via `eval/sprite-bootstrap.sh`); orthogonal to the runner and swappable later.
 
+### Branching
+
+All work implementing this plan branches from and targets `frontend-langgraph-update`, not `main`. `main` stays stable until the dashboard lands.
+
 ### Why this shape
 
 - Current "Claude-Code-as-orchestrator" works for humans but is opaque to the UI — the UI can't see phases, steps, or branch decisions.
