@@ -118,11 +118,16 @@ export async function startDriver(input: StartDriverInput): Promise<StartDriverR
 
   const { driverPort, cdpPort } = await findFreePortPair();
 
+  // Spawn `serve`, not `start`. `start` in cli.ts is a launcher that itself
+  // spawns a `serve` daemon and exits; capturing the launcher's PID would
+  // leave our `stop()` signaling a process that's already gone while the real
+  // daemon keeps running. We poll readiness ourselves via waitForHttpOk below,
+  // so we don't need the launcher's polling.
   const child = Bun.spawn(
     [
       "bun",
       script,
-      "start",
+      "serve",
       input.url,
       "--port",
       String(driverPort),
