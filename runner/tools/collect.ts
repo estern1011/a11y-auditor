@@ -1,7 +1,13 @@
 import { readFile } from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { PhaseId, TranscriptLine } from "../state.ts";
+
+// Absolute path to collect.ts at the repo root. Derived from this module's URL
+// so the runner works regardless of the caller's cwd (e.g. when invoked from
+// an orchestrator with a different working directory).
+const COLLECT_SCRIPT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "collect.ts");
 
 export interface CollectInput {
   url: string;
@@ -51,7 +57,7 @@ export async function runCollect(input: CollectInput): Promise<CollectResult> {
   const proc = Bun.spawn(
     [
       "bun",
-      "collect.ts",
+      COLLECT_SCRIPT,
       input.url,
       "--port",
       String(input.driverPort),
