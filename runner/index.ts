@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 import { randomUUID } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { buildGraph } from "./graph.ts";
@@ -8,7 +8,7 @@ import {
   ensureRunDir,
   resolveRunDir,
   appendEvent,
-  resetEventLog,
+  resetRunDir,
 } from "./tools/run-dir.ts";
 import { serialize, now, type RunnerEvent } from "./events.ts";
 
@@ -46,7 +46,7 @@ function parseCli(argv: string[]): CliOptions {
 
   const url = positionals[0];
   if (!url) {
-    throw new Error("Usage: bun run audit <url> [--wcag AA] [--viewport 1440x900] [--sr voiceover|orca] [--run-id <id>] [--auth-env <path>]");
+    throw new Error("Usage: bun runner/index.ts <url> [--wcag AA] [--viewport 1440x900] [--sr voiceover|orca] [--run-id <id>] [--auth-env <path>]");
   }
 
   const wcag = String(values.wcag) as CliOptions["wcag"];
@@ -68,26 +68,13 @@ function parseCli(argv: string[]): CliOptions {
 async function main() {
   process.stderr.write(SCAFFOLD_BANNER);
 
+  // CLI parse and run-dir resolution happen before we can emit to events.ndjson
+  // (the run dir doesn't exist yet). Anything that fails before `run.start`
+  // fails loudly on stderr with a nonzero exit and no partial run dir.
   const opts = parseCli(process.argv.slice(2));
   const runDir = resolveRunDir(opts.runId);
   await ensureRunDir(runDir);
-  await resetEventLog(runDir);
-
-  if (opts.authEnv) {
-    // Presence check only; the auth node (pending) is responsible for reading
-    // and unlinking the file per plan § Phase B auth handling.
-    const { access } = await import("node:fs/promises");
-    await access(opts.authEnv);
-  }
-
-  const graph = buildGraph();
-  // Save the declared graph shape so the UI can render it (plan § LangGraph graph).
-  try {
-    const mermaid = await graph.getGraph().drawMermaid();
-    await writeFile(join(runDir, "graph.mmd"), mermaid, "utf8");
-  } catch {
-    // Older LangGraph versions may expose `drawMermaidPng` only; non-fatal here.
-  }
+  await resetRunDir(runDir);
 
   const emit = async (ev: RunnerEvent) => {
     await appendEvent(runDir, serialize(ev));
@@ -95,7 +82,23 @@ async function main() {
 
   await emit({ k: "run.start", t: now(), runId: opts.runId, url: opts.url });
 
+  // From here on every exit path emits a terminal `done` event so downstream
+  // consumers never see a run dir that was opened but never marked complete.
   try {
+    if (opts.authEnv) {
+      // Presence check only; the auth node (pending) is responsible for reading
+      // and unlinking the file per plan § Phase B auth handling.
+      await access(opts.authEnv);
+    }
+
+    const graph = buildGraph();
+    try {
+      const mermaid = await graph.getGraph().drawMermaid();
+      await writeFile(join(runDir, "graph.mmd"), mermaid, "utf8");
+    } catch {
+      // Older LangGraph versions may expose `drawMermaidPng` only; non-fatal here.
+    }
+
     const finalState = await graph.invoke({
       runId: opts.runId,
       url: opts.url,
@@ -110,7 +113,7 @@ async function main() {
     process.stdout.write(`${opts.runId}\n`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await emit({ k: "done", t: now(), ok: false });
+    await emit({ k: "done", t: now(), ok: false, error: message });
     process.stderr.write(`audit failed: ${message}\n`);
     process.exit(1);
   }

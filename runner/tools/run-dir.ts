@@ -40,11 +40,16 @@ export async function ensureRunDir(runDir: string): Promise<void> {
   await mkdir(join(runDir, "artifacts"), { recursive: true });
 }
 
-// Truncate events.ndjson so retries with the same --run-id don't mix old and
-// new streams. Other per-run files (meta.json, findings.json, markers.json,
-// transcript.json) are already overwritten via writeFile on each run.
-export async function resetEventLog(runDir: string): Promise<void> {
+// Blank per-run output so retries with the same --run-id never expose stale
+// data. events.ndjson gets truncated; the JSON result files get rewritten to
+// empty arrays so a run that fails before reportNode doesn't leave prior
+// findings/markers/transcript lying around for downstream readers to pick up.
+export async function resetRunDir(runDir: string): Promise<void> {
   await writeFile(join(runDir, "events.ndjson"), "", "utf8");
+  const empty = "[]\n";
+  await writeFile(join(runDir, "findings.json"), empty, "utf8");
+  await writeFile(join(runDir, "markers.json"), empty, "utf8");
+  await writeFile(join(runDir, "transcript.json"), empty, "utf8");
 }
 
 export async function writeMeta(runDir: string, meta: RunMeta): Promise<void> {

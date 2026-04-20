@@ -13,7 +13,7 @@ export type RunnerEvent =
   | { k: "finding"; t: number; id: string; criterion: string }
   | { k: "artifact"; t: number; key: string; path: string }
   | { k: "budget"; t: number; usd: number; tokens: number }
-  | { k: "done"; t: number; ok: boolean };
+  | { k: "done"; t: number; ok: boolean; error?: string };
 
 export function fromLangGraphEvent(ev: unknown): RunnerEvent | null {
   // Real mapping lands alongside the LangGraph `streamEvents(v2)` integration.
