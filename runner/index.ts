@@ -9,6 +9,7 @@ import {
   resolveRunDir,
   appendEvent,
   resetRunDir,
+  writeMeta,
 } from "./tools/run-dir.ts";
 import { serialize, now, type RunnerEvent } from "./events.ts";
 
@@ -75,6 +76,21 @@ async function main() {
   const runDir = resolveRunDir(opts.runId);
   await ensureRunDir(runDir);
   await resetRunDir(runDir);
+
+  // Seed meta.json with the CLI inputs so the run dir is self-consistent from
+  // run.start onward, even if the graph fails before bootNode can rewrite it
+  // with real driver ports. driverPort/cdpPort stay 0 until boot succeeds.
+  await writeMeta(runDir, {
+    runId: opts.runId,
+    url: opts.url,
+    sr: opts.sr,
+    wcag: opts.wcag,
+    viewport: opts.viewport,
+    driverPort: 0,
+    cdpPort: 0,
+    startedAt: new Date().toISOString(),
+    authProvided: Boolean(opts.authEnv),
+  });
 
   const emit = async (ev: RunnerEvent) => {
     await appendEvent(runDir, serialize(ev));
