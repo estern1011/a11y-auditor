@@ -246,6 +246,39 @@ describe("runAgent (agent-host)", () => {
     expect(ndjson.split("\n").filter((l) => l.trim().length > 0)).toHaveLength(2);
   });
 
+  test("defaults to empty tool surface when frontmatter omits 'tools:'", async () => {
+    // Regression for codex review on PR #15: with `permissionMode:
+    // bypassPermissions`, dropping the `tools` field lets the SDK fall back to
+    // its default full toolset — broad tool access for an agent whose .md
+    // forgot the `tools:` line. Fix: always pass an explicit `tools` array,
+    // which `[]` tells the SDK to disable all built-in tools.
+    const noToolsDir = await mkdtemp(join(tmpdir(), "agent-host-notools-"));
+    await writeFile(
+      join(noToolsDir, "baseline-collector.md"),
+      `---\nname: baseline-collector\ndescription: no tools declared\n---\nBody.\n`,
+      "utf8",
+    );
+
+    let capturedOptions: Options | undefined;
+    const queryFn: QueryFactory = ({ options }) => {
+      capturedOptions = options;
+      return stubQuery([makeResultMessage(GOOD_PAYLOAD)]);
+    };
+
+    await runAgent(
+      { agentId: "baseline-collector", state: makeState(workDir) },
+      {
+        query: queryFn,
+        agentsDir: noToolsDir,
+        env: { ANTHROPIC_API_KEY: "sk-test" },
+        emit: async () => undefined,
+      },
+    );
+
+    expect(capturedOptions?.tools).toEqual([]);
+    expect(capturedOptions?.allowedTools).toEqual([]);
+  });
+
   test("loud throw on Zod mismatch includes payload", async () => {
     const badPayload = {
       findings: [

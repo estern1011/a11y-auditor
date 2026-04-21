@@ -243,17 +243,27 @@ function buildUserPrompt(state: RunnerState, agentId: AgentId, fm: AgentFrontmat
 }
 
 function buildOptions(fm: AgentFrontmatter, model: string, apiKey: string | undefined): Options {
-  const tools = fm.tools.length > 0 ? fm.tools : undefined;
+  // Always pass an explicit `tools` array — even when frontmatter omits
+  // `tools:` and fm.tools is `[]`. The SDK treats `tools: []` as "disable all
+  // built-in tools" (coreTypes.d.ts: `[] (empty array) - Disable all built-in
+  // tools`). Dropping the field would instead let the SDK fall back to its
+  // default full toolset, which combined with `permissionMode:
+  // "bypassPermissions"` below would silently grant broad tool access when a
+  // .md file simply forgot the `tools:` line. Default-deny is the safer
+  // baseline.
+  const tools = fm.tools;
   const options: Options = {
     model,
     systemPrompt: fm.systemPrompt,
     // Non-interactive automation — pre-approve the declared tool set and don't
     // ask the user. We keep the tool surface restricted to what the frontmatter
     // declared so an agent can't reach for Bash / Edit if the .md didn't grant
-    // it.
+    // it. `allowedTools` matches `tools` so every declared tool is auto-allowed
+    // and nothing else exists in the session.
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
-    ...(tools ? { tools, allowedTools: tools } : {}),
+    tools,
+    allowedTools: tools,
     // Route ANTHROPIC_API_KEY explicitly so the Claude Code child process picks
     // it up regardless of the caller's env propagation.
     ...(apiKey ? { env: { ...process.env, ANTHROPIC_API_KEY: apiKey } } : {}),
