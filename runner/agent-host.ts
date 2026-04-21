@@ -138,7 +138,20 @@ export async function runAgent(
 
   let result: SDKResultMessage | undefined;
   const startedAt = Date.now();
-  const q = queryFn({ prompt: userPrompt, options });
+  // queryFn() itself can throw on SDK spawn/config errors, and the for-await
+  // on `q` can throw on transport errors mid-stream. Both paths must still
+  // close out the agent.start we already emitted — otherwise the dashboard's
+  // phase rail stays stuck in "running" for failed sessions and lifecycle
+  // telemetry has unpaired start events.
+  let q: Query;
+  try {
+    q = queryFn({ prompt: userPrompt, options });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    await emitAgentDone(emit, clock, phase, input.agentId, false, `session init failed: ${detail}`);
+    throw err;
+  }
+
   const timeoutHandle = setTimeout(() => {
     // Calling interrupt() on the Query stops the in-flight turn; the message
     // loop then drains a `result` with an error subtype that we surface below.
@@ -154,6 +167,11 @@ export async function runAgent(
         break;
       }
     }
+  } catch (err) {
+    clearTimeout(timeoutHandle);
+    const detail = err instanceof Error ? err.message : String(err);
+    await emitAgentDone(emit, clock, phase, input.agentId, false, `stream error: ${detail}`);
+    throw err;
   } finally {
     clearTimeout(timeoutHandle);
   }

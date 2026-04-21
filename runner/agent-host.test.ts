@@ -463,4 +463,93 @@ describe("runAgent (agent-host)", () => {
     }
     expect(caught?.message).toMatch(/session ended without a result message/);
   });
+
+  test("emits agent.done when queryFn itself throws (session init failure)", async () => {
+    // Codex P2 regression: SDK spawn/config errors surface as a throw from
+    // `query()`, not an error result message. Without a guard the agent.start
+    // already fired stays unpaired.
+    const queryFn: QueryFactory = () => {
+      throw new Error("bun spawn ENOENT");
+    };
+    const events: RunnerEvent[] = [];
+
+    let caught: Error | undefined;
+    try {
+      await runAgent(
+        { agentId: "baseline-collector", state: makeState(workDir) },
+        {
+          query: queryFn,
+          agentsDir,
+          env: { ANTHROPIC_API_KEY: "sk-test" },
+          emit: async (ev) => {
+            events.push(ev);
+          },
+        },
+      );
+    } catch (e) {
+      caught = e as Error;
+    }
+
+    expect(caught?.message).toMatch(/bun spawn ENOENT/);
+    const done = events.find((e) => e.k === "agent.done");
+    expect(done).toBeDefined();
+    if (done && done.k === "agent.done") {
+      expect(done.ok).toBe(false);
+      expect(done.error).toMatch(/session init failed.*bun spawn ENOENT/);
+    }
+  });
+
+  test("emits agent.done when the message iterator throws (transport error)", async () => {
+    // Codex P2 regression: transport errors mid-stream raise from the
+    // for-await on `q`. Same indeterminate-phase problem as session-init
+    // failures — agent.done must still fire.
+    function explodingQuery(): Query {
+      const q = {
+        // eslint-disable-next-line @typescript-eslint/require-await
+        async *[Symbol.asyncIterator]() {
+          throw new Error("transport closed unexpectedly");
+          yield undefined as never;
+        },
+        interrupt: async () => undefined,
+        setPermissionMode: async () => undefined,
+        setModel: async () => undefined,
+        setMaxThinkingTokens: async () => undefined,
+        supportedCommands: async () => [],
+        supportedModels: async () => [],
+        mcpServerStatus: async () => [],
+        accountInfo: async () => ({}),
+        rewindFiles: async () => ({ canRewind: false }),
+        setMcpServers: async () => ({ added: [], removed: [], errors: {} }),
+        streamInput: async (_s: AsyncIterable<SDKUserMessage>) => undefined,
+      };
+      return q as unknown as Query;
+    }
+    const queryFn: QueryFactory = () => explodingQuery();
+    const events: RunnerEvent[] = [];
+
+    let caught: Error | undefined;
+    try {
+      await runAgent(
+        { agentId: "baseline-collector", state: makeState(workDir) },
+        {
+          query: queryFn,
+          agentsDir,
+          env: { ANTHROPIC_API_KEY: "sk-test" },
+          emit: async (ev) => {
+            events.push(ev);
+          },
+        },
+      );
+    } catch (e) {
+      caught = e as Error;
+    }
+
+    expect(caught?.message).toMatch(/transport closed/);
+    const done = events.find((e) => e.k === "agent.done");
+    expect(done).toBeDefined();
+    if (done && done.k === "agent.done") {
+      expect(done.ok).toBe(false);
+      expect(done.error).toMatch(/stream error.*transport closed/);
+    }
+  });
 });
