@@ -14,6 +14,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 
 import { runAgent, type QueryFactory } from "./agent-host.ts";
+import type { RunnerEvent } from "./events.ts";
 import type { RunnerState } from "./state.ts";
 
 // ---------------------------------------------------------------------------
@@ -111,10 +112,13 @@ function makeErrorResult(errors: string[]): SDKResultMessage {
     duration_api_ms: 10,
     is_error: true,
     num_turns: 1,
-    total_cost_usd: 0,
+    // Non-zero so the "budget emitted on error result" regression test below
+    // can assert the spend telemetry actually carries usage figures, not
+    // sentinel zeros.
+    total_cost_usd: 0.0017,
     usage: {
-      input_tokens: 0,
-      output_tokens: 0,
+      input_tokens: 30,
+      output_tokens: 10,
       cache_read_input_tokens: 0,
       cache_creation_input_tokens: 0,
     } as unknown as SDKResultMessage["usage"],
@@ -313,7 +317,7 @@ describe("runAgent (agent-host)", () => {
     expect(capturedOptions?.allowedTools).toEqual([]);
   });
 
-  test("loud throw on Zod mismatch includes payload", async () => {
+  test("loud throw on Zod mismatch includes payload + emits agent.done(ok:false)", async () => {
     const badPayload = {
       findings: [
         { id: "x", criterion: "1.1.1", severity: "info" /* not a valid severity */, title: "t" },
@@ -323,6 +327,7 @@ describe("runAgent (agent-host)", () => {
     };
 
     const queryFn: QueryFactory = () => stubQuery([makeResultMessage(badPayload)]);
+    const events: RunnerEvent[] = [];
 
     let caught: Error | undefined;
     try {
@@ -332,7 +337,9 @@ describe("runAgent (agent-host)", () => {
           query: queryFn,
           agentsDir,
           env: { ANTHROPIC_API_KEY: "sk-test" },
-          emit: async () => undefined,
+          emit: async (ev) => {
+            events.push(ev);
+          },
         },
       );
     } catch (e) {
@@ -343,6 +350,14 @@ describe("runAgent (agent-host)", () => {
     // The offending payload is included verbatim in the error so a bad run is
     // diagnosable from the single message — no silent default.
     expect(caught?.message).toContain('"severity": "info"');
+    // Codex P2 regression: agent.start must always pair with agent.done so the
+    // dashboard's per-phase status isn't left indeterminate on parse failure.
+    const done = events.find((e) => e.k === "agent.done");
+    expect(done).toBeDefined();
+    if (done && done.k === "agent.done") {
+      expect(done.ok).toBe(false);
+      expect(done.error).toMatch(/Zod validation failed/);
+    }
   });
 
   test("throws when the final message is non-JSON", async () => {
@@ -379,9 +394,16 @@ describe("runAgent (agent-host)", () => {
     expect(caught?.message).toMatch(/ANTHROPIC_API_KEY missing/);
   });
 
-  test("propagates agent error results as thrown errors", async () => {
+  test("error results propagate + still emit budget + agent.done(ok:false)", async () => {
+    // Codex P2 regression: the SDK's error-result subtypes (max-turn,
+    // execution-error, max-budget, etc.) still carry usage + total_cost_usd,
+    // so a session that fails after consuming tokens must show up in spend
+    // telemetry — otherwise run-level budget tracking under-counts. Lifecycle
+    // pairing is also load-bearing: agent.start without agent.done leaves the
+    // dashboard's phase status stuck on "running".
     const queryFn: QueryFactory = () =>
       stubQuery([makeErrorResult(["rate limit hit", "retry exhausted"])]);
+    const events: RunnerEvent[] = [];
 
     let caught: Error | undefined;
     try {
@@ -391,13 +413,35 @@ describe("runAgent (agent-host)", () => {
           query: queryFn,
           agentsDir,
           env: { ANTHROPIC_API_KEY: "sk-test" },
-          emit: async () => undefined,
+          emit: async (ev) => {
+            events.push(ev);
+          },
         },
       );
     } catch (e) {
       caught = e as Error;
     }
     expect(caught?.message).toMatch(/rate limit hit/);
+
+    const budget = events.find((e) => e.k === "budget");
+    expect(budget).toBeDefined();
+    if (budget && budget.k === "budget") {
+      expect(budget.tokens).toBe(40); // 30 input + 10 output from makeErrorResult
+      expect(budget.usd).toBeCloseTo(0.0017, 5);
+    }
+
+    const done = events.find((e) => e.k === "agent.done");
+    expect(done).toBeDefined();
+    if (done && done.k === "agent.done") {
+      expect(done.ok).toBe(false);
+      expect(done.error).toMatch(/rate limit hit/);
+    }
+
+    // Order matters: start → budget → done so the dashboard can render them
+    // monotonically.
+    const order = events.map((e) => e.k);
+    expect(order.indexOf("agent.start")).toBeLessThan(order.indexOf("budget"));
+    expect(order.indexOf("budget")).toBeLessThan(order.indexOf("agent.done"));
   });
 
   test("throws when session ends without any result message", async () => {

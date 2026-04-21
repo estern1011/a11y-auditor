@@ -161,34 +161,20 @@ export async function runAgent(
   if (!result) {
     const elapsed = Date.now() - startedAt;
     const hint = elapsed >= timeoutMs ? ` (timeout after ${String(timeoutMs)}ms)` : "";
+    // No result message → no usage figures to attribute. We still need to
+    // close out the agent.start that already fired so the dashboard isn't
+    // left with an unpaired lifecycle event.
+    await emitAgentDone(emit, clock, phase, input.agentId, false, "no result message");
     throw new Error(`runAgent[${input.agentId}]: session ended without a result message${hint}`);
   }
 
-  if (result.subtype !== "success") {
-    const errs = result.errors.join("; ") || result.subtype;
-    await emit({
-      k: "agent.done",
-      t: clock(),
-      node: phase,
-      agentId: input.agentId,
-      ok: false,
-      error: errs,
-    });
-    throw new Error(`runAgent[${input.agentId}]: agent failed (${result.subtype}): ${errs}`);
-  }
-
-  const payload = extractStructuredPayload(result);
-  const parsed = safeParseOrThrow(schema, payload, input.agentId);
-
-  const usage: AgentUsage = {
-    tokens:
-      Number(result.usage.input_tokens ?? 0) +
-      Number(result.usage.output_tokens ?? 0) +
-      Number(result.usage.cache_read_input_tokens ?? 0) +
-      Number(result.usage.cache_creation_input_tokens ?? 0),
-    costUsd: result.total_cost_usd,
-  };
-
+  // Both success and error result subtypes carry `usage` + `total_cost_usd`,
+  // so we always emit a budget event — runs that fail mid-session (max-turn,
+  // execution-error, etc.) still consumed tokens and must show up in run-level
+  // spend telemetry. Budget fires before the agent.done so the order in
+  // events.ndjson reads start → budget → done for every session, success or
+  // not.
+  const usage = computeUsage(result);
   await emit({
     k: "budget",
     t: clock(),
@@ -197,13 +183,28 @@ export async function runAgent(
     usd: usage.costUsd,
     tokens: usage.tokens,
   });
-  await emit({
-    k: "agent.done",
-    t: clock(),
-    node: phase,
-    agentId: input.agentId,
-    ok: true,
-  });
+
+  if (result.subtype !== "success") {
+    const errs = result.errors.join("; ") || result.subtype;
+    await emitAgentDone(emit, clock, phase, input.agentId, false, errs);
+    throw new Error(`runAgent[${input.agentId}]: agent failed (${result.subtype}): ${errs}`);
+  }
+
+  // Payload extraction + Zod validation can throw on malformed JSON or schema
+  // mismatch. Wrap them so the agent.start always pairs with an agent.done —
+  // an unpaired start leaves the dashboard's per-phase status indeterminate
+  // and breaks any future cost/lifecycle aggregation.
+  let parsed: AgentOutputParsed;
+  try {
+    const payload = extractStructuredPayload(result);
+    parsed = safeParseOrThrow(schema, payload, input.agentId);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    await emitAgentDone(emit, clock, phase, input.agentId, false, detail);
+    throw err;
+  }
+
+  await emitAgentDone(emit, clock, phase, input.agentId, true);
 
   return {
     findings: parsed.findings,
@@ -211,6 +212,35 @@ export async function runAgent(
     signals: parsed.signals,
     usage,
   };
+}
+
+function computeUsage(result: SDKResultMessage): AgentUsage {
+  return {
+    tokens:
+      Number(result.usage.input_tokens ?? 0) +
+      Number(result.usage.output_tokens ?? 0) +
+      Number(result.usage.cache_read_input_tokens ?? 0) +
+      Number(result.usage.cache_creation_input_tokens ?? 0),
+    costUsd: result.total_cost_usd,
+  };
+}
+
+async function emitAgentDone(
+  emit: (ev: RunnerEvent) => Promise<void>,
+  clock: () => number,
+  node: PhaseId,
+  agentId: AgentId,
+  ok: boolean,
+  error?: string,
+): Promise<void> {
+  await emit({
+    k: "agent.done",
+    t: clock(),
+    node,
+    agentId,
+    ok,
+    ...(error ? { error } : {}),
+  });
 }
 
 function buildUserPrompt(state: RunnerState, agentId: AgentId, fm: AgentFrontmatter): string {
