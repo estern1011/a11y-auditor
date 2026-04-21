@@ -107,35 +107,33 @@ export async function waitForHttpOk(
   });
 }
 
-// Wraps the screen-reader driver daemon as a child process. On success returns
-// the ports it's listening on plus a stop() handle the caller must invoke (e.g.
-// in a finally block) to avoid leaking daemons between runs.
-export async function startDriver(input: StartDriverInput): Promise<StartDriverResult> {
-  void input.viewport; // reserved for future use (viewport is applied by collect.ts navigate)
+export interface SpawnDaemonInput {
+  /** Absolute path to a bun-executable script that listens on `port`. */
+  script: string;
+  /** Positional + flag args appended after the script path. */
+  args: readonly string[];
+  /** Port the daemon will bind; `waitForHttpOk` polls it. */
+  port: number;
+  /** Health-check path (default `/`). */
+  readyPath?: string;
+  timeoutMs?: number;
+  intervalMs?: number;
+}
 
-  const script = DRIVER_SCRIPTS[input.sr];
-  if (!script) throw new Error(`Unknown screen reader: ${input.sr}`);
+export interface SpawnDaemonResult {
+  stop: StartDriverResult["stop"];
+}
 
-  const { driverPort, cdpPort } = await findFreePortPair();
-
-  // Spawn `serve`, not `start`. `start` in cli.ts is a launcher that itself
-  // spawns a `serve` daemon and exits; capturing the launcher's PID would
-  // leave our `stop()` signaling a process that's already gone while the real
-  // daemon keeps running. We poll readiness ourselves via waitForHttpOk below,
-  // so we don't need the launcher's polling.
-  const child = Bun.spawn(
-    [
-      "bun",
-      script,
-      "serve",
-      input.url,
-      "--port",
-      String(driverPort),
-      "--cdp-port",
-      String(cdpPort),
-    ],
-    { stdout: "pipe", stderr: "pipe", stdin: "ignore" },
-  );
+// Low-level helper: spawn a bun child, wait for its HTTP server to come up,
+// return a stop() that reaps it. Exported so tests can exercise the
+// spawn/poll/stop loop against a fake daemon without needing orca or
+// VoiceOver installed.
+export async function spawnDaemon(input: SpawnDaemonInput): Promise<SpawnDaemonResult> {
+  const child = Bun.spawn(["bun", input.script, ...input.args], {
+    stdout: "pipe",
+    stderr: "pipe",
+    stdin: "ignore",
+  });
 
   // Tee stderr into a buffer so we can include it in the timeout error without
   // blocking the child's pipe.
@@ -172,19 +170,51 @@ export async function startDriver(input: StartDriverInput): Promise<StartDriverR
   };
 
   try {
-    await waitForHttpOk(driverPort, "/", {
-      timeoutMs: POLL_TIMEOUT_MS,
-      intervalMs: POLL_INTERVAL_MS,
+    await waitForHttpOk(input.port, input.readyPath ?? "/", {
+      timeoutMs: input.timeoutMs ?? POLL_TIMEOUT_MS,
+      intervalMs: input.intervalMs ?? POLL_INTERVAL_MS,
     });
   } catch (err) {
     await stop();
     const stderr = stderrChunks.join("").trim();
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `driver failed to become ready: ${detail}${stderr ? `\n--- stderr ---\n${stderr}` : ""}`,
+      `daemon failed to become ready: ${detail}${stderr ? `\n--- stderr ---\n${stderr}` : ""}`,
       { cause: err },
     );
   }
+
+  return { stop };
+}
+
+// Wraps the screen-reader driver daemon as a child process. On success returns
+// the ports it's listening on plus a stop() handle the caller must invoke (e.g.
+// in a finally block) to avoid leaking daemons between runs.
+export async function startDriver(input: StartDriverInput): Promise<StartDriverResult> {
+  void input.viewport; // reserved for future use (viewport is applied by collect.ts navigate)
+
+  const script = DRIVER_SCRIPTS[input.sr];
+  if (!script) throw new Error(`Unknown screen reader: ${input.sr}`);
+
+  const { driverPort, cdpPort } = await findFreePortPair();
+
+  // Spawn `serve`, not `start`. `start` in cli.ts is a launcher that itself
+  // spawns a `serve` daemon and exits; capturing the launcher's PID would
+  // leave our `stop()` signaling a process that's already gone while the real
+  // daemon keeps running. We poll readiness ourselves via spawnDaemon below,
+  // so we don't need the launcher's polling.
+  const { stop } = await spawnDaemon({
+    script,
+    args: [
+      "serve",
+      input.url,
+      "--port",
+      String(driverPort),
+      "--cdp-port",
+      String(cdpPort),
+    ],
+    port: driverPort,
+  });
 
   return { driverPort, cdpPort, stop };
 }

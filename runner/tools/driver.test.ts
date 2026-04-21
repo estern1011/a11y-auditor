@@ -1,11 +1,31 @@
 import { describe, test, expect } from "bun:test";
 import { createServer } from "node:net";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { findFreePort, findFreePortPair, waitForHttpOk } from "./driver.ts";
+import { findFreePort, findFreePortPair, spawnDaemon, waitForHttpOk } from "./driver.ts";
 import { getFlag as getFlagOrca } from "../../drivers/orca/driver.ts";
 import { getFlag as getFlagVO } from "../../drivers/voiceover/driver.ts";
 import { DEFAULT_PORT as ORCA_DEFAULT, DEFAULT_CDP_PORT as ORCA_CDP_DEFAULT } from "../../drivers/orca/core.ts";
 import { DEFAULT_PORT as VO_DEFAULT, DEFAULT_CDP_PORT as VO_CDP_DEFAULT } from "../../drivers/voiceover/core.ts";
+
+async function writeFakeDaemon(behavior: "ok" | "never-ready"): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "fake-daemon-"));
+  const script = join(dir, "daemon.ts");
+  // Minimal Bun.serve that takes --port N. In "ok" mode it responds 200 right
+  // away; in "never-ready" it parks on 503 so the poller times out.
+  const body =
+    behavior === "ok"
+      ? `Bun.serve({ port, hostname: "127.0.0.1", fetch: () => new Response("ok") });\n`
+      : `Bun.serve({ port, hostname: "127.0.0.1", fetch: () => new Response("nope", { status: 503 }) });\n`;
+  await writeFile(
+    script,
+    `const i = Bun.argv.indexOf("--port"); const port = i >= 0 ? Number(Bun.argv[i + 1]) : 0;\n${body}`,
+    "utf8",
+  );
+  return script;
+}
 
 // ---------------------------------------------------------------------------
 // Free port picker
@@ -144,5 +164,67 @@ describe("driver stop()", () => {
     ]);
     expect(exited).toBe(true);
     expect(Date.now() - started).toBeLessThan(1_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// spawnDaemon — the shared spawn+poll+stop helper used by startDriver.
+// Exercised against a fake Bun.serve script so the failure paths
+// (startup timeout, stop-on-failure) are covered without a real driver.
+// ---------------------------------------------------------------------------
+
+describe("spawnDaemon", () => {
+  test("spawns and polls a working daemon, then stop() reaps it", async () => {
+    const script = await writeFakeDaemon("ok");
+    const port = await findFreePort();
+    const { stop } = await spawnDaemon({
+      script,
+      args: ["--port", String(port)],
+      port,
+      intervalMs: 50,
+      timeoutMs: 10_000,
+    });
+
+    const res = await fetch(`http://127.0.0.1:${port}/`);
+    expect(res.status).toBe(200);
+
+    await stop();
+
+    // Port should be free again once the daemon is reaped.
+    await new Promise<void>((resolve, reject) => {
+      const s = createServer();
+      s.once("error", reject);
+      s.listen(port, "127.0.0.1", () => s.close(() => resolve()));
+    });
+  });
+
+  test("throws on startup timeout and reaps the child so no zombie listens on the port", async () => {
+    const script = await writeFakeDaemon("never-ready");
+    const port = await findFreePort();
+
+    let caught: Error | undefined;
+    try {
+      await spawnDaemon({
+        script,
+        args: ["--port", String(port)],
+        port,
+        intervalMs: 25,
+        timeoutMs: 400,
+      });
+    } catch (e) {
+      caught = e as Error;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toMatch(/daemon failed to become ready/);
+
+    // Give SIGTERM a moment to land. If stop-on-failure leaked the child, the
+    // port would still be held and this bind would EADDRINUSE.
+    await Bun.sleep(100);
+    await new Promise<void>((resolve, reject) => {
+      const s = createServer();
+      s.once("error", reject);
+      s.listen(port, "127.0.0.1", () => s.close(() => resolve()));
+    });
   });
 });
