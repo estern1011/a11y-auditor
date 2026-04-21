@@ -12,6 +12,7 @@ import {
   writeMeta,
 } from "./tools/run-dir.ts";
 import { serialize, now, type RunnerEvent } from "./events.ts";
+import { startDriver, type StartDriverResult } from "./tools/driver.ts";
 
 const SCAFFOLD_BANNER =
   "WARNING: runner/ is scaffold-only. Tool/agent nodes return empty results; " +
@@ -98,14 +99,27 @@ async function main() {
 
   await emit({ k: "run.start", t: now(), runId: opts.runId, url: opts.url });
 
-  // From here on every exit path emits a terminal `done` event so downstream
-  // consumers never see a run dir that was opened but never marked complete.
+  // Two guarantees we need on every exit path:
+  //   1. A terminal `done` event is emitted — so consumers never see a run
+  //      dir that was opened but never marked complete.
+  //   2. driverHandle.stop() runs — so the spawned daemon never leaks between
+  //      runs, even if emit() itself throws (e.g., ENOSPC on the run dir).
+  // The emit in the catch is guarded, and cleanup lives in finally; we use
+  // process.exitCode rather than process.exit() so finally actually runs on
+  // the failure path.
+  let driverHandle: StartDriverResult | null = null;
   try {
     if (opts.authEnv) {
       // Presence check only; the auth node (pending) is responsible for reading
       // and unlinking the file per plan § Phase B auth handling.
       await access(opts.authEnv);
     }
+
+    driverHandle = await startDriver({
+      sr: opts.sr,
+      url: opts.url,
+      viewport: opts.viewport,
+    });
 
     const graph = buildGraph();
     try {
@@ -123,15 +137,34 @@ async function main() {
       viewport: opts.viewport,
       runDir,
       authEnvPath: opts.authEnv,
+      driverPort: driverHandle.driverPort,
+      cdpPort: driverHandle.cdpPort,
     });
     void finalState;
     await emit({ k: "done", t: now(), ok: true });
     process.stdout.write(`${opts.runId}\n`);
   } catch (err) {
+    process.exitCode = 1;
     const message = err instanceof Error ? err.message : String(err);
-    await emit({ k: "done", t: now(), ok: false, error: message });
+    try {
+      await emit({ k: "done", t: now(), ok: false, error: message });
+    } catch (emitErr) {
+      // Run-dir unwritable (ENOSPC, permissions, etc.). Surface it on stderr
+      // so the failure is diagnosable, but don't rethrow — we still need the
+      // finally below to reap the driver.
+      const detail = emitErr instanceof Error ? emitErr.message : String(emitErr);
+      process.stderr.write(`failed to record done event: ${detail}\n`);
+    }
     process.stderr.write(`audit failed: ${message}\n`);
-    process.exit(1);
+  } finally {
+    if (driverHandle) {
+      try {
+        await driverHandle.stop();
+      } catch (stopErr) {
+        const detail = stopErr instanceof Error ? stopErr.message : String(stopErr);
+        process.stderr.write(`failed to stop driver: ${detail}\n`);
+      }
+    }
   }
 }
 

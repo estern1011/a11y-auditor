@@ -97,7 +97,10 @@ export async function runCollect(input: CollectInput): Promise<CollectResult> {
   };
 }
 
-function absolutizeArtifacts(rel: Record<string, string>, outDir: string): Record<string, string> {
+export function absolutizeArtifacts(
+  rel: Record<string, string>,
+  outDir: string,
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, relPath] of Object.entries(rel)) {
     const abs = resolve(outDir, relPath);
@@ -113,7 +116,10 @@ function absolutizeArtifacts(rel: Record<string, string>, outDir: string): Recor
   return out;
 }
 
-function flattenSrTranscript(sr: EvidenceManifest["sr"], phase: PhaseId): TranscriptLine[] {
+export function flattenSrTranscript(
+  sr: EvidenceManifest["sr"],
+  phase: PhaseId,
+): TranscriptLine[] {
   if (!sr) return [];
   const now = Date.now();
   const lines: TranscriptLine[] = [];
