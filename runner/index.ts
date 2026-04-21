@@ -99,10 +99,14 @@ async function main() {
 
   await emit({ k: "run.start", t: now(), runId: opts.runId, url: opts.url });
 
-  // From here on every exit path emits a terminal `done` event so downstream
-  // consumers never see a run dir that was opened but never marked complete.
-  // driverHandle lives outside try so both success and failure paths reap the
-  // spawned daemon — otherwise back-to-back runs would leak ports and zombies.
+  // Two guarantees we need on every exit path:
+  //   1. A terminal `done` event is emitted — so consumers never see a run
+  //      dir that was opened but never marked complete.
+  //   2. driverHandle.stop() runs — so the spawned daemon never leaks between
+  //      runs, even if emit() itself throws (e.g., ENOSPC on the run dir).
+  // The emit in the catch is guarded, and cleanup lives in finally; we use
+  // process.exitCode rather than process.exit() so finally actually runs on
+  // the failure path.
   let driverHandle: StartDriverResult | null = null;
   try {
     if (opts.authEnv) {
@@ -140,15 +144,28 @@ async function main() {
     await emit({ k: "done", t: now(), ok: true });
     process.stdout.write(`${opts.runId}\n`);
   } catch (err) {
+    process.exitCode = 1;
     const message = err instanceof Error ? err.message : String(err);
-    await emit({ k: "done", t: now(), ok: false, error: message });
+    try {
+      await emit({ k: "done", t: now(), ok: false, error: message });
+    } catch (emitErr) {
+      // Run-dir unwritable (ENOSPC, permissions, etc.). Surface it on stderr
+      // so the failure is diagnosable, but don't rethrow — we still need the
+      // finally below to reap the driver.
+      const detail = emitErr instanceof Error ? emitErr.message : String(emitErr);
+      process.stderr.write(`failed to record done event: ${detail}\n`);
+    }
     process.stderr.write(`audit failed: ${message}\n`);
-    await driverHandle?.stop();
-    process.exit(1);
+  } finally {
+    if (driverHandle) {
+      try {
+        await driverHandle.stop();
+      } catch (stopErr) {
+        const detail = stopErr instanceof Error ? stopErr.message : String(stopErr);
+        process.stderr.write(`failed to stop driver: ${detail}\n`);
+      }
+    }
   }
-  // Success path: reap the driver before returning. (process.exit in the catch
-  // block skips this, which is why stop() is called inline above.)
-  await driverHandle?.stop();
 }
 
 await main();
