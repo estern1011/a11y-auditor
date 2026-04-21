@@ -29,6 +29,12 @@ const DRIVER_SCRIPTS: Record<StartDriverInput["sr"], string> = {
 const POLL_INTERVAL_MS = 250;
 const POLL_TIMEOUT_MS = 15_000;
 
+// SIGTERM grace window before we escalate to SIGKILL. Must exceed the daemon's
+// own cleanup budget in drivers/server.ts (SIGTERM → driver.cleanup(), with a
+// hard 5s safety timer that force-exits if cleanup hangs). Anything shorter
+// cuts the daemon off mid-cleanup and can leave orphan browser / AT processes.
+const STOP_GRACE_MS = 6_000;
+
 export interface WaitForHttpOkOptions {
   timeoutMs?: number;
   intervalMs?: number;
@@ -154,10 +160,12 @@ export async function spawnDaemon(input: SpawnDaemonInput): Promise<SpawnDaemonR
     stopped = true;
     try {
       child.kill("SIGTERM");
-      // Give the daemon up to 2s to shut down gracefully; then SIGKILL.
+      // Wait long enough for the daemon's own cleanup + safety timer in
+      // drivers/server.ts (5s) to run to completion. Only SIGKILL if it's
+      // still alive past that budget.
       const exited = await Promise.race([
         child.exited.then(() => true),
-        Bun.sleep(2000).then(() => false),
+        Bun.sleep(STOP_GRACE_MS).then(() => false),
       ]);
       if (!exited) {
         child.kill("SIGKILL");
