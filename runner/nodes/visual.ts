@@ -1,12 +1,12 @@
 import type { RunnerState, RunnerStateUpdate } from "../state.ts";
-import { runAgent } from "../agent-host.ts";
 
-export async function visualNode(state: RunnerState): Promise<RunnerStateUpdate> {
-  const out = await runAgent({ agentId: "visual-cross-referencer", state });
-
+// Scaffold-only: visual agent lands in slice #5. Mirrors keyboardNode — phase
+// flips to "ok" so the graph completes end-to-end, but no findings/transcript
+// are threaded. See baseline.ts for the real agent-host wiring pattern the
+// next slice will copy.
+export async function visualNode(_state: RunnerState): Promise<RunnerStateUpdate> {
+  await Promise.resolve();
   return {
-    findings: out.findings,
-    transcript: out.transcript,
     phaseStatus: { visual: "ok" },
   };
 }

@@ -1,14 +1,12 @@
 import type { RunnerState, RunnerStateUpdate } from "../state.ts";
-import { runAgent } from "../agent-host.ts";
 
-export async function authNode(state: RunnerState): Promise<RunnerStateUpdate> {
-  await runAgent({
-    agentId: "auth",
-    state,
-    // Auth agent file doesn't exist yet; node is scaffolded for the graph shape.
-    // Implementation lands alongside the auth flow design note (see open questions).
-  });
-
+// Auth node remains scaffold-only: the interactive-login secret flow is
+// Phase B per docs/web-dashboard-plan.md. The baseline agent-host plumbing
+// (`runAgent({ agentId: "auth", state })`) is ready to go once that design
+// note lands — until then we just clear the needsAuth flag so the graph
+// completes.
+export async function authNode(_state: RunnerState): Promise<RunnerStateUpdate> {
+  await Promise.resolve();
   return {
     needsAuth: false,
     phaseStatus: { auth: "ok" },
