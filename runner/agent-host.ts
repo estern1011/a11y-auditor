@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -117,6 +117,13 @@ export async function runAgent(
 
   const ndjsonPath = join(input.state.runDir, `agent-${input.agentId}.ndjson`);
   await mkdir(dirname(ndjsonPath), { recursive: true });
+  // Truncate per-agent NDJSON on every session start. run-dir.ts's
+  // resetRunDir() scrubs events.ndjson / findings.json / etc. on rerun, but
+  // the per-agent logs are created inside runAgent so they need their own
+  // clean-slate step. Without this a retry with the same --run-id would
+  // interleave old and new sessions in one log — bad for debugging and (once
+  // the auth node lands) worse for leaking prior tool inputs into later runs.
+  await writeFile(ndjsonPath, "", "utf8");
 
   await emit({
     k: "agent.start",

@@ -246,6 +246,40 @@ describe("runAgent (agent-host)", () => {
     expect(ndjson.split("\n").filter((l) => l.trim().length > 0)).toHaveLength(2);
   });
 
+  test("truncates agent-<id>.ndjson on session start", async () => {
+    // Regression for codex review on PR #15: resetRunDir() scrubs the
+    // top-level per-run files, but per-agent NDJSON is created inside
+    // runAgent. Without an explicit truncate step, a retry with the same
+    // --run-id appends new messages onto the prior run's log — mixing
+    // sessions for debugging and (once the auth node lands) carrying prior
+    // sensitive tool inputs into later logs.
+    const ndjsonPath = join(workDir, "agent-baseline-collector.ndjson");
+    await writeFile(
+      ndjsonPath,
+      `{"stale":"prior run message that must be cleared"}\n`,
+      "utf8",
+    );
+
+    const queryFn: QueryFactory = () => stubQuery([makeResultMessage(GOOD_PAYLOAD)]);
+    await runAgent(
+      { agentId: "baseline-collector", state: makeState(workDir) },
+      {
+        query: queryFn,
+        agentsDir,
+        env: { ANTHROPIC_API_KEY: "sk-test" },
+        emit: async () => undefined,
+      },
+    );
+
+    const contents = await readFile(ndjsonPath, "utf8");
+    expect(contents).not.toContain("stale");
+    expect(contents).not.toContain("prior run");
+    // Exactly one message from the new session (the result).
+    const lines = contents.split("\n").filter((l) => l.trim().length > 0);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('"type":"result"');
+  });
+
   test("defaults to empty tool surface when frontmatter omits 'tools:'", async () => {
     // Regression for codex review on PR #15: with `permissionMode:
     // bypassPermissions`, dropping the `tools` field lets the SDK fall back to
