@@ -173,6 +173,67 @@ describe("driver stop()", () => {
 // (startup timeout, stop-on-failure) are covered without a real driver.
 // ---------------------------------------------------------------------------
 
+describe("waitForHttpOk validator", () => {
+  test("keeps polling past a 2xx response the validator rejects", async () => {
+    // Simulates losing the free-port race: some other service is holding the
+    // port and returns 200, but its body isn't our daemon. Validator must
+    // reject it so the poller keeps trying (and ultimately times out rather
+    // than falsely reporting ready).
+    const port = await findFreePort();
+    const squatter = Bun.serve({
+      port,
+      hostname: "127.0.0.1",
+      fetch: () => Response.json({ status: "something-else", cdpPort: 1 }),
+    });
+
+    let caught: Error | undefined;
+    try {
+      await waitForHttpOk(port, "/", {
+        intervalMs: 25,
+        timeoutMs: 200,
+        validate: async (res) => {
+          const body = (await res.json()) as { status?: unknown };
+          return body.status === "running";
+        },
+      });
+    } catch (e) {
+      caught = e as Error;
+    } finally {
+      await squatter.stop(true);
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toMatch(/validator rejected|timed out/);
+  });
+
+  test("returns once the validator accepts", async () => {
+    const port = await findFreePort();
+    let hits = 0;
+    const server = Bun.serve({
+      port,
+      hostname: "127.0.0.1",
+      fetch: () => {
+        hits += 1;
+        return hits < 3
+          ? Response.json({ status: "pending" })
+          : Response.json({ status: "running", cdpPort: 42 });
+      },
+    });
+    try {
+      await waitForHttpOk(port, "/", {
+        intervalMs: 25,
+        timeoutMs: 2_000,
+        validate: async (res) => {
+          const body = (await res.json()) as { status?: unknown; cdpPort?: unknown };
+          return body.status === "running" && body.cdpPort === 42;
+        },
+      });
+      expect(hits).toBeGreaterThanOrEqual(3);
+    } finally {
+      await server.stop(true);
+    }
+  });
+});
+
 describe("spawnDaemon", () => {
   test("spawns and polls a working daemon, then stop() reaps it", async () => {
     const script = await writeFakeDaemon("ok");

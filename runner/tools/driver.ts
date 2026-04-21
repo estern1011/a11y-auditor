@@ -40,6 +40,13 @@ export interface WaitForHttpOkOptions {
   intervalMs?: number;
   /** Optional abort signal; when aborted the poller rejects immediately. */
   signal?: AbortSignal;
+  /**
+   * Called on each 2xx response. Return false to reject that response (the
+   * poller keeps trying) — used by startDriver to confirm the answering
+   * service is actually our spawned daemon, not a squatter that grabbed the
+   * port during the release-then-bind race.
+   */
+  validate?: (res: Response) => Promise<boolean> | boolean;
 }
 
 // Ports are chosen by having the OS assign them via listen(0), then releasing
@@ -93,10 +100,24 @@ export async function waitForHttpOk(
     if (opts.signal?.aborted) throw new Error("waitForHttpOk aborted");
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(intervalMs * 4) });
-      // Consume body so the connection is freed for Bun.
-      await res.arrayBuffer().catch(() => undefined);
-      if (res.ok) return;
-      lastError = new Error(`HTTP ${res.status}`);
+      if (res.ok) {
+        if (!opts.validate) {
+          // Consume body so the connection is freed for Bun.
+          await res.arrayBuffer().catch(() => undefined);
+          return;
+        }
+        // Validator reads the body itself; if it accepts, we're done.
+        // If it rejects, keep polling — the real daemon may not have bound yet
+        // and some other local service is holding the port.
+        const ok = await opts.validate(res);
+        if (ok) return;
+        lastError = new Error(
+          "endpoint responded 2xx but validator rejected (likely another service on the chosen port)",
+        );
+      } else {
+        await res.arrayBuffer().catch(() => undefined);
+        lastError = new Error(`HTTP ${res.status}`);
+      }
     } catch (e) {
       lastError = e;
     }
@@ -124,6 +145,13 @@ export interface SpawnDaemonInput {
   readyPath?: string;
   timeoutMs?: number;
   intervalMs?: number;
+  /**
+   * Optional readiness validator. Called on each 2xx; spawnDaemon only returns
+   * when it accepts. Use this to confirm the answering service is actually
+   * *our* child (e.g., echoes back the CDP port we chose) rather than a
+   * squatter that grabbed the port during the release-then-bind race.
+   */
+  validate?: (res: Response) => Promise<boolean> | boolean;
 }
 
 export interface SpawnDaemonResult {
@@ -181,6 +209,7 @@ export async function spawnDaemon(input: SpawnDaemonInput): Promise<SpawnDaemonR
     await waitForHttpOk(input.port, input.readyPath ?? "/", {
       timeoutMs: input.timeoutMs ?? POLL_TIMEOUT_MS,
       intervalMs: input.intervalMs ?? POLL_INTERVAL_MS,
+      validate: input.validate,
     });
   } catch (err) {
     await stop();
@@ -222,6 +251,20 @@ export async function startDriver(input: StartDriverInput): Promise<StartDriverR
       String(cdpPort),
     ],
     port: driverPort,
+    // Guard against the free-port race: if another local service answered on
+    // driverPort (e.g., something squatted between our listen(0) close and the
+    // daemon's bind), it won't return the exact { status:"running", cdpPort }
+    // our daemon exposes on GET /. Keep polling until we see a match —
+    // eventually either the real daemon comes up or waitForHttpOk times out
+    // and throws.
+    validate: async (res) => {
+      try {
+        const body = (await res.json()) as { status?: unknown; cdpPort?: unknown };
+        return body.status === "running" && body.cdpPort === cdpPort;
+      } catch {
+        return false;
+      }
+    },
   });
 
   return { driverPort, cdpPort, stop };
