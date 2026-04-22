@@ -1,0 +1,25 @@
+{
+  "findings": [
+    {
+      "id": "axe:color-contrast:0",
+      "criterion": "1.4.3",
+      "severity": "serious",
+      "title": "Text color contrast below 4.5:1",
+      "selector": ".hero h1",
+      "sources": ["axe"]
+    },
+    {
+      "id": "axe:image-alt:0",
+      "criterion": "1.1.1",
+      "severity": "critical",
+      "title": "<img> element without alt text",
+      "detail": "3 nodes",
+      "sources": ["axe"]
+    }
+  ],
+  "signals": {
+    "hasInteractive": true,
+    "treeEmpty": false,
+    "needsAuth": false
+  }
+}
