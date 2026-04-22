@@ -166,14 +166,40 @@ export async function runAgent(
   // malformed-output run left `events.ndjson` with `agent.start` and no close.
   const transcript: TranscriptLine[] = [];
   try {
+    // Honor the frontmatter's tool list as a *hard* restriction, not just
+    // auto-approval. Per the SDK docs, `allowedTools` only suppresses the
+    // permission prompt for listed tools — the model can still request
+    // unlisted tools and either execute them (with a permission fallback) or
+    // cause the session to hang on a prompt in headless runs. `tools:
+    // string[]` is the actual base-set restriction. We pass both so:
+    //   - the frontmatter list is the only set of built-in tools the model
+    //     can see (`tools`), and
+    //   - those tools run without interactive approval (`allowedTools`),
+    //     which is what headless sprite runs need.
+    // If an agent file omits a `tools:` line, default to the documented
+    // Claude Code preset rather than an empty allowlist (which would disable
+    // every built-in tool and make the agent useless).
+    const allowlist = parsed.frontmatter.tools;
+    const baseTools: Options["tools"] = allowlist
+      ? allowlist
+      : { type: "preset", preset: "claude_code" };
+
     const result = await driveAgentSession({
       queryFactory,
       prompt: userPrompt,
       options: {
         abortController,
+        // Agents authored in `.claude/agents/*.md` invoke repo-relative
+        // commands like `bun collect.ts ...` in their procedure sections.
+        // Pinning cwd to the repo root makes agent runs deterministic even
+        // when the runner is invoked from a different working directory
+        // (the rest of the runner is already cwd-independent via
+        // `fileURLToPath`; this closes the last gap for tool calls).
+        cwd: REPO_ROOT,
         model,
         systemPrompt: parsed.systemPrompt,
-        allowedTools: parsed.frontmatter.tools,
+        tools: baseTools,
+        allowedTools: allowlist,
         outputFormat: {
           type: "json_schema",
           schema: schemaEntry.jsonSchema,

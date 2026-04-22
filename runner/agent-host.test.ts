@@ -103,6 +103,42 @@ beforeEach(() => {
   process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "test-fake-key";
 });
 
+describe("runAgent — SDK options (regression for Codex P1/P2 on tools + cwd)", () => {
+  test("pins cwd to REPO_ROOT and applies frontmatter tools as a hard allowlist", async () => {
+    const state = await makeState();
+    const payload = {
+      findings: [],
+      signals: { hasInteractive: true, treeEmpty: false, needsAuth: false },
+    };
+
+    let capturedOptions: unknown;
+    const queryFactory: QueryFactory = (params) => {
+      capturedOptions = params.options;
+      return fakeQuery([successResultMessage(payload)]) as never;
+    };
+
+    await runAgent({ agentId: "baseline-collector", state }, { queryFactory });
+
+    const opts = capturedOptions as {
+      cwd?: string;
+      tools?: string[] | { type: string; preset: string };
+      allowedTools?: string[];
+    };
+
+    // The `.claude/agents/baseline-collector.md` frontmatter declares
+    // `tools: Bash, Read, Grep`. Those must appear as both the base tool
+    // set (hard allowlist) and the auto-approved set (headless), so the
+    // model can't pick up an unlisted tool via permission fallback.
+    expect(opts.tools).toEqual(["Bash", "Read", "Grep"]);
+    expect(opts.allowedTools).toEqual(["Bash", "Read", "Grep"]);
+
+    // cwd must resolve to the repo root — the .md files use commands like
+    // `bun collect.ts ...` that depend on repo-relative paths.
+    expect(typeof opts.cwd).toBe("string");
+    expect(opts.cwd).toMatch(/a11y-auditor$/);
+  });
+});
+
 describe("runAgent (baseline-collector, stubbed query)", () => {
   test("parses structured output and threads findings + signals into the result", async () => {
     const state = await makeState();
