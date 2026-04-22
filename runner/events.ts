@@ -26,8 +26,8 @@ export type RunnerEvent =
   | {
       k: "budget";
       t: number;
-      node?: PhaseId;
-      agentId?: string;
+      node: PhaseId;
+      agentId: string;
       usd: number;
       tokens: number;
     }

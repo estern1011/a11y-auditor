@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { runAgent, buildUserPrompt, type QueryFactory } from "./agent-host.ts";
+import { runAgent, buildUserPrompt, authHintFor, type QueryFactory } from "./agent-host.ts";
 import type { RunnerState } from "./state.ts";
 
 // Build a state skeleton matching what the graph would hand the baseline node
@@ -411,6 +411,109 @@ describe("runAgent (baseline-collector, stubbed query)", () => {
     expect(out.phaseOk).toBe(true);
     expect(out.findings).toEqual([]);
     expect(out.signals.hasInteractive).toBe(true);
+  });
+});
+
+describe("authHintFor", () => {
+  test("returns a hint for Claude Code's 'Invalid API key · /login' error", () => {
+    const hint = authHintFor("Invalid API key · Please run /login");
+    expect(hint).not.toBeNull();
+    expect(hint).toMatch(/ANTHROPIC_API_KEY/);
+    expect(hint).toMatch(/claude \/login/);
+  });
+
+  test("returns a hint on SDK-side 401s against api.anthropic.com", () => {
+    // The api.anthropic.com marker is what makes this unambiguous — a bare
+    // 401 could easily be the target page under audit returning 401.
+    expect(authHintFor("HTTP 401 from api.anthropic.com")).not.toBeNull();
+  });
+
+  test("returns a hint when a CLAUDE_CODE_OAUTH_TOKEN fd is unreadable", () => {
+    expect(
+      authHintFor("CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR read failed"),
+    ).not.toBeNull();
+  });
+
+  test("returns null for unrelated errors (no false positives on generic runner failures)", () => {
+    expect(authHintFor("structured output failed schema validation")).toBeNull();
+    expect(authHintFor("rate_limit")).toBeNull();
+    expect(authHintFor("Agent SDK query ended without a 'result' message")).toBeNull();
+  });
+
+  test("does NOT match target-site auth failures (Codex P2 regression guard)", () => {
+    // The agent is often pointed at pages that themselves require auth —
+    // a /login URL, a 401 from the app under test, a generic "Unauthorized"
+    // response body. Matching those would tell the user to reconfigure
+    // Claude credentials when the Claude SDK is working fine. Keep strict.
+    expect(
+      authHintFor("Navigation failed: https://app.example.com/login returned 500"),
+    ).toBeNull();
+    expect(authHintFor("target site returned HTTP 401")).toBeNull();
+    expect(authHintFor("Unauthorized access to /admin")).toBeNull();
+    expect(authHintFor("page under audit: redirected to /login")).toBeNull();
+  });
+});
+
+describe("runAgent auth-hint annotation (non-blocking)", () => {
+  test("annotates auth-shaped SDK failures with an actionable setup hint", async () => {
+    const state = await makeState();
+    // Simulate the exact shape the Agent SDK returns when Claude Code rejects
+    // a request with the "Invalid API key · Please run /login" message.
+    const errResult = {
+      type: "result",
+      subtype: "error_during_execution",
+      duration_ms: 5,
+      duration_api_ms: 0,
+      is_error: true,
+      num_turns: 0,
+      total_cost_usd: 0,
+      usage: {},
+      modelUsage: {},
+      permission_denials: [],
+      errors: ["Invalid API key · Please run /login"],
+      uuid: "00000000-0000-0000-0000-000000000999",
+      session_id: "sess",
+    };
+    const queryFactory: QueryFactory = () => fakeQuery([errResult]) as never;
+
+    let caught: Error | undefined;
+    try {
+      await runAgent({ agentId: "baseline-collector", state }, { queryFactory });
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    // Original SDK error message is preserved…
+    expect(caught?.message).toMatch(/Invalid API key/);
+    // …and the actionable hint is appended so a first-run user knows which of
+    // the four auth sources Claude Code supports needs to be set up.
+    expect(caught?.message).toMatch(/Hint:/);
+    expect(caught?.message).toMatch(/ANTHROPIC_API_KEY/);
+
+    // events.ndjson's agent.done.error carries the annotated message too, so
+    // the dashboard shows the hint without needing the thrown Error.
+    const events = await readFile(join(state.runDir, "events.ndjson"), "utf8");
+    expect(events).toMatch(/"k":"agent.done".*"ok":false.*Hint:/);
+  });
+
+  test("does NOT annotate unrelated failures (schema validation keeps its original message)", async () => {
+    const state = await makeState();
+    const bad = {
+      findings: [{ id: "x", criterion: "bogus", severity: "scary", title: "t" }],
+      signals: { hasInteractive: true, treeEmpty: false, needsAuth: false },
+    };
+    const queryFactory: QueryFactory = () =>
+      fakeQuery([successResultMessage(bad)]) as never;
+
+    let caught: Error | undefined;
+    try {
+      await runAgent({ agentId: "baseline-collector", state }, { queryFactory });
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toMatch(/schema validation/);
+    expect(caught?.message).not.toMatch(/Hint:/);
   });
 });
 

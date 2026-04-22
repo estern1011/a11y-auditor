@@ -337,17 +337,27 @@ export async function runAgent(
       phaseOk: true,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const error = err instanceof Error ? err : new Error(String(err));
+    // Annotate auth-shaped failures with a pointer to the supported auth
+    // sources so a first-run user doesn't have to decode an SDK-internal
+    // "Invalid API key · Please run /login" without context. We detect
+    // rather than pre-check so legitimate non-`ANTHROPIC_API_KEY` auth
+    // paths (cached OAuth, Bedrock, Vertex) still work — the hint only
+    // appears after the SDK itself reports a failure that looks auth-y.
+    const hint = authHintFor(error.message);
+    if (hint && !error.message.includes(hint)) {
+      error.message = `${error.message}\n${hint}`;
+    }
     await emitEvent({
       k: "agent.done",
       t: clock(),
       node: phase,
       agentId,
       ok: false,
-      error: message,
+      error: error.message,
       durationMs: clock() - startedAt,
     });
-    throw err instanceof Error ? err : new Error(message);
+    throw error;
   } finally {
     clearTimeout(timeoutHandle);
   }
@@ -382,6 +392,44 @@ async function driveAgentSession(
     }
   }
   return result;
+}
+
+// Patterns the Agent SDK (or the Claude Code binary it spawns) surfaces when
+// *its own* authentication fails — cached OAuth expired, API key rejected,
+// OAuth token fd unreadable, etc. These must be narrow enough to skip over
+// target-site auth failures the agent encounters while auditing (a page
+// behind /login, an HTTP 401 from the app under test, a generic
+// "Unauthorized" response). If we matched those, `agent.done.error` would
+// tell the user to reconfigure Claude credentials when the Claude SDK is
+// working fine — the target page is the one 401-ing.
+//
+// Each pattern below references an unambiguous Claude/Anthropic-side
+// marker: the literal SDK error string, an env var name, or the
+// api.anthropic.com host.
+const AUTH_ERROR_PATTERNS = [
+  // Claude Code's literal auth-failure output
+  /invalid api key/i,
+  /please run \/login/i,
+  /claude \/login/i,
+  // Env var names — won't appear in a target-site error
+  /\banthropic[_\s-]?api[_\s-]?key\b/i,
+  // No trailing \b — the env var often appears as
+  // `CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR`, and `_` is a word char so
+  // `\b` after `token` would refuse that suffix. Leading \b is enough to
+  // keep the pattern specific (the prefix doesn't occur in page errors).
+  /\bclaude_code_oauth_token/i,
+  // SDK-side HTTP failures call the Anthropic API host. Target-site errors
+  // don't mention this domain, so 401s against it are unambiguous SDK auth.
+  /\bapi\.anthropic\.com\b/i,
+];
+
+export function authHintFor(message: string): string | null {
+  if (!AUTH_ERROR_PATTERNS.some((p) => p.test(message))) return null;
+  return (
+    "Hint: Claude Agent SDK auth failed. Set one of: ANTHROPIC_API_KEY, a " +
+    "cached `claude /login` session, CLAUDE_CODE_OAUTH_TOKEN, or Vertex/" +
+    "Bedrock credentials. See https://docs.claude.com/en/docs/claude-code/setup."
+  );
 }
 
 function tryParseJson(raw: unknown): unknown {
