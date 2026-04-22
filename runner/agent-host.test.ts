@@ -192,6 +192,36 @@ describe("runAgent (baseline-collector, stubbed query)", () => {
     expect(caught?.message).toMatch(/schema validation/);
     expect(caught?.message).toMatch(/Payload:/);
     expect(caught?.message).toMatch(/"criterion":"bogus"/);
+
+    // Regression guard for Codex P2: schema-validation failure must still
+    // close the agent's lifecycle in events.ndjson. Without the terminal
+    // `agent.done`, SSE consumers would see `agent.start` and never a matching
+    // close, so a failed agent looks stuck rather than failed.
+    const events = await readFile(join(state.runDir, "events.ndjson"), "utf8");
+    expect(events).toMatch(/"k":"agent.start"/);
+    expect(events).toMatch(/"k":"agent.done".*"ok":false/);
+    expect(events).toMatch(/"error":"[^"]*schema validation/);
+  });
+
+  test("emits agent.done on the no-structured-output path", async () => {
+    const state = await makeState();
+    // Model returned a success result but neither `structured_output` nor a
+    // JSON-parseable `result` string. Should throw + emit `agent.done` ok:false.
+    const resultMsg = successResultMessage("this is not JSON");
+    (resultMsg as { structured_output?: unknown }).structured_output = undefined;
+    const queryFactory: QueryFactory = () => fakeQuery([resultMsg]) as never;
+
+    let caught: Error | undefined;
+    try {
+      await runAgent({ agentId: "baseline-collector", state }, { queryFactory });
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toMatch(/no structured output/);
+
+    const events = await readFile(join(state.runDir, "events.ndjson"), "utf8");
+    expect(events).toMatch(/"k":"agent.done".*"ok":false/);
   });
 
   test("throws when the query ends without a result message", async () => {

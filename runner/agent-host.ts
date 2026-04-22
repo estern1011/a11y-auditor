@@ -8,6 +8,7 @@ import type {
   Query,
   SDKMessage,
   SDKResultMessage,
+  SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
 import type { Finding, PhaseId, RunnerState, TranscriptLine } from "./state.ts";
@@ -42,7 +43,7 @@ export interface AgentOutput {
 }
 
 export type QueryFactory = (params: {
-  prompt: string | AsyncIterable<unknown>;
+  prompt: string | AsyncIterable<SDKUserMessage>;
   options?: Options;
 }) => Query;
 
@@ -157,11 +158,16 @@ export async function runAgent(
   const abortController = new AbortController();
   const timeoutHandle = setTimeout(() => abortController.abort(), AGENT_TIMEOUT_MS);
 
-  let result: SDKResultMessage | undefined;
+  // Single failure funnel. Every throw path inside the try records an
+  // `agent.done` event with ok:false so event consumers always see a terminal
+  // lifecycle signal for this agent execution — even when structured output
+  // fails schema validation or the SDK subprocess never produces a `result`
+  // message. Previously only the outer-iteration catch did this, so a
+  // malformed-output run left `events.ndjson` with `agent.start` and no close.
   const transcript: TranscriptLine[] = [];
-
   try {
-    const q = queryFactory({
+    const result = await driveAgentSession({
+      queryFactory,
       prompt: userPrompt,
       options: {
         abortController,
@@ -174,17 +180,85 @@ export async function runAgent(
         },
         env: { ...process.env },
       } as Options,
+      logPath,
+      transcript,
+      phase,
+      clock,
     });
 
-    for await (const msg of q) {
-      await appendFile(logPath, JSON.stringify(msg) + "\n", "utf8");
-      appendTranscriptForMessage(msg, transcript, phase, clock);
-      if (msg.type === "result") {
-        result = msg;
-      }
+    if (!result) {
+      throw new Error(
+        `runAgent(${agentId}): Agent SDK query ended without a 'result' message`,
+      );
     }
+
+    // Budget accounting — surfaced as an event line so the dashboard can show
+    // per-agent spend. See plan "Cost envelope" open question; this is the
+    // soft accounting step before we wire a hard cap. Emit for every terminal
+    // result (success or error) so a failed agent still contributes to the
+    // per-run spend total.
+    const usd = result.total_cost_usd ?? 0;
+    const tokens =
+      (result.usage?.input_tokens ?? 0) + (result.usage?.output_tokens ?? 0);
+    await emitEvent({ k: "budget", t: clock(), node: phase, agentId, usd, tokens });
+
+    if (result.subtype !== "success") {
+      const errText =
+        "errors" in result && Array.isArray(result.errors) && result.errors.length > 0
+          ? result.errors.join("; ")
+          : `Agent SDK returned non-success subtype '${result.subtype}'`;
+      throw new Error(`runAgent(${agentId}) failed: ${errText}`);
+    }
+
+    // Validate the structured output against the Zod schema. Falls back to
+    // parsing `result.result` as JSON if the SDK didn't populate
+    // `structured_output` — some transport paths don't.
+    const candidate = result.structured_output ?? tryParseJson(result.result);
+    if (candidate === undefined) {
+      const preview =
+        typeof result.result === "string" ? result.result.slice(0, 400) : "";
+      throw new Error(
+        `runAgent(${agentId}): no structured output from agent. result.result preview: ${preview}`,
+      );
+    }
+
+    const parseResult = schemaEntry.zod.safeParse(candidate);
+    if (!parseResult.success) {
+      const payload = JSON.stringify(candidate).slice(0, 2000);
+      throw new Error(
+        `runAgent(${agentId}): structured output failed schema validation — ${parseResult.error.message}\nPayload: ${payload}`,
+      );
+    }
+
+    const validated = parseResult.data as {
+      findings: Finding[];
+      signals: AgentSignals;
+    };
+
+    // Stamp `sources` on any finding that didn't declare one so the downstream
+    // reducer can still attribute the evidence channel.
+    const findings = validated.findings.map((f) => ({
+      ...f,
+      sources: f.sources && f.sources.length > 0 ? f.sources : ["axe" as const],
+    }));
+
+    await emitEvent({
+      k: "agent.done",
+      t: clock(),
+      node: phase,
+      agentId,
+      ok: true,
+      findings: findings.length,
+      durationMs: clock() - startedAt,
+    });
+
+    return {
+      findings,
+      transcript,
+      signals: validated.signals,
+      phaseOk: true,
+    };
   } catch (err) {
-    clearTimeout(timeoutHandle);
     const message = err instanceof Error ? err.message : String(err);
     await emitEvent({
       k: "agent.done",
@@ -195,98 +269,41 @@ export async function runAgent(
       error: message,
       durationMs: clock() - startedAt,
     });
-    throw new Error(`runAgent(${agentId}) threw: ${message}`, { cause: err });
+    throw err instanceof Error ? err : new Error(message);
+  } finally {
+    clearTimeout(timeoutHandle);
   }
-  clearTimeout(timeoutHandle);
+}
 
-  if (!result) {
-    const msg = `runAgent(${agentId}): Agent SDK query ended without a 'result' message`;
-    await emitEvent({
-      k: "agent.done",
-      t: clock(),
-      node: phase,
-      agentId,
-      ok: false,
-      error: msg,
-      durationMs: clock() - startedAt,
-    });
-    throw new Error(msg);
-  }
+interface DriveAgentSessionInput {
+  queryFactory: QueryFactory;
+  prompt: string;
+  options: Options;
+  logPath: string;
+  transcript: TranscriptLine[];
+  phase: PhaseId;
+  clock: () => number;
+}
 
-  // Budget accounting — surfaced as an event line so the dashboard can show
-  // per-agent spend. See plan "Cost envelope" open question; this is the soft
-  // accounting step before we wire a hard cap.
-  if (result.subtype === "success") {
-    const usd = result.total_cost_usd ?? 0;
-    const tokens =
-      (result.usage?.input_tokens ?? 0) + (result.usage?.output_tokens ?? 0);
-    await emitEvent({ k: "budget", t: clock(), node: phase, agentId, usd, tokens });
-  }
-
-  if (result.subtype !== "success") {
-    const errText =
-      "errors" in result && Array.isArray(result.errors) && result.errors.length > 0
-        ? result.errors.join("; ")
-        : `Agent SDK returned non-success subtype '${result.subtype}'`;
-    await emitEvent({
-      k: "agent.done",
-      t: clock(),
-      node: phase,
-      agentId,
-      ok: false,
-      error: errText,
-      durationMs: clock() - startedAt,
-    });
-    throw new Error(`runAgent(${agentId}) failed: ${errText}`);
-  }
-
-  // Validate the structured output against the Zod schema. Falls back to
-  // parsing `result.result` as JSON if the SDK didn't populate
-  // `structured_output` — some transport paths don't.
-  const candidate = result.structured_output ?? tryParseJson(result.result);
-  if (candidate === undefined) {
-    const preview = typeof result.result === "string" ? result.result.slice(0, 400) : "";
-    throw new Error(
-      `runAgent(${agentId}): no structured output from agent. result.result preview: ${preview}`,
-    );
-  }
-
-  const parseResult = schemaEntry.zod.safeParse(candidate);
-  if (!parseResult.success) {
-    const payload = JSON.stringify(candidate).slice(0, 2000);
-    throw new Error(
-      `runAgent(${agentId}): structured output failed schema validation — ${parseResult.error.message}\nPayload: ${payload}`,
-    );
-  }
-
-  const validated = parseResult.data as {
-    findings: Finding[];
-    signals: AgentSignals;
-  };
-
-  // Stamp `sources` on any finding that didn't declare one so the downstream
-  // reducer can still attribute the evidence channel.
-  const findings = validated.findings.map((f) => ({
-    ...f,
-    sources: f.sources && f.sources.length > 0 ? f.sources : ["axe" as const],
-  }));
-
-  await emitEvent({
-    k: "agent.done",
-    t: clock(),
-    node: phase,
-    agentId,
-    ok: true,
-    findings: findings.length,
-    durationMs: clock() - startedAt,
+// Runs the Agent SDK query to completion, logging every message and narrating
+// assistant text / tool uses into the transcript. Returns the terminal
+// `result` message (or undefined if the query iterator closed without one).
+async function driveAgentSession(
+  input: DriveAgentSessionInput,
+): Promise<SDKResultMessage | undefined> {
+  const q = input.queryFactory({
+    prompt: input.prompt,
+    options: input.options,
   });
-
-  return {
-    findings,
-    transcript,
-    signals: validated.signals,
-    phaseOk: true,
-  };
+  let result: SDKResultMessage | undefined;
+  for await (const msg of q) {
+    await appendFile(input.logPath, JSON.stringify(msg) + "\n", "utf8");
+    appendTranscriptForMessage(msg, input.transcript, input.phase, input.clock);
+    if (msg.type === "result") {
+      result = msg;
+    }
+  }
+  return result;
 }
 
 function tryParseJson(raw: unknown): unknown {
