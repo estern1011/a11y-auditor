@@ -425,7 +425,10 @@ describe("buildUserPrompt", () => {
     const prompt = buildUserPrompt({ agentId: "baseline-collector", state });
     expect(prompt).toContain("baseline-collector");
     expect(prompt).toContain("https://example.com/path");
-    expect(prompt).toContain("drivers/orca/driver.ts");
+    // Use a repo-relative path (agent runs with cwd pinned to REPO_ROOT) so
+    // a directory name with spaces elsewhere in the absolute path can't
+    // break the `bun <sr-driver> ...` commands the agent issues.
+    expect(prompt).toMatch(/sr-driver: drivers\/orca\/driver\.ts$/m);
     expect(prompt).toContain("cdp-port: 9223");
     expect(prompt).toContain("http-port: 7484");
     expect(prompt).toContain("output schema");

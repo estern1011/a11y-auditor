@@ -77,14 +77,20 @@ const DEFAULT_SIGNALS: AgentSignals = {
 // frontmatter — the runner forwards that verbatim.
 const AGENT_TIMEOUT_MS = 5 * 60 * 1000;
 
-// Absolute path to the `bun drivers/<sr>/driver.ts` script for each screen
-// reader, so the prompt we hand the agent matches what the orchestrator
-// documentation in .claude/agents/*.md expects ("sr-driver path").
 const RUNNER_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(RUNNER_DIR, "..");
+
+// Repo-relative `bun drivers/<sr>/driver.ts` path for each screen reader —
+// the string we inject into the agent prompt. Agent instructions in
+// `.claude/agents/*.md` execute it as `bun <sr-driver> ...` without shell
+// quoting, so an absolute path on a machine where the repo lives under a
+// directory with spaces (e.g. `/Users/Jane Smith/repos/a11y-auditor`) would
+// be split on whitespace and fail. Since the runner now pins agent-session
+// `cwd` to REPO_ROOT, a relative path resolves correctly and sidesteps the
+// whitespace issue entirely.
 const DRIVER_SCRIPTS: Record<RunnerState["sr"], string> = {
-  voiceover: resolve(REPO_ROOT, "drivers", "voiceover", "driver.ts"),
-  orca: resolve(REPO_ROOT, "drivers", "orca", "driver.ts"),
+  voiceover: "drivers/voiceover/driver.ts",
+  orca: "drivers/orca/driver.ts",
 };
 
 const AGENT_TO_PHASE: Record<AgentId, PhaseId> = {
