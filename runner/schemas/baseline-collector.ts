@@ -20,7 +20,10 @@ import { z } from "zod";
 // Zod then re-validates before we push into state — if the model ignores the
 // schema, `safeParse` fails loudly (see runner/agent-host.ts) so silent empty
 // findings never make it into the report. Hand-written duplicate rather than
-// auto-generated because zod-to-json-schema is an extra dep for three files.
+// auto-generated because zod-to-json-schema is an extra dep for three files;
+// baseline-collector-drift.test.ts guards against the two schemas drifting
+// out of sync by running both against a shared fixture set and asserting
+// verdict agreement on every case.
 
 const FindingSchema = z
   .object({
