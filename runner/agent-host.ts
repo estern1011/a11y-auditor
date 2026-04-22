@@ -337,17 +337,27 @@ export async function runAgent(
       phaseOk: true,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const error = err instanceof Error ? err : new Error(String(err));
+    // Annotate auth-shaped failures with a pointer to the supported auth
+    // sources so a first-run user doesn't have to decode an SDK-internal
+    // "Invalid API key · Please run /login" without context. We detect
+    // rather than pre-check so legitimate non-`ANTHROPIC_API_KEY` auth
+    // paths (cached OAuth, Bedrock, Vertex) still work — the hint only
+    // appears after the SDK itself reports a failure that looks auth-y.
+    const hint = authHintFor(error.message);
+    if (hint && !error.message.includes(hint)) {
+      error.message = `${error.message}\n${hint}`;
+    }
     await emitEvent({
       k: "agent.done",
       t: clock(),
       node: phase,
       agentId,
       ok: false,
-      error: message,
+      error: error.message,
       durationMs: clock() - startedAt,
     });
-    throw err instanceof Error ? err : new Error(message);
+    throw error;
   } finally {
     clearTimeout(timeoutHandle);
   }
@@ -382,6 +392,30 @@ async function driveAgentSession(
     }
   }
   return result;
+}
+
+// Patterns the Agent SDK (or the Claude Code binary it spawns) surfaces when
+// authentication fails — cached OAuth expired, API key rejected, OAuth token
+// fd unreadable, etc. Matching is intentionally broad; a false positive just
+// appends a benign hint to an unrelated error, while a false negative leaves
+// a first-run user staring at "Invalid API key · Please run /login" with no
+// context on which of four auth sources they need to set up.
+const AUTH_ERROR_PATTERNS = [
+  /invalid api key/i,
+  /anthropic[_\s-]?api[_\s-]?key/i,
+  /\/login\b/i,
+  /unauthenticated|unauthori[sz]ed/i,
+  /\b401\b/,
+  /claude_code_oauth_token/i,
+];
+
+export function authHintFor(message: string): string | null {
+  if (!AUTH_ERROR_PATTERNS.some((p) => p.test(message))) return null;
+  return (
+    "Hint: Claude Agent SDK auth failed. Set one of: ANTHROPIC_API_KEY, a " +
+    "cached `claude /login` session, CLAUDE_CODE_OAUTH_TOKEN, or Vertex/" +
+    "Bedrock credentials. See https://docs.claude.com/en/docs/claude-code/setup."
+  );
 }
 
 function tryParseJson(raw: unknown): unknown {
