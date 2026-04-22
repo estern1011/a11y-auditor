@@ -331,6 +331,43 @@ describe("runAgent (baseline-collector, stubbed query)", () => {
     }
   });
 
+  test("rejects a success result with non-empty permission_denials", async () => {
+    // The SDK returning `subtype: "success"` only means the session
+    // terminated cleanly. If the host denied the agent's Bash (or any)
+    // tool call, the model can still emit a schema-shaped payload it
+    // effectively made up — which would show up to the dashboard as a
+    // "clean" baseline. Regression guard: any permission_denials entry
+    // must fail the phase.
+    const state = await makeState();
+    const payload = {
+      findings: [],
+      signals: { hasInteractive: true, treeEmpty: false, needsAuth: false },
+    };
+    const resultMsg = successResultMessage(payload);
+    (resultMsg as { permission_denials?: unknown }).permission_denials = [
+      {
+        tool_name: "Bash",
+        tool_use_id: "tu_denied",
+        tool_input: { command: "bun collect.ts https://example.com" },
+      },
+    ];
+    const queryFactory: QueryFactory = () => fakeQuery([resultMsg]) as never;
+
+    let caught: Error | undefined;
+    try {
+      await runAgent({ agentId: "baseline-collector", state }, { queryFactory });
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toMatch(/denied by permission policy/);
+    expect(caught?.message).toMatch(/Bash/);
+
+    // events.ndjson still gets the terminal agent.done for the denied run.
+    const events = await readFile(join(state.runDir, "events.ndjson"), "utf8");
+    expect(events).toMatch(/"k":"agent.done".*"ok":false/);
+  });
+
   test("emits agent.start + agent.done even when setup (mkdir) fails", async () => {
     // runDir points at a regular file instead of a directory, so the
     // `mkdir(dirname(logPath), { recursive: true })` inside runAgent's setup

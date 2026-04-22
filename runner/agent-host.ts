@@ -252,6 +252,22 @@ export async function runAgent(
       throw new Error(`runAgent(${agentId}) failed: ${errText}`);
     }
 
+    // `subtype: "success"` means the SDK itself terminated cleanly — it does
+    // NOT mean every tool call the agent requested actually ran. If the host
+    // has restrictive permissions (e.g. policy-denied Bash), the model can
+    // still emit a schema-shaped payload even though it never ran
+    // `collect.ts`, which would give us hallucinated or defaulted findings.
+    // Treat any permission denial as a hard failure so the baseline phase
+    // doesn't silently report "clean" for a page it never actually audited.
+    if (result.permission_denials.length > 0) {
+      const denied = result.permission_denials
+        .map((d) => d.tool_name)
+        .join(", ");
+      throw new Error(
+        `runAgent(${agentId}) failed: ${result.permission_denials.length} tool call(s) denied by permission policy — ${denied}. The agent's output cannot be trusted.`,
+      );
+    }
+
     // Validate the structured output against the Zod schema. Falls back to
     // parsing `result.result` as JSON if the SDK didn't populate
     // `structured_output` — some transport paths don't.
