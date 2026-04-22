@@ -54,6 +54,14 @@ export function parseAgentFile(raw: string): ParsedAgentFile {
   const frontmatterBlock = rest.slice(0, closeIdx);
   const body = rest.slice(closeIdx + "\n---\n".length).replace(/^\n+/, "");
 
+  // Known frontmatter keys the runner honors. Anything else (e.g. a typo
+  // like `toools:`) is silently accepted as-is by a permissive parser, and
+  // the derived `frontmatter.tools` ends up undefined — which then causes
+  // runAgent to fall back to the full `claude_code` preset tool set instead
+  // of the allowlist the agent file intended. That's a permission widening
+  // we want to fail fast on, not quietly accept.
+  const KNOWN_KEYS = new Set(["name", "description", "tools", "model"]);
+
   const fields: Record<string, string> = {};
   for (const line of frontmatterBlock.split("\n")) {
     if (!line.trim()) continue;
@@ -63,6 +71,11 @@ export function parseAgentFile(raw: string): ParsedAgentFile {
     }
     const key = line.slice(0, idx).trim();
     const value = line.slice(idx + 1).trim();
+    if (!KNOWN_KEYS.has(key)) {
+      throw new Error(
+        `agent frontmatter has unknown key '${key}' — expected one of ${[...KNOWN_KEYS].join(", ")}. Did you mean 'tools'? A typo here silently widens agent tool permissions.`,
+      );
+    }
     fields[key] = value;
   }
 

@@ -109,4 +109,31 @@ describe("parseAgentFile — edge cases", () => {
     const raw = ["---", "name: t", "---", "b", ""].join("\n");
     expect(() => parseAgentFile(raw)).toThrow(/missing required 'description'/);
   });
+
+  test("rejects unknown frontmatter keys (permission-widening typos)", () => {
+    // Regression: a silent accept of `toools:` would leave
+    // `frontmatter.tools` undefined and let runAgent fall back to the
+    // full claude_code preset — the opposite of what the agent author
+    // intended. Codex P2 on the initial review insisted on loud-failing
+    // unknown keys so the typo surfaces before we ship a tool-permission
+    // drift to production.
+    const raw = [
+      "---",
+      "name: t",
+      "description: d",
+      "toools: Bash, Read",
+      "---",
+      "body",
+      "",
+    ].join("\n");
+    let caught: Error | undefined;
+    try {
+      parseAgentFile(raw);
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect(caught?.message).toMatch(/unknown key 'toools'/);
+    expect(caught?.message).toMatch(/widens agent tool permissions/);
+  });
 });
