@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect } from "bun:test";
 import { mkdtemp, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -96,12 +96,8 @@ function assistantToolUseMessage(name: string, input: Record<string, unknown>) {
   };
 }
 
-beforeEach(() => {
-  // Runner enforces ANTHROPIC_API_KEY presence for non-auth agents; tests
-  // inject a fake query factory so no actual key is used, but the presence
-  // check still needs to pass.
-  process.env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "test-fake-key";
-});
+// No env setup needed — runAgent no longer does its own auth pre-check, and
+// the injected queryFactory replaces the real SDK subprocess.
 
 describe("runAgent — SDK options (regression for Codex P1/P2 on tools + cwd)", () => {
   test("pins cwd to REPO_ROOT and applies frontmatter tools as a hard allowlist", async () => {
@@ -304,19 +300,32 @@ describe("runAgent (baseline-collector, stubbed query)", () => {
     expect(caught?.message).toMatch(/rate_limit/);
   });
 
-  test("fails loudly when ANTHROPIC_API_KEY is missing for a non-auth agent", async () => {
+  test("does NOT pre-check ANTHROPIC_API_KEY — Claude Code auth is multi-source", async () => {
+    // The SDK spawns Claude Code, which can auth via a cached OAuth login,
+    // CLAUDE_CODE_OAUTH_TOKEN, Vertex, or Bedrock — not only
+    // ANTHROPIC_API_KEY. We leave the auth check to the SDK itself (its
+    // error is richer than any env-inspection we could do) and rely on the
+    // failure-propagation path fixed in Codex P1 to surface SDK auth
+    // errors as `done ok:false`.
     const state = await makeState();
     const saved = process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     try {
-      let caught: Error | undefined;
-      try {
-        await runAgent({ agentId: "baseline-collector", state }, { queryFactory: () => fakeQuery([]) as never });
-      } catch (e) {
-        caught = e as Error;
-      }
-      expect(caught).toBeInstanceOf(Error);
-      expect(caught?.message).toMatch(/ANTHROPIC_API_KEY is not set/);
+      const payload = {
+        findings: [],
+        signals: { hasInteractive: true, treeEmpty: false, needsAuth: false },
+      };
+      const queryFactory: QueryFactory = () =>
+        fakeQuery([successResultMessage(payload)]) as never;
+
+      // Must not throw purely because ANTHROPIC_API_KEY is absent — the
+      // stubbed query simulates a successful SDK run that relied on some
+      // other auth source.
+      const out = await runAgent(
+        { agentId: "baseline-collector", state },
+        { queryFactory },
+      );
+      expect(out.phaseOk).toBe(true);
     } finally {
       if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
     }

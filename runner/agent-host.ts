@@ -67,7 +67,14 @@ const DEFAULT_SIGNALS: AgentSignals = {
   needsAuth: false,
 };
 
-const DEFAULT_MODEL = "claude-opus-4-7";
+// Intentionally no hard-coded default model. `@anthropic-ai/claude-agent-sdk`
+// pinned at 0.1.77 (see bun.lock) was shipped before Opus 4.7, so a
+// default of "claude-opus-4-7" would break every agent run that doesn't
+// declare its own `model:` override. Omitting `Options.model` lets the SDK
+// fall back to whatever default the installed Claude Code binary ships with,
+// which is the only choice we can guarantee is valid against the pinned SDK.
+// Agent authors who want a specific model still declare it in their .md
+// frontmatter — the runner forwards that verbatim.
 const AGENT_TIMEOUT_MS = 5 * 60 * 1000;
 
 // Absolute path to the `bun drivers/<sr>/driver.ts` script for each screen
@@ -119,18 +126,20 @@ export async function runAgent(
     };
   }
 
-  if (!process.env.ANTHROPIC_API_KEY && agentId !== "auth") {
-    // Fail loud rather than silently degrading to defaults — that's the bug
-    // this slice was written to fix.
-    throw new Error(
-      `runAgent(${agentId}): ANTHROPIC_API_KEY is not set. The Agent SDK cannot run without it.`,
-    );
-  }
+  // Intentionally no env-var pre-check here. The Agent SDK spawns Claude
+  // Code, which authenticates via any of: `ANTHROPIC_API_KEY`, a cached
+  // OAuth / subscription login under `~/.claude/`, `CLAUDE_CODE_OAUTH_TOKEN`,
+  // Vertex, or Bedrock. Checking only `ANTHROPIC_API_KEY` would reject a
+  // perfectly valid subscription-logged-in host. The SDK already surfaces
+  // its own auth error (which is richer than anything we could produce from
+  // env inspection) and that error is now propagated to runner/index.ts
+  // thanks to the P1 fix on baselineNode, so a missing-auth run ends with
+  // `done ok:false` rather than silent empty findings.
 
   const clock = deps.now ?? now;
   const startedAt = clock();
   const parsed = await loadAgentFile(agentId);
-  const model = parsed.frontmatter.model ?? DEFAULT_MODEL;
+  const model = parsed.frontmatter.model;
 
   const logPath = resolve(state.runDir, `agent-${agentId}.ndjson`);
   await mkdir(dirname(logPath), { recursive: true });
@@ -149,7 +158,7 @@ export async function runAgent(
     t: startedAt,
     node: phase,
     agentId,
-    model,
+    model: model ?? "(sdk-default)",
   });
 
   const userPrompt = buildUserPrompt({ agentId, state });

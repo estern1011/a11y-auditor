@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -38,26 +38,38 @@ async function makeState(overrides: Partial<RunnerState> = {}): Promise<RunnerSt
 }
 
 // baselineNode must NOT swallow agent exceptions — when the agent throws
-// (missing ANTHROPIC_API_KEY, SDK error, schema-validation failure), the
+// (SDK auth error, SDK subprocess failure, schema-validation failure), the
 // error has to propagate to runner/index.ts so `done ok:false` is emitted
 // and the process exits non-zero. Swallowing the throw would silently turn a
 // failed audit into an empty-findings "clean" run (Codex P1).
 describe("baselineNode — error propagation", () => {
-  test("re-throws when runAgent fails (e.g. missing ANTHROPIC_API_KEY)", async () => {
-    const state = await makeState();
-    const saved = process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
+  test("re-throws when runAgent fails (runDir points at a file, not a directory)", async () => {
+    // Force an early failure inside runAgent by giving it a runDir that's
+    // actually a file — `mkdir(dirname(logPath), { recursive: true })` fails
+    // with ENOTDIR, which runAgent surfaces through its `agent.done`
+    // failure path. Any similar downstream throw (missing Claude auth,
+    // malformed structured output, schema mismatch) must propagate the
+    // same way; this test pins the contract cheaply without spawning the
+    // SDK subprocess.
+    const parent = await mkdtemp(join(tmpdir(), "baseline-node-err-"));
+    const filePath = join(parent, "is-a-file");
+    await writeFile(filePath, "not a directory", "utf8");
+    await mkdir(parent, { recursive: true });
+    const state = await makeState({ runDir: filePath });
+
+    let caught: Error | undefined;
     try {
-      let caught: Error | undefined;
-      try {
-        await baselineNode(state);
-      } catch (e) {
-        caught = e as Error;
-      }
-      expect(caught).toBeInstanceOf(Error);
-      expect(caught?.message).toMatch(/ANTHROPIC_API_KEY is not set/);
-    } finally {
-      if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
+      await baselineNode(state);
+    } catch (e) {
+      caught = e as Error;
     }
+    expect(caught).toBeInstanceOf(Error);
+    // `mkdir(dirname(logPath), { recursive: true })` surfaces EEXIST on
+    // Linux/macOS when the path is occupied by a regular file. Other
+    // legitimate failure modes (ENOTDIR when the file is deeper in the
+    // tree, or runAgent's own wrapper text) are also fine — the only
+    // assertion we care about is "something bubbled out of baselineNode",
+    // proving the catch-and-swallow is really gone.
+    expect(caught?.message).toMatch(/EEXIST|ENOTDIR|not a directory|agent|runAgent/i);
   });
 });
