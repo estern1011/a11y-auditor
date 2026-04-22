@@ -200,6 +200,19 @@ export async function runAgent(
       ? allowlist
       : { type: "preset", preset: "claude_code" };
 
+    // Let the host override which Claude Code binary the SDK spawns. The
+    // pinned `@anthropic-ai/claude-agent-sdk@0.1.77` bundles its own
+    // (older) cli.js internally, which on hosts that auth via
+    // `CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR` (Claude Code on the web,
+    // some sandboxed environments) can't read the newer credential
+    // format and falls back to "Invalid API key · Please run /login".
+    // The host's native `claude` binary (pointed to by
+    // `CLAUDE_CODE_EXECPATH` when the runner is launched from Claude
+    // Code itself) does know how to read that fd. Prefer it whenever
+    // the env var is present so agent sessions authenticate the same
+    // way the outer Claude Code session does.
+    const pathToClaudeCodeExecutable = process.env.CLAUDE_CODE_EXECPATH;
+
     const result = await driveAgentSession({
       queryFactory,
       prompt: userPrompt,
@@ -213,6 +226,7 @@ export async function runAgent(
         // `fileURLToPath`; this closes the last gap for tool calls).
         cwd: REPO_ROOT,
         model,
+        pathToClaudeCodeExecutable,
         systemPrompt: parsed.systemPrompt,
         tools: baseTools,
         allowedTools: allowlist,
