@@ -15,8 +15,9 @@ import { serialize, now, type RunnerEvent } from "./events.ts";
 import { startDriver, type StartDriverResult } from "./tools/driver.ts";
 
 const SCAFFOLD_BANNER =
-  "WARNING: runner/ is scaffold-only. Tool/agent nodes return empty results; " +
-  "a clean run here does NOT mean the page is accessible.\n";
+  "WARNING: runner/ is still partial. Only the baseline agent node is wired end-to-end; " +
+  "keyboard + visual + auth nodes return defaults, so a clean run here does NOT mean " +
+  "the page is accessible.\n";
 
 interface CliOptions {
   url: string;

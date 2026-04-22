@@ -9,10 +9,28 @@ export type RunnerEvent =
   | { k: "phase.status"; t: number; phase: PhaseId; status: PhaseStatus }
   | { k: "node.start"; t: number; node: PhaseId }
   | { k: "node.end"; t: number; node: PhaseId; ok: boolean; error?: string }
+  | { k: "agent.start"; t: number; node: PhaseId; agentId: string; model: string }
+  | {
+      k: "agent.done";
+      t: number;
+      node: PhaseId;
+      agentId: string;
+      ok: boolean;
+      error?: string;
+      findings?: number;
+      durationMs?: number;
+    }
   | { k: "agent.chunk"; t: number; node: PhaseId; channel: "sr" | "tool" | "agent"; text: string }
   | { k: "finding"; t: number; id: string; criterion: string }
   | { k: "artifact"; t: number; key: string; path: string }
-  | { k: "budget"; t: number; usd: number; tokens: number }
+  | {
+      k: "budget";
+      t: number;
+      node?: PhaseId;
+      agentId?: string;
+      usd: number;
+      tokens: number;
+    }
   | { k: "done"; t: number; ok: boolean; error?: string };
 
 export function fromLangGraphEvent(ev: unknown): RunnerEvent | null {
