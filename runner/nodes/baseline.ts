@@ -20,6 +20,12 @@ export async function baselineNode(state: RunnerState): Promise<RunnerStateUpdat
     transcript: out.transcript,
     hasInteractive: out.signals.hasInteractive,
     treeEmpty: out.signals.treeEmpty,
+    // Persist `needsAuth` even though the graph's current conditional edges
+    // route through `auth` only on the discover→auth transition — if the
+    // baseline agent detects a login/paywall gate the discover heuristic
+    // missed, downstream phases and the ACR reporting pipeline should still
+    // see the signal. Dropping it would leave `state.needsAuth` stale.
+    needsAuth: out.signals.needsAuth,
     phaseStatus: { baseline: out.phaseOk ? "ok" : "error" },
   };
 }

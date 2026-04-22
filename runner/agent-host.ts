@@ -138,11 +138,6 @@ export async function runAgent(
 
   const clock = deps.now ?? now;
   const startedAt = clock();
-  const parsed = await loadAgentFile(agentId);
-  const model = parsed.frontmatter.model;
-
-  const logPath = resolve(state.runDir, `agent-${agentId}.ndjson`);
-  await mkdir(dirname(logPath), { recursive: true });
 
   const emitEvent = async (ev: RunnerEvent) => {
     try {
@@ -153,28 +148,40 @@ export async function runAgent(
     }
   };
 
+  // Emit `agent.start` before any setup work so the lifecycle has a consistent
+  // opening bracket even for setup-time failures (missing agent file,
+  // unwritable runDir). The model field may still be unknown at this point —
+  // we'll overwrite the field on success, or report "(sdk-default)" if the
+  // agent file itself is missing. Every remaining failure mode (setup or
+  // agent iteration) is caught by the big try/catch below and emits the
+  // matching `agent.done` ok:false.
   await emitEvent({
     k: "agent.start",
     t: startedAt,
     node: phase,
     agentId,
-    model: model ?? "(sdk-default)",
+    model: "(pending)",
   });
 
-  const userPrompt = buildUserPrompt({ agentId, state });
-  const queryFactory = deps.queryFactory ?? defaultQuery;
-
+  const transcript: TranscriptLine[] = [];
   const abortController = new AbortController();
   const timeoutHandle = setTimeout(() => abortController.abort(), AGENT_TIMEOUT_MS);
 
-  // Single failure funnel. Every throw path inside the try records an
-  // `agent.done` event with ok:false so event consumers always see a terminal
-  // lifecycle signal for this agent execution — even when structured output
-  // fails schema validation or the SDK subprocess never produces a `result`
-  // message. Previously only the outer-iteration catch did this, so a
-  // malformed-output run left `events.ndjson` with `agent.start` and no close.
-  const transcript: TranscriptLine[] = [];
+  // Single failure funnel. Every throw path — setup, iteration, or structured-
+  // output validation — records an `agent.done` event with ok:false so event
+  // consumers always see a terminal lifecycle signal for this agent
+  // execution. Previously the setup steps (loadAgentFile, mkdir) lived above
+  // the try/catch, so a missing agent file or invalid runDir left
+  // `events.ndjson` with `agent.start` and no close.
   try {
+    const parsed = await loadAgentFile(agentId);
+    const model = parsed.frontmatter.model;
+
+    const logPath = resolve(state.runDir, `agent-${agentId}.ndjson`);
+    await mkdir(dirname(logPath), { recursive: true });
+
+    const userPrompt = buildUserPrompt({ agentId, state });
+    const queryFactory = deps.queryFactory ?? defaultQuery;
     // Honor the frontmatter's tool list as a *hard* restriction, not just
     // auto-approval. Per the SDK docs, `allowedTools` only suppresses the
     // permission prompt for listed tools — the model can still request

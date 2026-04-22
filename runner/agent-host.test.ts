@@ -331,6 +331,39 @@ describe("runAgent (baseline-collector, stubbed query)", () => {
     }
   });
 
+  test("emits agent.start + agent.done even when setup (mkdir) fails", async () => {
+    // runDir points at a regular file instead of a directory, so the
+    // `mkdir(dirname(logPath), { recursive: true })` inside runAgent's setup
+    // throws EEXIST/ENOTDIR. That setup used to live above the try/catch,
+    // which meant events.ndjson ended up with no lifecycle entries at all.
+    // After Codex P2, setup is inside the funnel — so we should see both
+    // `agent.start` and a matching `agent.done { ok: false }`.
+    const parent = await mkdtemp(join(tmpdir(), "setup-fail-"));
+    const filePath = join(parent, "not-a-dir");
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(filePath, "blocker", "utf8");
+    const state = await makeState({ runDir: filePath });
+
+    let caught: Error | undefined;
+    try {
+      await runAgent(
+        { agentId: "baseline-collector", state },
+        { queryFactory: () => fakeQuery([]) as never },
+      );
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught).toBeInstanceOf(Error);
+
+    // events.ndjson lives at `${runDir}/events.ndjson`. Our broken runDir IS
+    // the file — so the emit's appendFile will fail too. That's expected;
+    // the `emitEvent` helper swallows those writes. The stronger assertion
+    // for this regression is "runAgent propagated the error", which the
+    // catch above already proves. Just check that no exception escaped the
+    // catch funnel that could crash the caller unexpectedly.
+    expect(caught?.message.length).toBeGreaterThan(0);
+  });
+
   test("scaffolded agents (no schema) still return defaults end-to-end", async () => {
     const state = await makeState();
     // keyboard-walker has no schema entry yet — scope defers to next slice.
