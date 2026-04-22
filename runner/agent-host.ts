@@ -395,18 +395,32 @@ async function driveAgentSession(
 }
 
 // Patterns the Agent SDK (or the Claude Code binary it spawns) surfaces when
-// authentication fails — cached OAuth expired, API key rejected, OAuth token
-// fd unreadable, etc. Matching is intentionally broad; a false positive just
-// appends a benign hint to an unrelated error, while a false negative leaves
-// a first-run user staring at "Invalid API key · Please run /login" with no
-// context on which of four auth sources they need to set up.
+// *its own* authentication fails — cached OAuth expired, API key rejected,
+// OAuth token fd unreadable, etc. These must be narrow enough to skip over
+// target-site auth failures the agent encounters while auditing (a page
+// behind /login, an HTTP 401 from the app under test, a generic
+// "Unauthorized" response). If we matched those, `agent.done.error` would
+// tell the user to reconfigure Claude credentials when the Claude SDK is
+// working fine — the target page is the one 401-ing.
+//
+// Each pattern below references an unambiguous Claude/Anthropic-side
+// marker: the literal SDK error string, an env var name, or the
+// api.anthropic.com host.
 const AUTH_ERROR_PATTERNS = [
+  // Claude Code's literal auth-failure output
   /invalid api key/i,
-  /anthropic[_\s-]?api[_\s-]?key/i,
-  /\/login\b/i,
-  /unauthenticated|unauthori[sz]ed/i,
-  /\b401\b/,
-  /claude_code_oauth_token/i,
+  /please run \/login/i,
+  /claude \/login/i,
+  // Env var names — won't appear in a target-site error
+  /\banthropic[_\s-]?api[_\s-]?key\b/i,
+  // No trailing \b — the env var often appears as
+  // `CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR`, and `_` is a word char so
+  // `\b` after `token` would refuse that suffix. Leading \b is enough to
+  // keep the pattern specific (the prefix doesn't occur in page errors).
+  /\bclaude_code_oauth_token/i,
+  // SDK-side HTTP failures call the Anthropic API host. Target-site errors
+  // don't mention this domain, so 401s against it are unambiguous SDK auth.
+  /\bapi\.anthropic\.com\b/i,
 ];
 
 export function authHintFor(message: string): string | null {

@@ -422,7 +422,9 @@ describe("authHintFor", () => {
     expect(hint).toMatch(/claude \/login/);
   });
 
-  test("returns a hint on 401 responses", () => {
+  test("returns a hint on SDK-side 401s against api.anthropic.com", () => {
+    // The api.anthropic.com marker is what makes this unambiguous — a bare
+    // 401 could easily be the target page under audit returning 401.
     expect(authHintFor("HTTP 401 from api.anthropic.com")).not.toBeNull();
   });
 
@@ -436,6 +438,19 @@ describe("authHintFor", () => {
     expect(authHintFor("structured output failed schema validation")).toBeNull();
     expect(authHintFor("rate_limit")).toBeNull();
     expect(authHintFor("Agent SDK query ended without a 'result' message")).toBeNull();
+  });
+
+  test("does NOT match target-site auth failures (Codex P2 regression guard)", () => {
+    // The agent is often pointed at pages that themselves require auth —
+    // a /login URL, a 401 from the app under test, a generic "Unauthorized"
+    // response body. Matching those would tell the user to reconfigure
+    // Claude credentials when the Claude SDK is working fine. Keep strict.
+    expect(
+      authHintFor("Navigation failed: https://app.example.com/login returned 500"),
+    ).toBeNull();
+    expect(authHintFor("target site returned HTTP 401")).toBeNull();
+    expect(authHintFor("Unauthorized access to /admin")).toBeNull();
+    expect(authHintFor("page under audit: redirected to /login")).toBeNull();
   });
 });
 
