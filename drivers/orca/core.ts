@@ -13,7 +13,8 @@
  */
 
 import { spawn, spawnSync, execSync } from "child_process";
-import { writeFileSync, existsSync, unlinkSync } from "fs";
+import { existsSync, unlinkSync } from "fs";
+import { runtimePath, safeWriteSync, safeAppendSync } from "../runtime-paths.ts";
 import { chromium } from "playwright";
 import type { Page, Browser } from "playwright";
 import { translateError, type ErrorContext } from "../errors.ts";
@@ -38,9 +39,9 @@ export { isVoError, ORCA_COMMANDS } from "../types.ts";
 
 export const DEFAULT_PORT = 7484;
 export const DEFAULT_CDP_PORT = 9223;
-export const LOG_FILE = "/tmp/orca-driver.log";
-export const PID_FILE = "/tmp/orca-driver.pid";
-export const ORCA_STATE_FILE = "/tmp/orca-driver-state.json";
+export const LOG_FILE = runtimePath("orca-driver.log");
+export const PID_FILE = runtimePath("orca-driver.pid");
+export const ORCA_STATE_FILE = runtimePath("orca-driver-state.json");
 
 export const CLI_TIMEOUT_MS = 30_000;
 export const STARTUP_POLL_MS = 200;
@@ -157,7 +158,7 @@ export function getTranscriptLength(): number {
 export function log(msg: string, err = false) {
   const line = `[${new Date().toISOString()}] [${err ? "ERROR" : "INFO"}] ${msg}\n`;
   try {
-    writeFileSync(LOG_FILE, line, { flag: "a" });
+    safeAppendSync(LOG_FILE, line);
   } catch {}
 }
 
@@ -592,6 +593,7 @@ export async function initialize(url: string | null, cdpPort: number) {
     headless: false,
     args: [
       `--remote-debugging-port=${cdpPort}`,
+      "--remote-debugging-address=127.0.0.1",
       "--force-renderer-accessibility",
       "--start-maximized",
     ],
@@ -626,7 +628,7 @@ export async function initialize(url: string | null, cdpPort: number) {
   log("Orca active");
 
   try {
-    writeFileSync(ORCA_STATE_FILE, JSON.stringify({ weStartedOrca: state.weStartedOrca }));
+    safeWriteSync(ORCA_STATE_FILE, JSON.stringify({ weStartedOrca: state.weStartedOrca }));
   } catch {}
 
   await sleep(ORCA_INIT_SETTLE_MS);

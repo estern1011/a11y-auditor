@@ -7,8 +7,8 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
-import { writeFileSync } from "fs";
 import type { ScreenReaderDriver } from "./interface.ts";
+import { safeWriteSync } from "./runtime-paths.ts";
 import { runAxeAudit } from "../audit.ts";
 import { checkLoadingState, startObserver, waitForSelector, type ObserverHandle } from "./wait.ts";
 
@@ -60,11 +60,40 @@ function parseBody(body: string): Record<string, unknown> | null {
   }
 }
 
+// Schemes the driver is willing to load. file:// and chrome:// are excluded
+// so a compromised endpoint (see DNS-rebinding scenario in the security
+// review) can't be used as a local-file-read primitive.
+const ALLOWED_URL_SCHEMES = new Set(["http:", "https:", "data:"]);
+
+export function isAllowedNavigationUrl(value: string): boolean {
+  try {
+    return ALLOWED_URL_SCHEMES.has(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
+
+// Reject the literal string "null" (sent by sandboxed iframes / data: /
+// file: documents) and any origin that isn't this exact daemon port.
+// A regex matching any localhost port would let a malicious dev server on
+// another local port drive the daemon.
+function isOriginAllowed(origin: string | undefined, port: number): boolean {
+  if (origin === undefined) return true;
+  const lower = origin.toLowerCase();
+  return lower === `http://127.0.0.1:${port}` || lower === `http://localhost:${port}`;
+}
+
+function isHostAllowed(host: string | undefined, port: number): boolean {
+  if (!host) return false;
+  const lower = host.toLowerCase();
+  return lower === `127.0.0.1:${port}` || lower === `localhost:${port}`;
+}
+
 // ---------------------------------------------------------------------------
 // Request handler
 // ---------------------------------------------------------------------------
 
-export function createHandler(driver: ScreenReaderDriver) {
+export function createHandler(driver: ScreenReaderDriver, port: number) {
   // Server-level observer handle — persists across requests
   let observer: ObserverHandle | null = null;
 
@@ -72,6 +101,19 @@ export function createHandler(driver: ScreenReaderDriver) {
     const { method } = req;
     const url = new URL(req.url || "/", "http://localhost");
     const path = url.pathname;
+
+    // Reject DNS-rebinding and cross-origin browser callers before any
+    // route runs. Node fetch / curl don't send Origin so the absent-Origin
+    // case is allowed; browsers always send Origin for cross-origin requests
+    // so its absence is a non-browser signal.
+    if (!isHostAllowed(req.headers.host, port)) {
+      json(res, 403, { error: "bad host" });
+      return;
+    }
+    if (!isOriginAllowed(req.headers.origin, port)) {
+      json(res, 403, { error: "bad origin" });
+      return;
+    }
 
     try {
       if (path === "/" && method === "GET") {
@@ -134,6 +176,10 @@ export function createHandler(driver: ScreenReaderDriver) {
         const body = parseBody(await readBody(req, driver.maxRequestBody));
         if (!body?.url || typeof body.url !== "string") {
           json(res, 400, { error: "Missing 'url' in request body" });
+          return;
+        }
+        if (!isAllowedNavigationUrl(body.url)) {
+          json(res, 400, { error: "URL scheme not allowed (http/https/data only)" });
           return;
         }
         json(res, 200, await driver.navigate(body.url));
@@ -285,12 +331,12 @@ export async function startServer(
   url: string | null,
 ) {
   try {
-    writeFileSync(driver.logFile, "");
+    safeWriteSync(driver.logFile, "");
   } catch {}
 
   await driver.initialize(url, cdpPort);
 
-  const server = createServer(createHandler(driver));
+  const server = createServer(createHandler(driver, port));
   await new Promise<void>((resolve, reject) => {
     server.on("error", async (e) => {
       driver.log(`Server listen failed: ${e.message}`, true);
@@ -303,7 +349,7 @@ export async function startServer(
       console.log(`Server ready on http://127.0.0.1:${port}`);
       console.log(`CDP available on ws://127.0.0.1:${cdpPort}`);
       try {
-        writeFileSync(driver.pidFile, process.pid.toString());
+        safeWriteSync(driver.pidFile, process.pid.toString());
       } catch {}
       resolve();
     });
