@@ -298,7 +298,7 @@ Listing these so a future reviewer can skip past them.
 
 ## Recommended commit order (smallest blast radius first)
 
-1. Add `--` to the `git checkout` / `git pull` calls in `eval/sprite-bootstrap.sh` (#5).
+1. Validate `$BRANCH` (reject values starting with `-` or containing shell-meta characters) and replace `git checkout "$BRANCH"` with `git switch "$BRANCH"` in `eval/sprite-bootstrap.sh` (#5). **Do not** add `--` to the `git checkout` line — `--` makes git treat the value as a pathspec, which would break the default `main` case.
 2. Pass `settleMs` as an arg to `page.evaluate` in `drivers/wait.ts` (#6).
 3. Add `--remote-debugging-address=127.0.0.1` to the Chromium launch args (#7).
 4. Allow-list URL schemes in `/navigate` (and the CLI `start` / `navigate` paths) (#2).
