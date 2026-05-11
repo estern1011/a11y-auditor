@@ -74,7 +74,7 @@ Binding to `127.0.0.1` blocks direct remote access. **It does not block DNS rebi
 - Allowing a missing `Origin` header is acceptable for the CLI / non-browser callers (Node's `fetch` and `curl` don't send one by default). Browsers always send an `Origin` for cross-origin requests, so absence is a non-browser signal.
 - Optionally require a per-launch random bearer token written into the pid file (and read by `cli.ts`).
 
-Minimal patch sketch (matches the prose above — rejects literal `null`, allows a missing header):
+Minimal patch sketch (matches the prose above — rejects literal `null`, allows a missing header, **pins the allowed origin to the driver port**):
 
 ```ts
 // inside handle(...)
@@ -82,12 +82,20 @@ const host = (req.headers.host || "").toLowerCase();
 const okHost = host === `127.0.0.1:${port}` || host === `localhost:${port}`;
 if (!okHost) { json(res, 403, { error: "bad host" }); return; }
 const origin = req.headers.origin;
-if (origin !== undefined && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(origin)) {
-  // Note: the literal string "null" (sent by sandboxed iframes / data: / file:)
-  // does not match the regex and is rejected here.
+const allowedOrigins = new Set([
+  `http://127.0.0.1:${port}`,
+  `http://localhost:${port}`,
+]);
+if (origin !== undefined && !allowedOrigins.has(origin.toLowerCase())) {
+  // The literal string "null" (sent by sandboxed iframes / data: / file:)
+  // is not in the set and is rejected here. Any other-port localhost dev
+  // server (e.g. http://localhost:3000) is also rejected — only the
+  // driver's own port is allowed.
   json(res, 403, { error: "bad origin" }); return;
 }
 ```
+
+Important: do **not** use a regex like `/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/` — that allows any port, which lets a malicious/compromised dev server on another localhost port (e.g. `http://localhost:3000`) drive `/navigate`, `/press`, or `/stop`. Compare against the exact `:${port}` only.
 
 ### 2. `/navigate` accepts any URL scheme — `file://`, `chrome://`, `javascript:` all permitted
 
@@ -150,7 +158,15 @@ If the attacker swapped the symlink for a file whose first integer is the PID of
 **Recommended fix:**
 - Move state to `os.tmpdir()`-derived per-user directories (`mkdtempSync` once, store the path in an env var or in the user's home), or to `${XDG_RUNTIME_DIR:-$HOME/.cache/a11y-auditor}`.
 - Open writes with `O_NOFOLLOW | O_CREAT | O_EXCL` for first creation, and `O_NOFOLLOW` for appends, refusing to proceed if a symlink is detected.
-- Validate the pid file before killing: `fs.statSync(pidFile)` should show `uid === process.geteuid()` and `isSymbolicLink() === false`.
+- Validate the pid file before killing. **Use `lstatSync`, not `statSync`** — `statSync` follows the symlink and returns the stats of the target, so `isSymbolicLink()` is always `false` for a symlinked PID file (the attacker wins). With `lstatSync` you see the symlink itself:
+  ```ts
+  const st = fs.lstatSync(pidFile);
+  if (st.isSymbolicLink()) throw new Error("refusing to kill: pid file is a symlink");
+  if (st.uid !== process.geteuid?.()) throw new Error("refusing to kill: pid file not owned by us");
+  // Then read with O_NOFOLLOW so a swap between lstat and read still fails:
+  const fd = fs.openSync(pidFile, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  try { /* read pid from fd */ } finally { fs.closeSync(fd); }
+  ```
 
 ### 4. State-file-driven `defaults write` / `osascript quit` / `pkill orca` in `cli kill`
 
@@ -185,7 +201,22 @@ git pull origin "$BRANCH" || true
 
 `$BRANCH` is a script argument supplied by the operator. If it starts with `-` (e.g. `--orphan`, `-q`, or a future option that git ships), `git checkout` will parse it as a flag rather than a branch name. Currently the worst case is benign — `git checkout --orphan foo` doesn't run code — but the same idiom in `git pull origin "$BRANCH"` is also suspect.
 
-**Recommended fix:** `git checkout -- "$BRANCH"` (or `git switch --detach -- "$BRANCH"`), and pass `--` to `git pull` likewise.
+**Recommended fix:** *Do not* use `git checkout -- "$BRANCH"` — after `--`, `git checkout` treats its arguments as **file pathspecs**, not as a branch/ref, so `git checkout -- main` tries to restore a file named `main` and never actually switches branches. The correct fixes are:
+
+1. **Validate the ref name** before passing it to git. Refuse anything that starts with `-` or contains shell-meta characters:
+   ```bash
+   case "$BRANCH" in
+     -*|*[![:alnum:]/._-]*) echo "invalid branch name: $BRANCH" >&2; exit 1 ;;
+   esac
+   git fetch origin -- "$BRANCH"
+   git switch "$BRANCH"            # git switch only takes refs, not pathspecs
+   git pull origin -- "$BRANCH"
+   ```
+   `git switch` is preferable to `git checkout` here because it has a smaller flag surface and does not overload the same command with pathspec semantics.
+
+2. Or use `git -c protocol.file.allow=user` plus an explicit ref form: `git switch --detach "refs/heads/$BRANCH"` — this still allows `-` prefixes through to git, so it isn't a substitute for validation, but it makes the operation idempotent.
+
+The original report's suggestion (`git checkout -- "$BRANCH"`) was wrong and would break the default `main` case.
 
 ### 6. JS template-literal interpolation of `settleMs` in `page.evaluate`
 
