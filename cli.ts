@@ -5,10 +5,12 @@
  * or structured JSON consumption. Works with both VoiceOver and Orca.
  */
 
-import { existsSync, readFileSync } from "fs";
+import { readFileSync } from "fs";
 import { spawnSync } from "child_process";
 import type { ScreenReaderDriver } from "./drivers/interface.ts";
 import { isVoError, type VoResult, type TranscriptEntry } from "./drivers/types.ts";
+import { isAllowedNavigationUrl } from "./drivers/server.ts";
+import { readPidFile } from "./drivers/runtime-paths.ts";
 
 // ---------------------------------------------------------------------------
 // Config from driver
@@ -156,6 +158,9 @@ export async function cli(args: string[], driver: ScreenReaderDriver, usage: str
       case "start": {
         const url = positional[1];
         if (!url) throw new CliError("Missing URL. Usage: start <url>");
+        if (!isAllowedNavigationUrl(url)) {
+          throw new CliError("URL scheme not allowed (http/https/data only)");
+        }
         console.log(`Starting ${driver.name} driver...`);
 
         // Spawn the daemon
@@ -200,8 +205,11 @@ export async function cli(args: string[], driver: ScreenReaderDriver, usage: str
         break;
 
       case "kill": {
-        if (!existsSync(driver.pidFile)) throw new CliError("No PID file");
-        const pid = parseInt(readFileSync(driver.pidFile, "utf-8"), 10);
+        // readPidFile uses lstat + O_NOFOLLOW to refuse following a symlink
+        // planted at the pid path, and requires the file to be owned by the
+        // running user. A null return means "no safe pid to kill".
+        const pid = readPidFile(driver.pidFile);
+        if (pid === null) throw new CliError("No valid PID file");
         process.kill(pid, "SIGKILL");
 
         // Platform-specific cleanup
@@ -268,6 +276,9 @@ export async function cli(args: string[], driver: ScreenReaderDriver, usage: str
       case "navigate": {
         const url = positional[1];
         if (!url) throw new CliError("Missing URL");
+        if (!isAllowedNavigationUrl(url)) {
+          throw new CliError("URL scheme not allowed (http/https/data only)");
+        }
         printVO(await post(port, "/navigate", { url }), jsonMode);
         break;
       }

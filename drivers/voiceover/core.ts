@@ -7,7 +7,8 @@
  */
 
 import { spawn, spawnSync } from "child_process";
-import { writeFileSync, existsSync, unlinkSync } from "fs";
+import { existsSync, unlinkSync } from "fs";
+import { runtimePath, safeWriteSync, safeAppendSync } from "../runtime-paths.ts";
 import { voiceOver, VoiceOverCommanderCommands } from "@guidepup/guidepup";
 import type { MacOSKeyboardCommand } from "@guidepup/guidepup";
 import { chromium } from "playwright";
@@ -47,9 +48,9 @@ export const VALID_MODIFIERS = VOICEOVER_MODIFIERS;
 
 export const DEFAULT_PORT = 7483;
 export const DEFAULT_CDP_PORT = 9222;
-export const LOG_FILE = "/tmp/vo-driver.log";
-export const PID_FILE = "/tmp/vo-driver.pid";
-export const VO_STATE_FILE = "/tmp/vo-driver-state.json";
+export const LOG_FILE = runtimePath("vo-driver.log");
+export const PID_FILE = runtimePath("vo-driver.pid");
+export const VO_STATE_FILE = runtimePath("vo-driver-state.json");
 
 export const CLI_TIMEOUT_MS = 30_000;
 export const STARTUP_POLL_MS = 200;
@@ -156,7 +157,7 @@ export function getTranscriptLength(): number {
 export function log(msg: string, err = false) {
   const line = `[${new Date().toISOString()}] [${err ? "ERROR" : "INFO"}] ${msg}\n`;
   try {
-    writeFileSync(LOG_FILE, line, { flag: "a" });
+    safeAppendSync(LOG_FILE, line);
   } catch {}
 }
 
@@ -482,7 +483,10 @@ export async function initialize(url: string | null, cdpPort: number) {
 
   state.browser = await chromium.launch({
     headless: false,
-    args: [`--remote-debugging-port=${cdpPort}`],
+    args: [
+      `--remote-debugging-port=${cdpPort}`,
+      "--remote-debugging-address=127.0.0.1",
+    ],
   });
   const ctx = await state.browser.newContext();
   state.page = await ctx.newPage();
@@ -523,7 +527,7 @@ export async function initialize(url: string | null, cdpPort: number) {
 
   // Persist state so CLI kill command can restore speech rate and check VO ownership
   try {
-    writeFileSync(
+    safeWriteSync(
       VO_STATE_FILE,
       JSON.stringify({
         weStartedVoiceOver: true,

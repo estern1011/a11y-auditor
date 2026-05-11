@@ -253,13 +253,14 @@ export interface StartObserverOptions {
   settleMs?: number;
 }
 
-// The observer injection script — stored as a string so it can be
-// re-injected after every navigation (page.goto loads a new document,
-// wiping all injected JS).
-const OBSERVER_INJECT = `(function(settleMs) {
-  if (window.__a11yObserver) return;
+// The observer injection function — page.evaluate serializes this and
+// runs it in the browser context. settleMs is passed as a real argument
+// rather than interpolated into the source string, so it remains safe
+// against JS injection even if upstream validation regresses.
+function observerInject(settleMs: number): void {
+  if ((window as any).__a11yObserver) return;
 
-  var state = {
+  const state = {
     active: true,
     settled: false,
     mutationCount: 0,
@@ -268,15 +269,15 @@ const OBSERVER_INJECT = `(function(settleMs) {
     settleMs: settleMs,
   };
 
-  var timer = null;
-  var observer = new MutationObserver(function(mutations) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const observer = new MutationObserver((mutations) => {
     if (!state.active) return;
     state.mutationCount += mutations.length;
     state.lastMutationTime = Date.now();
     state.settled = false;
 
     if (timer) clearTimeout(timer);
-    timer = setTimeout(function() {
+    timer = setTimeout(() => {
       state.settled = true;
     }, settleMs);
   });
@@ -288,20 +289,20 @@ const OBSERVER_INJECT = `(function(settleMs) {
     characterData: true,
   });
 
-  timer = setTimeout(function() {
+  timer = setTimeout(() => {
     state.settled = true;
   }, settleMs);
 
-  window.__a11yObserver = {
-    state: state,
-    observer: observer,
-    stop: function() {
+  (window as any).__a11yObserver = {
+    state,
+    observer,
+    stop: () => {
       state.active = false;
       observer.disconnect();
       if (timer) clearTimeout(timer);
     },
   };
-})`;
+}
 
 export async function startObserver(
   page: Page,
@@ -309,9 +310,10 @@ export async function startObserver(
 ): Promise<ObserverHandle> {
   const settleMs = options.settleMs ?? 2000;
 
-  // Inject into the current page
+  // Inject into the current page. Passing settleMs as a real arg avoids
+  // string-interpolating untrusted values into the script source.
   async function inject() {
-    await page.evaluate(`${OBSERVER_INJECT}(${settleMs})`);
+    await page.evaluate(observerInject, settleMs);
   }
 
   // Re-inject after every navigation

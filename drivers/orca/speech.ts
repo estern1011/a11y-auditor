@@ -14,7 +14,6 @@ import {
   writeFileSync,
   readFileSync,
   mkdirSync,
-  existsSync,
   watchFile,
   unwatchFile,
   statSync,
@@ -22,12 +21,13 @@ import {
 import { execSync } from "child_process";
 import { homedir } from "os";
 import { join } from "path";
+import { runtimePath, safeWriteSync } from "../runtime-paths.ts";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-export const SPEECH_LOG = "/tmp/orca-speech.log";
+export const SPEECH_LOG = runtimePath("orca-speech.log");
 
 // ---------------------------------------------------------------------------
 // Speech buffer
@@ -85,7 +85,7 @@ export function clear(): number {
   nextIndex = 0;
   filePos = 0;
   try {
-    writeFileSync(SPEECH_LOG, "");
+    safeWriteSync(SPEECH_LOG, "");
   } catch {}
   return count;
 }
@@ -121,7 +121,7 @@ function readNew(): void {
 export function startWatching(): void {
   if (watching) return;
   try {
-    writeFileSync(SPEECH_LOG, "");
+    safeWriteSync(SPEECH_LOG, "");
   } catch {}
   filePos = 0;
   watching = true;

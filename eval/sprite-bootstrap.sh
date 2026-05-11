@@ -19,6 +19,13 @@ set -euo pipefail
 BRANCH="${1:-main}"
 DEST="$HOME/a11y-auditor"
 
+case "$BRANCH" in
+  -*|*[![:alnum:]/._-]*)
+    echo "invalid branch name: $BRANCH" >&2
+    exit 1
+    ;;
+esac
+
 echo "==> Installing bun..."
 curl -fsSL https://bun.sh/install | bash
 export PATH="$HOME/.bun/bin:$PATH"
@@ -28,7 +35,7 @@ if [ -d "$DEST" ]; then
   echo "    Repo already exists, fetching and checking out $BRANCH..."
   cd "$DEST"
   git fetch origin
-  git checkout "$BRANCH"
+  git switch "$BRANCH"
   git pull origin "$BRANCH" || true
 else
   git clone --branch "$BRANCH" https://github.com/estern1011/a11y-auditor.git "$DEST"
