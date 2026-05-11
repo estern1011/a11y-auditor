@@ -70,10 +70,11 @@ Binding to `127.0.0.1` blocks direct remote access. **It does not block DNS rebi
 
 **Recommended fix:**
 - Validate `req.headers.host` against an allow-list of `127.0.0.1[:port]` and `localhost[:port]` before dispatching any route.
-- Reject any request carrying an `Origin` header that isn't `null` or `http://127.0.0.1:<port>` / `http://localhost:<port>`.
+- Reject any request whose `Origin` header is present and is **not** `http://127.0.0.1:<port>` or `http://localhost:<port>`. In particular, **reject the literal string `null`** — sandboxed iframes, `data:` documents, and `file:` documents serialize their origin as `Origin: null`, and they can still issue simple cross-origin POSTs (e.g. `Content-Type: text/plain` carrying JSON) that fire side-effect endpoints like `/stop`, `/navigate`, and `/press`. CORS only prevents the attacker from *reading* the response — it doesn't block the request itself.
+- Allowing a missing `Origin` header is acceptable for the CLI / non-browser callers (Node's `fetch` and `curl` don't send one by default). Browsers always send an `Origin` for cross-origin requests, so absence is a non-browser signal.
 - Optionally require a per-launch random bearer token written into the pid file (and read by `cli.ts`).
 
-Minimal patch sketch:
+Minimal patch sketch (matches the prose above — rejects literal `null`, allows a missing header):
 
 ```ts
 // inside handle(...)
@@ -81,7 +82,9 @@ const host = (req.headers.host || "").toLowerCase();
 const okHost = host === `127.0.0.1:${port}` || host === `localhost:${port}`;
 if (!okHost) { json(res, 403, { error: "bad host" }); return; }
 const origin = req.headers.origin;
-if (origin && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(origin)) {
+if (origin !== undefined && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(origin)) {
+  // Note: the literal string "null" (sent by sandboxed iframes / data: / file:)
+  // does not match the regex and is rejected here.
   json(res, 403, { error: "bad origin" }); return;
 }
 ```
