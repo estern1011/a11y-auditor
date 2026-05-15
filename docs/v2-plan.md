@@ -69,11 +69,13 @@ An LLM-driven WCAG 2.2 auditor that ships as a portable agent skill, makes targe
 
 | Channel | Surface | Audience |
 |---|---|---|
-| `npx skills add` (skills.sh) | SKILL.md + bundled scripts/data | Devs in any code agent host |
+| `npx skills add <source>` (skills.sh) | SKILL.md + bundled scripts/data | Devs in any code agent host |
 | `npm install -g @org/a11y-auditor` | CLI binary | Devs running CLI/CI |
 | `npx a11y-auditor` | Same CLI without install | Ad-hoc usage |
 
 The skill and the CLI ship from the **same npm package**. `skills add` symlinks the package's `skills/auditor/` directory into each detected host's skills location. No separate package per host.
+
+The `<source>` placeholder above is the skills.sh CLI's required argument and resolves to one of (a) the published GitHub repo (`owner/repo`, e.g. `estern1011/a11y-auditor-v2`) or (b) the npm package name once published. The exact string is pinned when §18's repo-name / npm-scope / skill-name questions resolve at bootstrap; until then the doc uses `<source>` as an explicit placeholder so install commands are syntactically complete but not committed to a value.
 
 ### Host-agnosticism commitment
 
@@ -443,7 +445,7 @@ One CI job per PR that runs the smoke set inside a vanilla Codespaces-equivalent
 | Decision-log storage v2.1 | + SQLite (`better-sqlite3`) ingest |
 | Decision-log storage v3 | + Turso (libSQL) for hosted |
 | Eval orchestration | Sprite (`sprites.dev`) fan-out + Codespaces canary |
-| Distribution | npm (`@org/a11y-auditor`) + skills.sh (`npx skills add`) |
+| Distribution | npm (`@org/a11y-auditor`) + skills.sh (`npx skills add <source>`) |
 | Trace observability | Raindrop Workshop (dev-time only) |
 
 ### Bun → Node compat boundary
@@ -623,7 +625,7 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 | 7 | Eval scorer + calibration report | ACT smoke set runs, calibration report rendered |
 | 8 | 6 hand-authored Tier A fixtures + expected verdicts | All 6 fixtures pass smoke; Tier A coverage = 37 criteria |
 | 9 | Sprite fan-out + Codespaces canary CI | Sprite eval green; canary green |
-| 10 | Publish skill to skills.sh + verify install on Claude Code / Cursor / Continue | `npx skills add` installs cleanly on all three; smoke audit runs on each |
+| 10 | Publish skill to skills.sh + verify install on Claude Code / Cursor / Continue | `npx skills add <source>` (with the pinned source string from §18 resolution) installs cleanly on all three; smoke audit runs on each |
 | 11 | Docs (PLAN.md, architecture, rubric, AGENTS.md, README) | All four docs land, link-check passes |
 
 ### Explicitly NOT in v2 (the "won't" list)
