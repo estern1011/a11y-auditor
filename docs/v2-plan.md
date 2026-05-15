@@ -365,8 +365,8 @@ Token budget: ~110 tokens/record. At 50 criteria/page on Sonnet: ~$0.08/page in 
 | Tier | What | How we eval | Examples |
 |---|---|---|---|
 | **A — Verifiable** | Criteria with formal rules or measurable thresholds | Verdict accuracy vs fixture ground truth (ACT + hand-authored) | 1.4.3 contrast ratio, 1.4.11 non-text contrast, 2.5.8 target size, 1.1.1 alt presence |
-| **B — Reasoned** | Criteria where context/judgment dominates | **Confidence calibration** — human spot-checks a sample, score agreement at each confidence band | 3.3.4 error prevention, 4.1.3 status messages, 2.4.5 multiple ways, 3.2.6 consistent help, 2.4.6 link descriptiveness |
-| **C — Flagged for human** | Criteria the agent can't programmatically verify | **Applicability eval** — did the agent flag `needs-human-review` when criterion applies? | 2.3.1 three flashes, some 2.5.1 pointer gestures, 1.4.2 audio control on user-uploaded media |
+| **B — Reasoned** | Criteria where context/judgment dominates *and* are evaluable on a single page or element | **Confidence calibration** — human spot-checks a sample, score agreement at each confidence band | 3.3.4 error prevention, 4.1.3 status messages, 2.4.6 link descriptiveness in context |
+| **C — Flagged for human** | Two cases: (a) criteria the agent can't programmatically verify; (b) criteria that need scope v2 doesn't emit (flow/site) | **Applicability eval** — did the agent flag `needs-human-review` when criterion applies? | (a) 2.3.1 three flashes, some 2.5.1 pointer gestures, 1.4.2 audio control on user-uploaded media; (b) **scope-deferred in v2** — 2.4.5 multiple ways, 3.2.3 consistent navigation, 3.2.4 consistent identification, 3.2.6 consistent help, 3.3.7 redundant entry |
 
 ### ACT coverage gap
 
