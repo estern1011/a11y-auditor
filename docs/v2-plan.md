@@ -475,13 +475,15 @@ a11y-auditor-v2/
 │   ├── confidence-rubric.md
 │   └── categories.md
 ├── schemas/                        # generated from src/schema/*.ts
+├── skills/
+│   └── auditor/                    # PUBLISHED PATH — skills add reads from here
+│       ├── SKILL.md                # methodology, host-agnostic
+│       └── data/                   # criteria.json, categories.json, confidence-rubric.md
 ├── src/
 │   ├── schema/                    # Zod canonical
-│   ├── skill/                      # SKILL.md template + data
 │   ├── cli/                        # entry point + subcommands
 │   ├── lib/                        # decision-log, manifest, archive
-│   ├── drivers/                    # voiceover + orca (Node-compat ports)
-│   └── data/                       # criteria.json, categories.json
+│   └── drivers/                    # voiceover + orca (Node-compat ports)
 ├── fixtures/
 │   ├── act/                        # from eval/act-test-cases.json
 │   ├── authored/                   # 6 hand-authored Tier A
@@ -504,6 +506,7 @@ a11y-auditor-v2/
   "name": "@org/a11y-auditor",
   "type": "module",
   "bin": { "a11y-auditor": "dist/cli/index.js" },
+  "files": ["dist/", "skills/", "schemas/"],
   "scripts": {
     "build": "bun build src/cli/index.ts --target=node --outdir=dist/cli && bun run schema:emit",
     "schema:emit": "bun run src/schema/emit.ts",
@@ -513,6 +516,8 @@ a11y-auditor-v2/
   "engines": { "node": ">=20.0.0" }
 }
 ```
+
+The `files` array is what makes the skill installable: `dist/` is the built CLI, `skills/` is the published skill directory `skills add` symlinks (no build step — SKILL.md and the JSON data ship as-is), `schemas/` is the emitted JSON Schema for external consumers.
 
 ### CI
 
