@@ -185,6 +185,17 @@ const RunHeader = z.object({
   orchestratorVersion: z.string(),
   auth:                z.object({ type: z.enum(['storage-state','login-script','none']), file: z.string().optional() }),
   labels:              z.record(z.string()).optional(),
+}).superRefine((rh, ctx) => {
+  // Both file-backed auth modes need a file path to replay the run; 'none' must not carry a stale path.
+  const requiresFile = rh.auth.type === 'storage-state' || rh.auth.type === 'login-script';
+  if (requiresFile && !rh.auth.file) {
+    ctx.addIssue({ code: 'custom', path: ['auth', 'file'],
+      message: `auth type '${rh.auth.type}' requires file` });
+  }
+  if (rh.auth.type === 'none' && rh.auth.file) {
+    ctx.addIssue({ code: 'custom', path: ['auth', 'file'],
+      message: `auth type 'none' must not have file` });
+  }
 });
 ```
 
@@ -291,7 +302,7 @@ For each criterion in scope:
 | `log append <record>` | Validate + append decision record. Used by skill. |
 | `eval <fixture-dir>` | Run eval suite against a fixture set, output calibration report. |
 | `archive <runDir>` | Compress run to `.tar.zst`. |
-| `view <runArchive> --evidence-id <id>` | Decode one evidence file from archive. |
+| `view <runArchive> --evidence-path <relative-path>` | Decode one evidence file from archive. The path is the same relative string that appears in the decision record (e.g., `evidence/screenshots/001-button-focus.png`) and as a manifest key — stable, unique within a run, no separate id field needed. |
 
 ### Model selection
 
@@ -524,7 +535,7 @@ The `files` array is what makes the skill installable: `dist/` is the built CLI,
 ### CI
 
 Two jobs per PR:
-1. **Smoke eval** (sprite-backed if available, else local Node-only container) — ~12 cases, <5 min.
+1. **Smoke eval** (sprite-backed by default; if a sprite isn't available, falls back to a local **Bun-enabled** container — the smoke eval code under `eval/` may use Bun-only APIs, so the runner must provide Bun). ~12 cases, <5 min.
 2. **Codespaces canary** — vanilla Node container, runs the built `dist/` output against one fixture. Proves shipped artifact works without Bun.
 
 Nightly job: full ACT + authored fixture run, fan out across sprites.
