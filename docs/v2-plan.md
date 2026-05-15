@@ -631,7 +631,7 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 | Deferred | When |
 |---|---|
 | Flow-scoped + site-scoped records emitted by agent | v2.1 (orchestrator concern) |
-| Cross-page criteria (2.4.5, 3.2.3, 3.2.4) evaluated automatically | v2.1 |
+| Cross-page criteria (2.4.5, 3.2.3, 3.2.4, 3.2.6, 3.3.7) evaluated automatically — skill flags as `needs-human-review` in v2 (see Tier C deferral list in §8) | v2.1 |
 | SQLite ingest of decision logs | v2.1 |
 | LangGraph orchestrator | v3 |
 | Turso / hosted backend | v3 |
