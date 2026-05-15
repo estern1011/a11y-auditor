@@ -134,6 +134,21 @@ const DecisionRecord = z.object({
       message: `confidence '${rec.confidence}' requires uncertaintyNotes`,
     });
   }
+  // page/element scopes must identify their target so verdicts can be replayed and attributed.
+  if ((rec.scope === 'page' || rec.scope === 'element') && !rec.pageUrl) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['pageUrl'],
+      message: `scope '${rec.scope}' requires pageUrl`,
+    });
+  }
+  if (rec.scope === 'element' && !rec.elementSelector) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['elementSelector'],
+      message: `scope 'element' requires elementSelector`,
+    });
+  }
 });
 ```
 
