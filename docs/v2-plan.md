@@ -73,9 +73,9 @@ An LLM-driven WCAG 2.2 auditor that ships as a portable agent skill, makes targe
 | `npm install -g @org/a11y-auditor` | CLI binary | Devs running CLI/CI |
 | `npx a11y-auditor` | Same CLI without install | Ad-hoc usage |
 
-The skill and the CLI ship from the **same npm package**. `skills add` symlinks the package's `skills/auditor/` directory into each detected host's skills location. No separate package per host.
+The skill and the CLI ship from the **same git repository**. The CLI is additionally published to npm. `skills add` symlinks the package's `skills/auditor/` directory into each detected host's skills location. No separate package per host.
 
-The `<source>` placeholder above is the skills.sh CLI's required argument and resolves to one of (a) the published GitHub repo (`owner/repo`, e.g. `estern1011/a11y-auditor-v2`) or (b) the npm package name once published. The exact string is pinned when §18's repo-name / npm-scope / skill-name questions resolve at bootstrap; until then the doc uses `<source>` as an explicit placeholder so install commands are syntactically complete but not committed to a value.
+The `<source>` placeholder above is the skills.sh CLI's required argument. It is a **git ref** — the skills CLI accepts GitHub shorthand (`owner/repo`), a full git URL, or a local path; it does *not* accept npm package names. After §18 resolves the repo name, `<source>` becomes the published GitHub shorthand (e.g., `estern1011/a11y-auditor-v2`). The npm package name (`@org/a11y-auditor`) is a separate distribution surface for the CLI binary (`npm install -g`), not for skill installation.
 
 ### Host-agnosticism commitment
 
