@@ -97,7 +97,7 @@ const DecisionRecord = z.object({
   pageUrl:            z.string().url().optional(),     // required for page/element scopes
   elementSelector:    z.string().optional(),           // required for element scope
   criterion:          z.string().regex(/^[1-4]\.[0-9]+\.[0-9]+$/),
-  criterionLevel:     z.enum(['A', 'AA', 'AAA']),
+  criterionLevel:     z.enum(['A', 'AA']),
   verdict:            z.enum([
                         'supports', 'partially-supports', 'does-not-support',
                         'not-applicable', 'not-evaluated',
@@ -176,7 +176,7 @@ const RunHeader = z.object({
   endedAt:             z.string().datetime().nullable(),
   scope: z.object({
     pages:             z.array(z.string().url()),
-    wcagLevel:         z.enum(['A', 'AA', 'AAA']),
+    wcagLevel:         z.enum(['A', 'AA']),
     criteria:          z.array(z.string()),       // resolved criterion ids
     criteriaSelector:  z.string(),                // original --criteria arg, for replay
   }),
@@ -250,14 +250,14 @@ skills/auditor/
 ### Invocation contract
 
 ```
-<target> --criteria <selector> --level <A|AA|AAA> [--auth <config>]
+<target> --criteria <selector> --level <A|AA> [--auth <config>]
 ```
 
 | Param | Values |
 |---|---|
 | `target` | URL (`page` scope) or URL + CSS selector (`element` scope) |
 | `--criteria` | category name (`contrast`, `keyboard`, `forms`, …) OR comma list of criterion IDs (`1.4.3,2.4.7`) OR `applicable` (agent enumerates) |
-| `--level` | `A` / `AA` / `AAA` |
+| `--level` | `A` / `AA` (AAA deferred — see §15) |
 | `--auth` | path to storage-state JSON, path to login script TS, or omitted |
 
 `all` is **not** accepted at the skill level — that intent belongs to the orchestrator, which composes N targeted audits.
@@ -311,7 +311,7 @@ User-facing category names (axe-style), mapped to criterion sets in our own conf
 ```ts
 // src/data/categories.ts (sketch)
 export const CATEGORIES = {
-  contrast:        ['1.4.3', '1.4.6', '1.4.11'],
+  contrast:        ['1.4.3', '1.4.11'],
   keyboard:        ['2.1.1', '2.1.2', '2.1.4', '2.4.3', '2.4.7'],
   forms:           ['1.3.1', '2.4.6', '3.3.1', '3.3.2', '3.3.3', '3.3.4', '3.3.7', '3.3.8', '4.1.2'],
   images:          ['1.1.1', '1.4.5'],
@@ -320,7 +320,7 @@ export const CATEGORIES = {
   media:           ['1.2.1', '1.2.2', '1.2.3', '1.2.4', '1.2.5', '1.4.2'],
   motion:          ['2.2.2', '2.3.1', '2.3.3'],
   pointer:         ['2.5.1', '2.5.2', '2.5.3', '2.5.4', '2.5.7', '2.5.8'],
-  focus:           ['2.4.7', '2.4.11', '2.4.12', '2.4.13'],
+  focus:           ['2.4.7', '2.4.11'],
   // ...
 };
 ```
@@ -633,6 +633,7 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 | Public web UI / dashboard | v3 |
 | ACR / VPAT report generator (existing `skills/acr` deferred) | v2.1 |
 | Cross-browser (Firefox, Safari) | v2.1 if customer asks |
+| WCAG AAA conformance (`--level AAA`) | v2.1+ — requires sourcing AAA metadata (28 criteria) and AAA fixtures; existing `criteria.json` is A/AA only |
 | Mobile / responsive audits | future |
 | Cognitive WCAG / WCAG 3 draft | future |
 | Localization of agent prompts / categories | future |
