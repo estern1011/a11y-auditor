@@ -228,7 +228,7 @@ runs/
 
 `a11y-auditor archive <runDir>` → single `.tar.zst` blob (~5–10× smaller than raw). This is the artifact uploaded to S3 / posted to a PR / attached to a ticket / sent to a customer.
 
-`a11y-auditor view <run> --evidence-id <id>` decodes one file from the archive to a temp path without unpacking the whole thing.
+`a11y-auditor view <run> --evidence-path <relative-path>` decodes one file from the archive to a temp path without unpacking the whole thing.
 
 ### Selective retention
 
@@ -428,7 +428,7 @@ Existing eval queue scaffold (`eval/queue-init.ts` / `queue-collect.ts` / `queue
 
 ### Codespaces canary
 
-One CI job per PR that runs the smoke set inside a vanilla Codespaces-equivalent container. Proves the Node-compat ship target works without Bun.
+One CI job per PR that, in a vanilla Node container (no Bun), runs the built `dist/` CLI against a single fixture end-to-end. The eval-side smoke code is *not* invoked here — it can rely on Bun (see §10) and the canary's purpose is precisely to prove the shipped artifact works without Bun.
 
 ### Scorer
 
