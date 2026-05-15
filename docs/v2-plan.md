@@ -107,7 +107,7 @@ const DecisionRecord = z.object({
   reasoning:          z.string().min(1).max(200),             // 1-sentence synthesis
   uncertaintyNotes:   z.string().min(1).max(500).optional(),  // required when confidence ∈ {low, needs-human-review}
   applicableButUntested: z.boolean().optional(),
-  evidence:           z.array(Evidence).min(1),               // min 0 for not-applicable/not-evaluated
+  evidence:           z.array(Evidence),                       // see refinement below
   supersedesRecordId: z.string().uuid().nullable(),
   agent: z.object({
     name:    z.string(),
@@ -115,6 +115,25 @@ const DecisionRecord = z.object({
     model:   z.string(),    // resolved full model id (e.g., "claude-sonnet-4-6-20251015")
   }),
   ts: z.string().datetime(),
+}).superRefine((rec, ctx) => {
+  // Evidence required for verdicts that make a claim; not required for applicability records.
+  const requiresEvidence = !['not-applicable', 'not-evaluated'].includes(rec.verdict);
+  if (requiresEvidence && rec.evidence.length < 1) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['evidence'],
+      message: `verdict '${rec.verdict}' requires at least one evidence pointer`,
+    });
+  }
+  // uncertaintyNotes required when the agent flags uncertainty.
+  const requiresUncertaintyNotes = ['low', 'needs-human-review'].includes(rec.confidence);
+  if (requiresUncertaintyNotes && !rec.uncertaintyNotes) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['uncertaintyNotes'],
+      message: `confidence '${rec.confidence}' requires uncertaintyNotes`,
+    });
+  }
 });
 ```
 
@@ -342,9 +361,9 @@ ACT-rules covers 31 of ~55 WCAG 2.2 A/AA criteria. The remaining 24 have no publ
 
 This is **not a coverage gap** in our product — it's the value-add of an LLM agent over a static rule engine. Tier B + Tier C explicitly carve out that space.
 
-### 8 hand-authored Tier A fixtures (priority list)
+### 7 hand-authored Tier A fixtures (priority list)
 
-Highest-value gaps where measurable thresholds exist but ACT hasn't published a rule:
+Highest-value gaps where measurable thresholds exist but ACT hasn't published a rule, and each can be exercised on a single page or element (the only scopes v2 emits):
 
 | Criterion | Pattern |
 |---|---|
@@ -352,10 +371,11 @@ Highest-value gaps where measurable thresholds exist but ACT hasn't published a 
 | 2.4.11 Focus Not Obscured (AA, 2.2-new) | Pass: focus visible above sticky header. Fail: header overlays focus. |
 | 2.5.7 Dragging Movements (AA, 2.2-new) | Pass: drag has button alternative. Fail: drag-only reorder. |
 | 2.5.8 Target Size (AA, 2.2-new) | Pass: 24×24 px. Fail: 16×16 px touching another target. |
-| 3.2.6 Consistent Help (A, 2.2-new) | Pass: help link in same nav location. Fail: position differs. |
 | 3.3.7 Redundant Entry (A, 2.2-new) | Pass: address remembered. Fail: re-entered. |
 | 3.3.8 Accessible Authentication (AA, 2.2-new) | Pass: paste-allowed password. Fail: blocked paste, no alternative. |
 | 4.1.3 Status Messages (A) | Pass: live region announces submit. Fail: silent success. |
+
+**Not in this list — 3.2.6 Consistent Help (A, 2.2-new).** It requires comparison across multiple pages and v2 defers flow/site scope. Move to v2.1 as a flow-scoped fixture when the orchestrator lands; until then the skill should flag 3.2.6 as `needs-human-review` when invoked on a single page.
 
 Each fixture: a single HTML file, no JS framework, filename encodes criterion + verdict (`1.4.11/pass-button-border.html`), companion `fixtures.json` lists expected `(verdict, criterion)` pairs.
 
@@ -450,7 +470,7 @@ a11y-auditor-v2/
 │   └── data/                       # criteria.json, categories.json
 ├── fixtures/
 │   ├── act/                        # from eval/act-test-cases.json
-│   ├── authored/                   # 8 hand-authored Tier A
+│   ├── authored/                   # 7 hand-authored Tier A
 │   └── manifest.json
 ├── eval/
 │   ├── smoke/
@@ -582,7 +602,7 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 | 5 | CLI: `audit`, `capture-auth`, `log`, `archive`, `view`, Agent SDK loop | End-to-end run against one fixture produces valid decision log |
 | 6 | Driver port to Node-compat (voiceover + orca) | Drivers run under `dist/` (no Bun); SR transcript captured for one fixture |
 | 7 | Eval scorer + calibration report | ACT smoke set runs, calibration report rendered |
-| 8 | 8 hand-authored Tier A fixtures + expected verdicts | All 8 fixtures pass smoke; Tier A coverage = 39 criteria |
+| 8 | 7 hand-authored Tier A fixtures + expected verdicts | All 7 fixtures pass smoke; Tier A coverage = 38 criteria |
 | 9 | Sprite fan-out + Codespaces canary CI | Sprite eval green; canary green |
 | 10 | Publish skill to skills.sh + verify install on Claude Code / Cursor / Continue | `npx skills add` installs cleanly on all three; smoke audit runs on each |
 | 11 | Docs (PLAN.md, architecture, rubric, AGENTS.md, README) | All four docs land, link-check passes |
@@ -635,7 +655,7 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 | `capture-auth` flow + credential redaction | 0.5 |
 | Driver port to Node-compat (voiceover + orca) | 1 |
 | Eval scorer + calibration report | 2 |
-| 8 hand-authored fixtures + expected verdicts | 1.5 |
+| 7 hand-authored fixtures + expected verdicts | 1.25 |
 | Sprite fan-out + Codespaces canary | 1 |
 | Cross-host compatibility verification (Cursor + Continue) | 1 |
 | Publish skill to skills.sh + verify install | 0.5 |
@@ -649,7 +669,7 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 
 v2 ships when all five hold:
 
-1. **Tier A accuracy ≥ 95%** on verdicts marked `high` confidence, measured against ACT fixtures + 8 hand-authored fixtures (~39 criteria with ground truth).
+1. **Tier A accuracy ≥ 95%** on verdicts marked `high` confidence, measured against ACT fixtures + 7 hand-authored fixtures (~38 criteria with ground truth).
 2. **Tier B calibration**: human-reviewed sample of 100 records shows `high` ≥ 90% agreement with reviewer, monotonic decrease at `medium`/`low`.
 3. **Tier C correct flagging**: ≥ 90% of fixtures where criterion is applicable-but-unverifiable get marked `needs-human-review`.
 4. **Smoke eval green in CI** on every PR for the two weeks leading up to launch.
@@ -664,7 +684,7 @@ v2 ships when all five hold:
 | Orca on sprites untested (xvfb + dbus + at-spi) | ~½ day spike before relying on it — slice 0 |
 | Skill drift across hosts (Cursor / Continue have subtler tool semantics than Claude Code) | Compatibility verification slice with manual smoke run on each |
 | Confidence calibration data takes longer than 1 sprint | Human spot-checks can run async; eval scorer ships before calibration data is complete |
-| 4-week estimate slips | Buffer is 2 days; if it slips >1 week, cut the 8 hand-authored fixtures from v2 and rely on ACT-only Tier A coverage |
+| 4-week estimate slips | Buffer is 2 days; if it slips >1 week, cut the 7 hand-authored fixtures from v2 and rely on ACT-only Tier A coverage |
 | Workshop instrumentation overhead | Spike before committing |
 | `bun build --target node` produces broken output for some import | Codespaces canary catches it on every PR |
 
