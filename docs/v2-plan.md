@@ -29,7 +29,7 @@ An LLM-driven WCAG 2.2 auditor that ships as a portable agent skill, makes targe
 
 ## 2. Architecture
 
-### Two tiers with a single contract
+### Three tiers with two contracts
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -43,18 +43,33 @@ An LLM-driven WCAG 2.2 auditor that ships as a portable agent skill, makes targe
                    │                          │
                    ▼                          ▼
 ┌────────────────────────────────────────────────────────────────┐
-│                    AUDIT PRIMITIVE (SKILL)                     │
+│        TIER 0 — DETERMINISTIC COLLECTORS & DRIVERS             │
+│                  (plain Node, NO LLM, no API key)              │
 │                                                                │
-│  Targeted, scoped audit of one page or one element             │
-│  Inputs:   target (URL [+selector]), criteria, level, auth     │
-│  Reasoning: chain-of-draft per criterion                       │
-│  Output:   append-only JSONL of DecisionRecord                 │
-│             + run.json + evidence/ + manifest.json              │
+│  sr session (start/command/transcript/stop), collect-baseline, │
+│  run-states (states.yml driver). "Playwright for a11y."        │
+│  Consumes the same states.yml a Playwright spec would.         │
+│  Output (CONTRACT 1 — deterministic artifacts):                │
+│    focus-order.json, headings.json, landmarks.json,            │
+│    forms.json, sr-run.json, sr-transcripts/*.txt, axe.json,    │
+│    screenshots/, dom-snapshots/                                 │
 └──────────────────────────────┬─────────────────────────────────┘
-                               │
-                               ▼  decision-log JSONL is the wire
+                               │ any host/skill/Playwright spec
+                               │ can stop here — no LLM required
+                               ▼
 ┌────────────────────────────────────────────────────────────────┐
-│                  ORCHESTRATOR (v2.1+)                          │
+│             TIER 1 — LLM AUDITOR (SKILL, Agent SDK)            │
+│                                                                │
+│  Reasons over Tier 0 artifacts for one page or element.        │
+│  Inputs:   target, criteria, level, states.yml                 │
+│  Reasoning: chain-of-draft per criterion                       │
+│  Output (CONTRACT 2 — append-only JSONL of DecisionRecord)     │
+│    + run.json + manifest.json, referencing Tier 0 artifacts    │
+└──────────────────────────────┬─────────────────────────────────┘
+                               │ decision-log JSONL is the wire
+                               ▼
+┌────────────────────────────────────────────────────────────────┐
+│                  TIER 2 — ORCHESTRATOR (v2.1+)                 │
 │                                                                │
 │  Composes page audits into flow/site audits, emits             │
 │  flow/site-scoped records, aggregates cross-page findings,     │
@@ -63,7 +78,9 @@ An LLM-driven WCAG 2.2 auditor that ships as a portable agent skill, makes targe
 └────────────────────────────────────────────────────────────────┘
 ```
 
-**The seam between tiers is the decision-log schema** — a JSONL file conforming to a Zod source of truth. Anything that produces conforming records is a valid audit producer; anything that consumes them is a valid downstream tool.
+**Two contracts, not one.** Tier 0 emits *deterministic artifacts* (focus-order.json, headings.json, sr-transcripts, etc.) that any consumer can read without invoking an LLM — a Cursor state-sweep skill, a Playwright spec, or CI. Tier 1 (the LLM auditor) reasons over those artifacts and emits the *decision-log JSONL*. This separation is deliberate: the deterministic layer is co-equal with the decision log, not subordinate to it. A non-LLM consumer uses Tier 0 directly; the auditor is a layer on top.
+
+**Tier 0 is "Playwright for accessibility."** It is a scriptable, session-driven, JSON-emitting driver in the same category as Playwright / agent-browser / chrome-devtools-mcp — but it drives the screen reader + AT-SPI/accessibility tree (the layer browser tools skip) and is deterministic-by-design (scripted, not agent-driven). It consumes the same `states.yml` recipe a Playwright spec uses, so one manifest drives the browser *and* the a11y/SR collectors.
 
 ### Distribution
 
@@ -183,14 +200,18 @@ const RunHeader = z.object({
     criteriaSelector:  z.string(),                // original --criteria arg, for replay
   }),
   orchestratorVersion: z.string(),
-  auth:                z.object({ type: z.enum(['storage-state','login-script','none']), file: z.string().optional() }),
+  statesFile:          z.string().optional(),    // path to states.yml, if a recipe drove the run
+  auth:                z.object({ type: z.enum(['storage-state','states','none']), file: z.string().optional() }),
   labels:              z.record(z.string()).optional(),
 }).superRefine((rh, ctx) => {
-  // Both file-backed auth modes need a file path to replay the run; 'none' must not carry a stale path.
-  const requiresFile = rh.auth.type === 'storage-state' || rh.auth.type === 'login-script';
-  if (requiresFile && !rh.auth.file) {
+  // storage-state needs a file path to replay; states reads its path from statesFile; 'none' carries no file.
+  if (rh.auth.type === 'storage-state' && !rh.auth.file) {
     ctx.addIssue({ code: 'custom', path: ['auth', 'file'],
-      message: `auth type '${rh.auth.type}' requires file` });
+      message: `auth type 'storage-state' requires file` });
+  }
+  if (rh.auth.type === 'states' && !rh.statesFile) {
+    ctx.addIssue({ code: 'custom', path: ['statesFile'],
+      message: `auth type 'states' requires statesFile` });
   }
   if (rh.auth.type === 'none' && rh.auth.file) {
     ctx.addIssue({ code: 'custom', path: ['auth', 'file'],
@@ -212,17 +233,25 @@ const RunHeader = z.object({
 runs/
   2026-MM-DDTHH-MM-SSZ--<slug>/
     run.json                       # the run header
-    decisions.jsonl                # the decision log
+    decisions.jsonl                # TIER 1 — the LLM decision log
+    collectors/                    # TIER 0 — deterministic artifacts (no LLM)
+      axe.json                     #   raw axe-core output
+      focus-order.json             #   tab stops, in order, with names/roles
+      headings.json                #   heading tree
+      landmarks.json               #   landmark regions
+      forms.json                   #   form controls + label associations
+      sr-run.json                  #   states visited, SR session metadata
+      sr-transcripts/              #   per-state, per-driver .txt
     evidence/
-      screenshots/                 # numeric prefix + slug, e.g. 001-button-focus.png
-      sr-transcripts/              # per-driver
-      dom-snapshots/               # rendered HTML at moment of audit
-    manifest.json                  # sha256 + size of every evidence file
+      screenshots/                 #   numeric prefix + slug, e.g. 001-button-focus.png
+      dom-snapshots/               #   rendered HTML at moment of audit
+    manifest.json                  # sha256 + size of every file under collectors/ + evidence/
 ```
 
-- Evidence paths in records are **relative to the run directory**.
+- **`collectors/` is the Tier 0 contract** — first-class deterministic artifacts, written by `collect-baseline` / `sr run-states` with no LLM involved. A Cursor skill, Playwright spec, or CI job can consume these directly. `decisions.jsonl` references them by relative path; it does not duplicate their content.
+- Artifact paths in records are **relative to the run directory**.
 - Manifest is the integrity check; verify-script catches dangling refs, missing files, modified bytes.
-- `./runs/` is `.gitignore`d. `decisions.jsonl` may be committed selectively as regression baselines.
+- `./runs/` is `.gitignore`d. `decisions.jsonl` and `collectors/*.json` may be committed selectively as regression baselines (both are text, both diff cleanly).
 
 ### Archival
 
@@ -280,7 +309,7 @@ skills/auditor/
 For each criterion in scope:
 
 1. **Determine applicability.** Is this criterion meaningfully evaluable on this target?
-2. **Gather evidence.** Run the appropriate CLI subcommand (`collect-baseline`, `walk-keyboard`, `cross-ref-visual`, or direct DOM/CDP queries). Capture screenshots, SR transcripts, DOM snapshots, axe findings as artifacts; reference them in the record.
+2. **Gather evidence from Tier 0.** Run the deterministic collectors (`collect-baseline`, `run-states` for multi-state, `sr` session for screen-reader transcripts, `cross-ref-visual`). These write `collectors/*.json` + transcripts + screenshots with no LLM involved; the agent reads those artifacts and references them by relative path in the record. The agent does not re-derive what Tier 0 already measured.
 3. **Reason in drafts.** Produce ≤5 chain-of-draft steps (≤5 words each) leading to the verdict.
 4. **Synthesize.** Write the 1-sentence reasoning, pick verdict + confidence.
 5. **Append.** Call `a11y-auditor log append <record>` (validates against schema, fails fast on missing evidence).
@@ -290,19 +319,35 @@ For each criterion in scope:
 
 ## 5. CLI design
 
+### The Agent-SDK boundary
+
+There are two classes of command, and the split is a hard contract:
+
+- **Tier 0 — deterministic, plain Node, NO Agent SDK, no API key.** `sr *`, `collect-baseline`, `run-states`, `report`, `archive`, `view`, `log`, `capture-auth`. Callable from a Cursor skill, a Playwright spec, CI, or any agent host with zero Anthropic dependency.
+- **Tier 1 — LLM orchestration, requires Agent SDK + API key.** Only `audit`. It internally calls the Tier 0 commands.
+
 ### Subcommands (v2)
 
-| Command | Purpose |
-|---|---|
-| `audit <target>` | Run a scoped audit. Spawns Agent SDK with skill loaded. |
-| `capture-auth <login-url>` | Open browser, user logs in, save storage state. |
-| `collect-baseline <url>` | Headless axe + a11y tree + screenshots (called by skill). |
-| `walk-keyboard <url>` | Tab through page, capture focus order + SR transcript (called by skill). |
-| `cross-ref-visual <url>` | Compare rendered visuals to a11y tree (called by skill). |
-| `log append <record>` | Validate + append decision record. Used by skill. |
-| `eval <fixture-dir>` | Run eval suite against a fixture set, output calibration report. |
-| `archive <runDir>` | Compress run to `.tar.zst`. |
-| `view <runArchive> --evidence-path <relative-path>` | Decode one evidence file from archive. The path is the same relative string that appears in the decision record (e.g., `evidence/screenshots/001-button-focus.png`) and as a manifest key — stable, unique within a run, no separate id field needed. |
+| Command | Tier | Purpose |
+|---|---|---|
+| `audit <target>` | 1 | Run a scoped LLM audit. Spawns Agent SDK with skill loaded; internally drives Tier 0 commands. **Only command needing an API key.** |
+| `sr doctor` | 0 | Preflight: verify screen reader + xvfb + dbus + AT-SPI (Linux/Orca) or VoiceOver (macOS) are wired up. Exit non-zero with a diagnosis if not. |
+| `sr start [--driver orca\|voiceover]` | 0 | Start an SR session; returns a session handle. |
+| `sr command <session> <action>` | 0 | Send one SR action (next, tab, activate, read-item, …). |
+| `sr transcript <session>` | 0 | Emit the session transcript so far as JSON + `.txt`. |
+| `sr stop <session>` | 0 | Tear down the SR session. |
+| `sr run-states <states.yml>` | 0 | Drive a page through a `states.yml` recipe, capturing SR transcript + focus order per state. The session commands above, scripted. |
+| `collect-baseline <url>` | 0 | Headless axe + a11y tree → `axe.json`, `headings.json`, `landmarks.json`, `forms.json`, `focus-order.json`, screenshots. |
+| `run-states <states.yml>` | 0 | Drive the page through a `states.yml` recipe and run all deterministic collectors (axe + a11y + SR) against each state. The unifying entry point — see §6.5. |
+| `cross-ref-visual <url>` | 0 | Compare rendered visuals to a11y tree. |
+| `report --mode screen-reader [--format json\|md]` | 0 | Project the decision log + collectors into an SR-concern report (skipped states, transcript summaries, focus traps, unlabeled controls, unexpected announcements, heading/landmark issues). JSON first, markdown optional. Renders `findings/screen-reader.md`. |
+| `log append <record>` | 0 | Validate + append decision record. Used by the skill. |
+| `eval <fixture-dir>` | 0 | Run eval suite against a fixture set, output calibration report. |
+| `capture-auth <login-url>` | 0 | Open browser, user logs in, save storage state. |
+| `archive <runDir>` | 0 | Compress run to `.tar.zst`. |
+| `view <runArchive> --evidence-path <relative-path>` | 0 | Decode one file from archive. The path is the same relative string that appears in the decision record (e.g., `collectors/sr-transcripts/...` or `evidence/screenshots/001-button-focus.png`) and as a manifest key — stable, unique within a run, no separate id field. |
+
+`walk-keyboard` from earlier drafts is now a thin convenience wrapper over `sr start → tab-loop → sr transcript → sr stop`; the session surface is the real contract.
 
 ### Model selection
 
@@ -341,6 +386,39 @@ export const CATEGORIES = {
 WCAG Principles (POUR) and Guidelines (1.1, 1.2, ...) are derivable from any criterion ID — preserved, just not the primary filter.
 
 `criteria.json` ships the full WCAG 2.2 metadata (title, level, principle, guideline, description) so the agent has reference material without lookup.
+
+### 6.5 `states.yml` — the page-state recipe (interop seam)
+
+A single page often has multiple audit-relevant *states* (modal open, accordion expanded, wizard step 2, post-login). A static URL audit misses them. `states.yml` is a Playwright-shaped manifest that drives the page into each state; the deterministic collectors and the SR session run against each.
+
+**v2 adopts the existing state-sweep manifest shape** (open question §18 #2 — match the consumer's exact schema, don't reinvent). Indicative shape:
+
+```yaml
+# states.yml — actions vocabulary mirrors Playwright
+states:
+  - name: default
+    # no actions — the page as loaded
+  - name: menu-open
+    actions:
+      - click: "button#menu-toggle"
+      - waitFor: "[role=menu]"
+  - name: logged-in
+    actions:
+      - navigate: "/login"
+      - fill: { selector: "#email", value: "${TEST_EMAIL}" }
+      - fill: { selector: "#password", value: "${TEST_PASSWORD}" }
+      - click: "button[type=submit]"
+      - waitFor: "[data-testid=dashboard]"
+```
+
+Supported actions (v2): `navigate`, `click`, `fill`, `press`, `waitFor`, `hover`. Env interpolation (`${VAR}`) for credentials.
+
+**Why this is the high-leverage piece:**
+- **One recipe, three checks.** The same `states.yml` feeds `run-states` (axe + a11y + SR collectors), so adding screen-reader coverage to an existing browser/axe state sweep is mechanical — pass the same file.
+- **It subsumes auth.** A login flow is just navigate + fill + click states, so `states.yml` replaces the separate `--auth login-script` path. Storage-state auth (`--auth <file>`) remains for the pre-captured-session case; the login-script form folds into `states.yml`. (See §13.)
+- **It fixes the static-`page`-scope gap.** A `page`-scoped audit becomes "page in state X" — the right unit for modals, wizards, and dynamic content, without needing flow scope.
+
+Each state's collector output is namespaced under `collectors/<state-name>/` in the run directory.
 
 ---
 
@@ -493,20 +571,25 @@ a11y-auditor-v2/
 │       ├── SKILL.md                # methodology, host-agnostic
 │       └── data/                   # criteria.json, categories.json, confidence-rubric.md
 ├── src/
-│   ├── schema/                    # Zod canonical
+│   ├── schema/                    # Zod canonical (decision log, run header, states.yml)
 │   ├── cli/                        # entry point + subcommands
+│   ├── collectors/                 # TIER 0 — axe, focus-order, headings, landmarks, forms
+│   ├── states/                     # states.yml parser + Playwright-backed driver
+│   ├── sr/                         # sr session surface (start/command/transcript/stop)
+│   ├── report/                     # report --mode screen-reader renderer
 │   ├── lib/                        # decision-log, manifest, archive
 │   └── drivers/                    # voiceover + orca (Node-compat ports)
 ├── fixtures/
 │   ├── act/                        # from eval/act-test-cases.json
-│   ├── authored/                   # 6 hand-authored Tier A
+│   ├── authored/                   # Tier A hand-authored (v2.1 — see roadmap)
+│   ├── sr-smoke/                   # tiny page for the SR-in-Codespaces gate
 │   └── manifest.json
 ├── eval/
 │   ├── smoke/
 │   ├── sample/
 │   └── scorer/
-├── .devcontainer/                  # mirrors sprite-bootstrap
-├── .github/workflows/             # smoke eval + Codespaces canary
+├── .devcontainer/                  # mirrors sprite-bootstrap (incl. Orca + xvfb + dbus)
+├── .github/workflows/             # smoke eval + Codespaces canary + SR-in-Codespaces gate
 ├── package.json
 ├── AGENTS.md                       # repo-level brief for agents
 └── README.md
@@ -534,9 +617,10 @@ The `files` array is what makes the skill installable: `dist/` is the built CLI,
 
 ### CI
 
-Two jobs per PR:
+Three jobs per PR:
 1. **Smoke eval** (sprite-backed by default; if a sprite isn't available, falls back to a local **Bun-enabled** container — the smoke eval code under `eval/` may use Bun-only APIs, so the runner must provide Bun). ~12 cases, <5 min.
-2. **Codespaces canary** — vanilla Node container, runs the built `dist/` output against one fixture. Proves shipped artifact works without Bun.
+2. **Codespaces canary** — vanilla Node container (no Bun), runs the built `dist/` CLI against one fixture end-to-end. Proves the shipped artifact works without Bun.
+3. **SR-in-Codespaces gate** — `a11y-auditor sr doctor` plus a tiny fixture page where Orca starts, tabs twice, and writes a transcript. This is the "it's actually easy to integrate" proof: it demonstrates the screen-reader path works in a Codespaces-equivalent container, not just axe/visual. **Contingent on the Orca-headless spike (slice 0) succeeding** — if `xvfb + dbus + at-spi` can't run Orca headless, this gate runs on a dedicated runner instead of in the canary.
 
 Nightly job: full ACT + authored fixture run, fan out across sprites.
 
@@ -567,24 +651,20 @@ Spike required: ~½ day to verify Workshop instruments Claude Agent SDK runs (no
 
 ## 13. Authentication
 
-### v2 supports two formats
+Auth has two shapes in v2, and the second now folds into `states.yml` (§6.5) rather than a separate login-script flag:
 
-**Storage state file** (one-time manual login, reusable):
+**1. Storage state file** (one-time manual login, reusable):
 
 ```bash
 a11y-auditor capture-auth https://app.example.com/login --output ./.a11y-auth/prod.json
 a11y-auditor audit https://app.example.com/checkout --auth ./.a11y-auth/prod.json --criteria forms --level AA
 ```
 
-Handles any login flow (OAuth, MFA, magic links, SAML) because the user does it themselves once.
+Handles any login flow (OAuth, MFA, magic links, SAML) because the user does it themselves once. This stays a first-class `--auth <file>` because a pre-captured session can't be expressed as scripted actions.
 
-**Login script** (for auditing the login flow itself, or fully-automated reaudits):
+**2. Scripted login** — folds into `states.yml`. A login flow is just `navigate` + `fill` + `click` states, so it's expressed as a `logged-in` state in the recipe (see §6.5 example) rather than a separate `login.ts`. This both pre-conditions audits *and* lets the auditor evaluate the login experience itself (the `logged-in` state's collectors capture the login page's a11y/SR data en route).
 
-```bash
-a11y-auditor audit https://app.example.com/login --auth ./scripts/login.ts --criteria forms --level AA
-```
-
-Where `login.ts` is a Playwright-style async function reading credentials from env vars. Two purposes: pre-condition login when storage state isn't a fit; audit the login experience itself.
+The run header's `auth.type` enum becomes `'storage-state' | 'states' | 'none'` accordingly (`'login-script'` retired in favor of `'states'`).
 
 ### Deferred to v2.1
 
@@ -594,8 +674,9 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 
 - `capture-auth` never logs credentials (only post-login storage state).
 - Storage state files auto-`.gitignore`d.
-- Login scripts run in subprocess with network egress restricted to the audit target's origin.
-- Decision log + screenshots + DOM snapshots scrub cookies, Authorization headers, and a configurable redaction list before persisting.
+- `states.yml` credential interpolation reads from env vars (`${TEST_EMAIL}`); literal secrets in the YAML are linted against and warned.
+- `run-states` runs in a subprocess with network egress restricted to the target's origin.
+- Decision log + collectors + screenshots + DOM snapshots scrub cookies, Authorization headers, and a configurable redaction list before persisting.
 
 ---
 
@@ -622,22 +703,23 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 
 ## 15. Roadmap
 
-### v2 in scope (12 slices, ~4 weeks)
+### v2 in scope (13 slices, ~4 weeks)
 
 | # | Slice | Acceptance gate |
 |---|---|---|
-| 0 | Repo bootstrap (devcontainer, CI, package.json, license, AGENTS.md) | `npm install` clean, smoke CI green on empty stub |
-| 1 | Zod schemas + JSON Schema emit + decision-log append helper | Schema unit tests pass; `log append` rejects invalid records |
+| 0 | Repo bootstrap (devcontainer w/ Orca+xvfb+dbus, CI, package.json, license, AGENTS.md) **+ Orca-headless spike** | `npm install` clean, smoke CI green on empty stub; `sr doctor` exits 0 in the devcontainer (or spike concludes Orca needs a dedicated runner) |
+| 1 | Zod schemas (decision log, run header, `states.yml`) + JSON Schema emit + `log append` helper | Schema unit tests pass; `log append` rejects invalid records |
 | 2 | Data: `criteria.json`, `categories.json`, `confidence-rubric.md` | Loader tests; lint script validates references |
-| 3 | Skill rewrite for targeted invocation (page + element) | SKILL.md renders; loads in Claude Code; no Claude-Code idioms detected by lint |
-| 4 | Subagent → CLI subcommand refactor (`collect-baseline`, `walk-keyboard`, `cross-ref-visual`) | Each subcommand standalone; existing v1 fixtures pass against them |
-| 5 | CLI: `audit`, `capture-auth`, `log`, `archive`, `view`, Agent SDK loop | End-to-end run against one fixture produces valid decision log |
-| 6 | Driver port to Node-compat (voiceover + orca) | Drivers run under `dist/` (no Bun); SR transcript captured for one fixture |
-| 7 | Eval scorer + calibration report | ACT smoke set runs, calibration report rendered |
-| 8 | 6 hand-authored Tier A fixtures + expected verdicts | All 6 fixtures pass smoke; Tier A coverage = 37 criteria |
-| 9 | Sprite fan-out + Codespaces canary CI | Sprite eval green; canary green |
-| 10 | Publish skill to skills.sh + verify install on Claude Code / Cursor / Continue | `npx skills add <source>` (with the pinned source string from §18 resolution) installs cleanly on all three; smoke audit runs on each |
-| 11 | Docs (PLAN.md, architecture, rubric, AGENTS.md, README) | All four docs land, link-check passes |
+| 3 | **Tier 0 collectors** (`collect-baseline` → axe/headings/landmarks/forms/focus-order JSON) | Each artifact emitted + schema-valid against v1 fixtures; no LLM/API key invoked |
+| 4 | **`sr` session surface + Node-compat driver port** (voiceover + orca; start/command/transcript/stop) | Session drives a fixture; transcript JSON captured; runs under `dist/` (no Bun); no API key |
+| 5 | **`states.yml` parser + `run-states` driver** (Playwright-backed) | A multi-state recipe drives a fixture; per-state collectors land under `collectors/<state>/`; matches consumer schema (§18 #2) |
+| 6 | Skill rewrite for targeted invocation (page + element), host-agnostic | SKILL.md renders; loads in Claude Code + Cursor; no Claude-Code idioms by lint |
+| 7 | CLI Tier 1: `audit` + Agent SDK loop (drives Tier 0 commands) | End-to-end run against one fixture produces valid decision log referencing collector artifacts |
+| 8 | `report --mode screen-reader` renderer + `archive`/`view` | `findings/screen-reader.md` + JSON render from a run; archive round-trips |
+| 9 | Eval scorer + calibration report | ACT smoke set runs, calibration report rendered |
+| 10 | Sprite fan-out + Codespaces canary + **SR-in-Codespaces gate** | Sprite eval green; canary green; `sr doctor` + tab-twice transcript green in canary (or dedicated runner per slice 0) |
+| 11 | Publish skill to skills.sh + verify install on **Cursor + Claude Code** | `npx skills add <source>` installs cleanly on both; smoke audit + `run-states` smoke runs on each |
+| 12 | Docs (PLAN.md, architecture, rubric, AGENTS.md, README) | All docs land, link-check passes |
 
 ### Explicitly NOT in v2 (the "won't" list)
 
@@ -652,6 +734,8 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 | ACR / VPAT report generator (existing `skills/acr` deferred) | v2.1 |
 | Cross-browser (Firefox, Safari) | v2.1 if customer asks |
 | WCAG AAA conformance (`--level AAA`) | v2.1+ — requires sourcing AAA metadata (28 criteria) and AAA fixtures; existing `criteria.json` is A/AA only |
+| 6 hand-authored Tier A fixtures (1.4.11, 2.4.11, 2.5.7, 2.5.8, 3.3.8, 4.1.3) | v2.1 — **cut to absorb `states.yml` work**; v2 launch relies on ACT-only Tier A coverage (31 criteria) |
+| Continue host verification (Cursor + Claude Code only at launch) | v2.1 — Cursor is the integration target |
 | Mobile / responsive audits | future |
 | Cognitive WCAG / WCAG 3 draft | future |
 | Localization of agent prompts / categories | future |
@@ -679,34 +763,37 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 
 | Block | Days |
 |---|---|
-| Repo bootstrap + CI + devcontainer | 1 |
-| Schemas + Zod + append helper + manifest | 1.5 |
+| Repo bootstrap + CI + devcontainer + Orca-headless spike | 1.5 |
+| Schemas + Zod (incl. states.yml) + append helper + manifest | 1.5 |
 | Confidence rubric + categories + criteria metadata | 0.5 |
+| Tier 0 collectors (axe/headings/landmarks/forms/focus-order JSON) | 1.5 |
+| `sr` session surface + Node-compat driver port (voiceover + orca) | 1.5 |
+| `states.yml` parser + `run-states` driver (Playwright-backed) | 2.5 |
 | Skill rewrite — host-agnostic, page + element targeted | 3 |
-| Subagent → CLI subcommand refactor | 1.5 |
-| CLI + Agent SDK loop + `--auth` plumbing | 2 |
-| `capture-auth` flow + credential redaction | 0.5 |
-| Driver port to Node-compat (voiceover + orca) | 1 |
+| CLI Tier 1: `audit` + Agent SDK loop | 1.5 |
+| `report --mode screen-reader` + `archive`/`view` + `capture-auth` | 1 |
 | Eval scorer + calibration report | 2 |
-| 6 hand-authored fixtures + expected verdicts | 1.0 |
-| Sprite fan-out + Codespaces canary | 1 |
-| Cross-host compatibility verification (Cursor + Continue) | 1 |
+| Sprite fan-out + Codespaces canary + SR-in-Codespaces gate | 1.5 |
+| Cross-host verification (Cursor + Claude Code) | 0.5 |
 | Publish skill to skills.sh + verify install | 0.5 |
 | Docs (PLAN, architecture, rubric, AGENTS) | 1 |
-| Buffer / iteration | 2 |
-| **Total** | **~20 working days (~4 weeks)** |
+| Buffer / iteration | 1.5 |
+| **Total** | **~21.5 working days (~4.3 weeks)** |
+
+(Up ~1.5 days from the pre-feedback ~20: `states.yml` + `sr` session + Tier 0 split add work; cutting the 6 hand-authored fixtures and Continue verification claws most of it back. The deterministic-layer investment is the integration unlock, so the net is worth it.)
 
 ---
 
 ## 17. Success bar
 
-v2 ships when all five hold:
+v2 ships when all six hold:
 
-1. **Tier A accuracy ≥ 95%** on verdicts marked `high` confidence, measured against ACT fixtures + 6 hand-authored fixtures (~37 criteria with ground truth).
+1. **Tier A accuracy ≥ 95%** on verdicts marked `high` confidence, measured against the ACT fixture suite (~31 criteria with ground truth; the 6 hand-authored fixtures slip to v2.1).
 2. **Tier B calibration**: human-reviewed sample of 100 records shows `high` ≥ 90% agreement with reviewer, monotonic decrease at `medium`/`low`.
 3. **Tier C correct flagging**: ≥ 90% of fixtures where criterion is applicable-but-unverifiable get marked `needs-human-review`.
 4. **Smoke eval green in CI** on every PR for the two weeks leading up to launch.
-5. **Codespaces canary green** on every PR (Node-compat ship target works).
+5. **Codespaces canary + SR-in-Codespaces gate green** on every PR (Node-compat ship target works; `sr doctor` + tab-twice transcript runs in a Codespaces-equivalent container).
+6. **`states.yml` round-trip**: a multi-state recipe drives `run-states` and produces per-state collector artifacts that the consumer's existing state-sweep skill can read without translation.
 
 ---
 
@@ -714,20 +801,23 @@ v2 ships when all five hold:
 
 | Risk | Mitigation |
 |---|---|
-| Orca on sprites untested (xvfb + dbus + at-spi) | ~½ day spike before relying on it — slice 0 |
-| Skill drift across hosts (Cursor / Continue have subtler tool semantics than Claude Code) | Compatibility verification slice with manual smoke run on each |
-| Confidence calibration data takes longer than 1 sprint | Human spot-checks can run async; eval scorer ships before calibration data is complete |
-| 4-week estimate slips | Buffer is 2 days; if it slips >1 week, cut the 6 hand-authored fixtures from v2 and rely on ACT-only Tier A coverage |
+| Orca headless (xvfb + dbus + at-spi) may not run in Codespaces/sprites | Spike is now **slice 0**, before anything depends on it. If it fails, SR gate moves to a dedicated runner and the Codespaces SR proof is descoped — the rest of Tier 0 (axe/a11y collectors) still runs headless. |
+| `states.yml` schema mismatch with the consumer's existing state-sweep skill | **Open question §18 #1** — adopt the consumer's *exact* schema, not a near-copy. Blocking input before slice 5. |
+| `states.yml` + `sr` + Tier 0 split expands scope | Cut 6 hand-authored fixtures + Continue verification to absorb; net +1.5 days (see §16). |
+| Skill drift across hosts (Cursor tool semantics differ from Claude Code) | Cursor + Claude Code verification slice with manual smoke + `run-states` smoke on each |
+| Confidence calibration data takes longer than 1 sprint | Human spot-checks run async; eval scorer ships before calibration data is complete |
 | Workshop instrumentation overhead | Spike before committing |
 | `bun build --target node` produces broken output for some import | Codespaces canary catches it on every PR |
 
 ### Open questions for first review
 
+- **(BLOCKING, before slice 5) `states.yml` schema.** Adopt the consumer's *exact* existing state-sweep manifest shape — share the real schema so v2 matches it rather than a near-copy that needs translation. The §6.5 sketch is indicative only.
+- **(BLOCKING, affects slices 10–11) Host targeting at launch.** Plan now assumes **Cursor + Claude Code**, Continue deferred. Confirm Cursor is the integration target and Continue can wait.
 - **Repo name.** Working name `a11y-auditor-v2`. Real name TBD.
 - **License.** Default MIT for tooling; Apache-2.0 if we expect contributors who care about patent grants. Decide before repo init.
 - **npm scope.** `@org/a11y-auditor` or unscoped `a11y-auditor`? Affects squatting risk.
 - **Skill name on skills.sh.** Today's name is `auditor`. Keep, or pick something more specific (e.g., `a11y-auditor`, `wcag-auditor`)?
-- **What's the persistent v2 deliverable to the user beyond the JSONL?** Today the answer is "a rendered markdown report alongside the JSONL." Should this be promoted to a v2 must-ship vs deferred to v2.1?
+- **What's the persistent v2 deliverable to the user beyond the JSONL?** Now partly answered: `report --mode screen-reader` renders `findings/screen-reader.md`. Should a general (all-criteria) markdown report also be a v2 must-ship, or just the SR-concern one?
 
 ---
 
@@ -736,17 +826,18 @@ v2 ships when all five hold:
 Order of operations once the new repo exists:
 
 1. `git init`, `package.json`, `tsconfig.json`, `eslint`, `prettier`, `.gitignore`.
-2. `.devcontainer/devcontainer.json` mirroring the sprite-bootstrap apt list + Bun + Node.
-3. `.github/workflows/ci.yml`: smoke eval job + Codespaces canary job.
-4. `AGENTS.md` at root: 1-page brief.
-5. `docs/PLAN.md` (this doc, polished).
-6. `src/schema/decisionLog.ts` + emit script + JSON Schema artifact.
-7. `src/data/criteria.json` (copy from v1).
-8. `src/data/categories.json` (write fresh).
-9. `docs/confidence-rubric.md`.
-10. Stub `src/cli/index.ts` that prints `--help`.
-11. Empty `runs/` with gitignore.
-12. Conscious-copy: `fixtures/act/` from v1.
+2. `.devcontainer/devcontainer.json` mirroring the sprite-bootstrap apt list + Bun + Node + **Orca + xvfb + dbus + at-spi**.
+3. **Orca-headless spike** — `apt install` + `xvfb-run` + `sr doctor` against `fixtures/sr-smoke/`. Decides whether the SR gate lives in the Codespaces canary or a dedicated runner (slice 0).
+4. `.github/workflows/ci.yml`: smoke eval job + Codespaces canary + SR-in-Codespaces gate.
+5. `AGENTS.md` at root: 1-page brief (incl. the three-tier model + the Tier 0 / Agent-SDK boundary).
+6. `docs/PLAN.md` (this doc, polished).
+7. `src/schema/{decisionLog,runHeader,statesYml}.ts` + emit script + JSON Schema artifacts.
+8. `skills/auditor/data/criteria.json` (copy from v1).
+9. `skills/auditor/data/categories.json` (write fresh).
+10. `skills/auditor/data/confidence-rubric.md`.
+11. Stub `src/cli/index.ts` that prints `--help`.
+12. Empty `runs/` with gitignore.
+13. Conscious-copy: `fixtures/act/` from v1; author `fixtures/sr-smoke/` tiny page.
 
 After day 1, slice work proceeds in numbered order per §15.
 
