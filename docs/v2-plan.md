@@ -205,18 +205,16 @@ const RunHeader = z.object({
     criteriaSelector:  z.string(),                // original --criteria arg, for replay
   }),
   orchestratorVersion: z.string(),
-  statesFile:          z.string().optional(),    // path to states.yml, if a recipe drove the run
-  auth:                z.object({ type: z.enum(['storage-state','states','none']), file: z.string().optional() }),
+  statesFile:          z.string().optional(),    // path to states.yml, if a recipe drove the run (independent of auth)
+  auth:                z.object({ type: z.enum(['storage-state','login-script','none']), file: z.string().optional() }),
   labels:              z.record(z.string()).optional(),
 }).superRefine((rh, ctx) => {
-  // storage-state needs a file path to replay; states reads its path from statesFile; 'none' carries no file.
-  if (rh.auth.type === 'storage-state' && !rh.auth.file) {
+  // Both file-backed auth modes need a file path to replay the run; 'none' must not carry a stale path.
+  // auth is independent of statesFile — states.yml never carries credentials (§13).
+  const requiresFile = rh.auth.type === 'storage-state' || rh.auth.type === 'login-script';
+  if (requiresFile && !rh.auth.file) {
     ctx.addIssue({ code: 'custom', path: ['auth', 'file'],
-      message: `auth type 'storage-state' requires file` });
-  }
-  if (rh.auth.type === 'states' && !rh.statesFile) {
-    ctx.addIssue({ code: 'custom', path: ['statesFile'],
-      message: `auth type 'states' requires statesFile` });
+      message: `auth type '${rh.auth.type}' requires file` });
   }
   if (rh.auth.type === 'none' && rh.auth.file) {
     ctx.addIssue({ code: 'custom', path: ['auth', 'file'],
@@ -305,8 +303,8 @@ skills/auditor/
 | `target` | URL (`page` scope) or URL + CSS selector (`element` scope) |
 | `--criteria` | category name (`contrast`, `keyboard`, `forms`, …) OR comma list of criterion IDs (`1.4.3,2.4.7`) OR `applicable` (agent enumerates) |
 | `--level` | `A` / `AA` (AAA deferred — see §15) |
-| `--auth` | path to storage-state JSON, or omitted (scripted login lives in `states.yml` per §6.5/§13) |
-| `--states` | path to `states.yml` (§6.5) — audits each declared state |
+| `--auth` | path to storage-state JSON, path to login-script TS, or omitted. Separate from `states.yml`; never carries credentials in the recipe (§13). |
+| `--states` | path to `states.yml` (§6.5) — page-state reproduction only, audits each declared state |
 
 `all` is **not** accepted at the skill level — that intent belongs to the orchestrator, which composes N targeted audits.
 
@@ -455,7 +453,7 @@ type StateAction =
 - `initial` should normally be present and first.
 - **A failed action marks that state `skipped` with an action error — it does not fail the whole audit.** (Surfaces as a `skipped` entry in `sr-run.json` + the SR-concern report.)
 
-**One compatible extension, flagged for your sign-off (§18):** to let `states.yml` also carry login (so it subsumes the scripted-auth path), `value` and `navigate` strings would additionally support `${ENV_VAR}` interpolation. This is backward-compatible — literal strings are unaffected — but it *is* an addition to your contract. If you'd rather keep credentials out of `states.yml` entirely, we drop the extension and scripted login stays a separate concern; storage-state auth (`--auth <file>`) is unaffected either way.
+**`states.yml` is page-state reproduction ONLY — no credentials, no secret interpolation (decided).** It is a committed audit artifact (lives under `docs/investigations/...`, and its actions are copied into generated specs + raw capture JSON). Resolved secret values would leak unless every writer preserved placeholders perfectly, so secrets stay out entirely. Authentication is a *separate* mechanism (§13), never expressed in `states.yml`. If non-secret env interpolation (e.g., a test-data search term) is ever added, it is for **non-secret test data only**, and **resolved values must never be persisted** — the artifact keeps the placeholder, not the resolved string.
 
 **Why this is the high-leverage piece:**
 - **One recipe, three checks.** The same `states.yml` feeds `run-states` (axe + a11y + SR collectors), so adding screen-reader coverage to your existing browser/axe state sweep is mechanical — pass the same file.
@@ -694,7 +692,7 @@ Spike required: ~½ day to verify Workshop instruments Claude Agent SDK runs (no
 
 ## 13. Authentication
 
-Auth has two shapes in v2, and the second now folds into `states.yml` (§6.5) rather than a separate login-script flag:
+Auth is a **separate mechanism from `states.yml`** (decided — see §6.5). `states.yml` never carries credentials. v2 supports two auth shapes:
 
 **1. Storage state file** (one-time manual login, reusable):
 
@@ -703,13 +701,27 @@ a11y-auditor capture-auth https://app.example.com/login --output ./.a11y-auth/pr
 a11y-auditor audit https://app.example.com/checkout --auth ./.a11y-auth/prod.json --criteria forms --level AA
 ```
 
-Handles any login flow (OAuth, MFA, magic links, SAML) because the user does it themselves once. This stays a first-class `--auth <file>` because a pre-captured session can't be expressed as scripted actions.
+Handles any login flow (OAuth, MFA, magic links, SAML) because the user does it themselves once. A pre-captured session can't be expressed as scripted actions, so this is first-class.
 
-**2. Scripted login** — *conditionally* folds into `states.yml`, pending the §6.5 env-interpolation sign-off. A login flow is just `navigate` + `fill` + `click` states, so it's expressed as a state in the recipe rather than a separate `login.ts` — **but only if `value` strings support `${ENV_VAR}` interpolation** (otherwise credentials would be literal in the YAML, which we won't do). Two outcomes:
-- **If the extension is accepted:** scripted login is a `states.yml` state; `auth.type` enum is `'storage-state' | 'states' | 'none'`.
-- **If credentials stay out of `states.yml`:** scripted login remains a separate minimal mechanism (env-var-driven step) and `auth.type` keeps a distinct value for it. Storage-state auth is unaffected in both cases.
+**2. Scripted login** (`--auth login-script.ts`) — a Playwright-style async function that performs login, kept **separate from `states.yml`** specifically so credentials never land in a committed audit artifact:
 
-This is the one place the consumer's `states.yml` contract and our auth needs intersect, so it's a sign-off, not a unilateral decision.
+```bash
+a11y-auditor audit https://app.example.com/checkout --auth ./scripts/login.ts --criteria forms --level AA
+```
+
+```ts
+// login.ts — reads secrets from env at runtime, never persisted
+export async function login(page) {
+  await page.fill('#email', process.env.TEST_EMAIL);
+  await page.fill('#password', process.env.TEST_PASSWORD);
+  await page.click('button[type=submit]');
+  await page.waitForSelector('[data-testid=dashboard]');
+}
+```
+
+The login script runs *before* the `states.yml` recipe (auth, then state reproduction). It pre-conditions the session; it is not part of the reproducible state model. The script file is `.gitignore`d by convention and credentials come from env vars at runtime — nothing resolves into any persisted artifact.
+
+The run header's `auth.type` enum is `'storage-state' | 'login-script' | 'none'`.
 
 ### Deferred to v2.1
 
@@ -718,9 +730,9 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 ### Security
 
 - `capture-auth` never logs credentials (only post-login storage state).
-- Storage state files auto-`.gitignore`d.
-- `states.yml` credential interpolation reads from env vars (`${TEST_EMAIL}`); literal secrets in the YAML are linted against and warned.
-- `run-states` runs in a subprocess with network egress restricted to the target's origin.
+- Storage-state files and login scripts are `.gitignore`d by convention; the CLI warns if it detects either tracked in `git ls-files`.
+- **`states.yml` is credential-free by contract** — no secret interpolation. If non-secret env interpolation is ever added, resolved values are never persisted (placeholder stays in the artifact).
+- Login scripts read secrets from env vars at runtime and run in a subprocess with network egress restricted to the target's origin.
 - Decision log + collectors + screenshots + DOM snapshots scrub cookies, Authorization headers, and a configurable redaction list before persisting.
 
 ---
@@ -857,7 +869,7 @@ v2 ships when all six hold:
 
 ### Open questions for first review
 
-- **RESOLVED — `states.yml` schema.** Exact contract received from `SCSZ-8151-a11y-state-sweep` and matched verbatim in §6.5 (type shape + semantics, incl. filesystem-safe names and skip-on-action-failure). **One open sign-off:** the `${ENV_VAR}` interpolation extension that lets `states.yml` carry login credentials (§6.5/§13). Accept it → scripted login folds into `states.yml`; decline it → credentials stay out and scripted login is a separate minimal mechanism. Either way storage-state auth is unaffected.
+- **RESOLVED — `states.yml` schema + auth boundary.** Exact contract from `SCSZ-8151-a11y-state-sweep` matched verbatim in §6.5 (type shape + semantics, incl. filesystem-safe names and skip-on-action-failure). **Credentials decision: declined** — `states.yml` is page-state reproduction only, no secret interpolation, because it's a committed audit artifact copied into specs + capture JSON and resolved secrets would leak. Scripted login stays a separate `--auth login-script.ts` mechanism (§13); `auth.type` enum is `'storage-state' | 'login-script' | 'none'`. Any future env interpolation is non-secret test data only, resolved values never persisted.
 - **RESOLVED — Host targeting at launch.** Cursor + Claude Code verified; any-agent flexibility is a build constraint (§2); Continue deferred to v2.1.
 - **Repo name.** Working name `a11y-auditor-v2`. Real name TBD.
 - **License.** Default MIT for tooling; Apache-2.0 if we expect contributors who care about patent grants. Decide before repo init.
