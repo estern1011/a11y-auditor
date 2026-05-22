@@ -113,7 +113,7 @@ Subagents from the v1 prototype (`baseline-collector`, `keyboard-walker`, `visua
 
 When a `states.yml` recipe drives the run, a "page" verdict is really "page in state X" — so `state` is a first-class field on the record, not something aggregation has to infer from filenames. Aggregation keys on `(pageUrl, state.name, criterion)`; `state` is absent for plain single-render audits.
 
-Canonical source: a Zod schema in `src/schema/decisionLog.ts`. JSON Schema emitted at build time to `dist/schemas/decision-log.schema.json` for external consumers.
+Canonical source: a Zod schema in `src/schema/decisionLog.ts`. JSON Schema emitted at build time to the top-level `schemas/` directory (`schemas/decision-log.schema.json`) for external consumers — the same `schemas/` that the `package.json` `files` array publishes (§11). Not `dist/` — the emitted schema is a published artifact, not a build-internal one.
 
 ```ts
 const DecisionRecord = z.object({
@@ -358,9 +358,9 @@ There are two classes of command, and the split is a hard contract:
 | `sr command <session> <action>` | 0 | Send one SR action (next, tab, activate, read-item, …). |
 | `sr transcript <session>` | 0 | Emit the session transcript so far as JSON + `.txt`. |
 | `sr stop <session>` | 0 | Tear down the SR session. |
-| `sr run-states <states.yml>` | 0 | Drive a page through a `states.yml` recipe, capturing SR transcript + focus order per state. The session commands above, scripted. |
+| `sr run-states --states <states.yml>` | 0 | Drive a page through a `states.yml` recipe, capturing SR transcript + focus order per state. The session commands above, scripted. |
 | `collect-baseline <url>` | 0 | Headless axe + a11y tree → `axe.json`, `headings.json`, `landmarks.json`, `forms.json`, `focus-order.json`, screenshots. |
-| `run-states <states.yml>` | 0 | Drive the page through a `states.yml` recipe and run all deterministic collectors (axe + a11y + SR) against each state. The unifying entry point — see §6.5. |
+| `run-states --states <states.yml>` | 0 | Drive the page through a `states.yml` recipe and run all deterministic collectors (axe + a11y + SR) against each state. The unifying entry point — see §6.5. |
 | `cross-ref-visual <url>` | 0 | Compare rendered visuals to a11y tree. |
 | `report --mode screen-reader [--format json\|md]` | 0 | SR-concern report (skipped states, transcript summaries, focus traps, unlabeled controls, unexpected announcements, heading/landmark issues). **Reads Tier 0 collectors directly — works with no decision log present** (e.g. before any LLM run); enriches with `decisions.jsonl` if it exists. JSON first, markdown optional. Renders `findings/screen-reader.md`. |
 | `log append <record>` | 0 | Validate + append decision record. Used by the skill. |
@@ -546,7 +546,7 @@ Each fixture: a single HTML file, no JS framework, filename encodes criterion + 
 |---|---|---|---|---|
 | **Smoke** | `smoke-test-cases.json` | ~12 cases | <5 min on 1 sprite | Every PR |
 | **Sample** | `sample-test-cases.json` | ~140 cases | ~30 min, 3 sprites | On merge to main |
-| **Full** | `act-test-cases.json` + Tier A authored | ~1,026 cases | ~1 hr, 10+ sprites | Nightly |
+| **Full** | `act-test-cases.json` (ACT only for v2 — authored fixtures deferred to v2.1) | ~1,010 cases | ~1 hr, 10+ sprites | Nightly |
 
 Existing eval queue scaffold (`eval/queue-init.ts` / `queue-collect.ts` / `queue-score.ts`) carries over with one adapter: ACT cases → decision-log expectations.
 
@@ -674,7 +674,7 @@ Three jobs per PR:
 2. **Codespaces canary** — vanilla Node container (no Bun), runs the built `dist/` CLI against one fixture end-to-end. Proves the shipped artifact works without Bun.
 3. **SR-in-Codespaces gate** — `a11y-auditor sr doctor` plus a tiny fixture page where Orca starts, tabs twice, and writes a transcript. This is the "it's actually easy to integrate" proof: it demonstrates the screen-reader path works in a Codespaces-equivalent container, not just axe/visual. **Contingent on the Orca-headless spike (slice 0) succeeding** — if `xvfb + dbus + at-spi` can't run Orca headless, this gate runs on a dedicated runner instead of in the canary.
 
-Nightly job: full ACT + authored fixture run, fan out across sprites.
+Nightly job: full ACT run (ACT-only for v2; authored Tier A fixtures arrive in v2.1), fan out across sprites.
 
 ### Tracking
 
@@ -758,7 +758,7 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 | `eval/queue-init.ts` / `queue-collect.ts` / `queue-score.ts` | Queue scaffold | Keep concept; rewrite against new schema |
 | `drivers/voiceover/*`, `drivers/orca/*` | Working SR drivers | Bun→Node-compat refactor |
 | `skills/auditor/SKILL.md` | v1 methodology | Heavy rewrite for v2's targeted/scoped contract — reference, not source |
-| `skills/acr/criteria.json` | WCAG 2.2 metadata | Drop in as `src/data/criteria.json` |
+| `skills/acr/criteria.json` | WCAG 2.2 metadata | Drop in as `skills/auditor/data/criteria.json` (part of the published skill payload) |
 
 ### What we don't copy
 
@@ -780,7 +780,7 @@ HTTP basic auth (`--auth-header`), bearer tokens (`--auth-header "Authorization:
 | 2 | Data: `criteria.json`, `categories.json`, `confidence-rubric.md` | Loader tests; lint script validates references |
 | 3 | **Tier 0 collectors** (`collect-baseline` → axe/headings/landmarks/forms/focus-order JSON) | Each artifact emitted + schema-valid against v1 fixtures; no LLM/API key invoked |
 | 4 | **`sr` session surface + Node-compat driver port** (voiceover + orca; start/command/transcript/stop) | Session drives a fixture; transcript JSON captured; runs under `dist/` (no Bun); no API key |
-| 5 | **`states.yml` parser + `run-states` driver** (Playwright-backed) | A multi-state recipe drives a fixture; per-state collectors land under `collectors/<state>/`; matches consumer schema (§18 #2) |
+| 5 | **`states.yml` parser + `run-states` driver** (Playwright-backed) | A multi-state recipe drives a fixture; per-state collectors land under `collectors/states/<stateName>/` (locked layout, §3); matches consumer schema (§6.5) |
 | 6 | Skill rewrite for targeted invocation (page + element), host-agnostic | SKILL.md renders; loads in Claude Code + Cursor; no Claude-Code idioms by lint |
 | 7 | CLI Tier 1: `audit` + Agent SDK loop (drives Tier 0 commands) | End-to-end run against one fixture produces valid decision log referencing collector artifacts |
 | 8 | `report --mode screen-reader` renderer + `archive`/`view` | `findings/screen-reader.md` + JSON render from a run; archive round-trips |
