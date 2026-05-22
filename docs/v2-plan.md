@@ -94,11 +94,16 @@ The skill and the CLI ship from the **same git repository**. The CLI is addition
 
 The `<source>` placeholder above is the skills.sh CLI's required argument. It is a **git ref** — the skills CLI accepts GitHub shorthand (`owner/repo`), a full git URL, or a local path; it does *not* accept npm package names. After §18 resolves the repo name, `<source>` becomes the published GitHub shorthand (e.g., `estern1011/a11y-auditor-v2`). The npm package name (`@org/a11y-auditor`) is a separate distribution surface for the CLI binary (`npm install -g`), not for skill installation.
 
-### Host-agnosticism commitment
+### Host-agnosticism: a build constraint, not a test target
 
-The SKILL.md depends on only the lowest-common-denominator agent tools: **Bash, Read, Edit, Write, Grep, Glob.** No Claude-Code-specific idioms (no `Agent`, `AskUserQuestion`, `Skill`, `ExitPlanMode`). Subagents from the v1 prototype (`baseline-collector`, `keyboard-walker`, `visual-cross-referencer`) become CLI subcommands the skill invokes via shell.
+Two distinct properties, deliberately kept separate:
 
-v2 launch testing covers Claude Code, Cursor, Continue. Spec-compliance on the other ~47 skills.sh hosts but not eval-verified.
+- **Spec-compliance — "any agent can use it" — is a *build constraint*.** The SKILL.md depends only on the lowest-common-denominator agent surface: **Bash + Read + Edit + Write + Grep + Glob**, plus the deterministic Tier 0 CLI (no Agent SDK, no API key). No Claude-Code-specific idioms (`Agent`, `AskUserQuestion`, `Skill`, `ExitPlanMode`), no Cursor-specific features. Any host that can run a shell command can drive it. This holds *by construction*, for hosts that don't exist yet — it's not something we test, it's something we forbid ourselves from breaking.
+- **Verification — "we confirmed these hosts" — is a *budget*.** We pay time to smoke-test specific hosts. v2 verifies **Cursor + Claude Code** (Cursor is the integration target; Continue deferred to v2.1).
+
+Why the separation matters: if the only commitment were "verified on Cursor + CC," it would be tempting to reach for a host-specific shortcut to make something easier — and a third agent would silently break, undetected because we only test two. Treating host-agnosticism as a *constraint* forbids those shortcuts up front. The same property that makes it portable to any agent is exactly what lets your existing tooling (a Playwright spec, a state-sweep skill, CI) drive the Tier 0 CLI with no Anthropic dependency. "Flexible for any agent" and "usable from your existing tooling" are the same requirement.
+
+Subagents from the v1 prototype (`baseline-collector`, `keyboard-walker`, `visual-cross-referencer`) become Tier 0 CLI subcommands the skill invokes via shell — which is what makes them reusable outside any single host.
 
 ---
 
@@ -300,7 +305,8 @@ skills/auditor/
 | `target` | URL (`page` scope) or URL + CSS selector (`element` scope) |
 | `--criteria` | category name (`contrast`, `keyboard`, `forms`, …) OR comma list of criterion IDs (`1.4.3,2.4.7`) OR `applicable` (agent enumerates) |
 | `--level` | `A` / `AA` (AAA deferred — see §15) |
-| `--auth` | path to storage-state JSON, path to login script TS, or omitted |
+| `--auth` | path to storage-state JSON, or omitted (scripted login lives in `states.yml` per §6.5/§13) |
+| `--states` | path to `states.yml` (§6.5) — audits each declared state |
 
 `all` is **not** accepted at the skill level — that intent belongs to the orchestrator, which composes N targeted audits.
 
@@ -314,6 +320,13 @@ For each criterion in scope:
 4. **Synthesize.** Write the 1-sentence reasoning, pick verdict + confidence.
 5. **Append.** Call `a11y-auditor log append <record>` (validates against schema, fails fast on missing evidence).
 6. **Move on.** Don't backtrack within a record; later corrections use `supersedesRecordId`.
+
+### The line that protects the deep WCAG knowledge
+
+The three-tier split is what *preserves* the original auditor's core value — deep WCAG reasoning — by separating it cleanly from evidence collection. Two rules enforce that:
+
+- **Tier 0 makes no WCAG judgments.** It gathers focus order, headings, landmarks, forms, transcripts, contrast values. It never decides "this fails 1.3.1." All conformance reasoning — applicability, the judgment-heavy Tier B criteria, "does this announcement actually make sense to a screen-reader user," confidence calibration — lives only in this SKILL.md methodology + the criteria reference + chain-of-draft. Extracting tool-driving into Tier 0 *concentrates* the skill on WCAG judgment instead of diluting it with browser-driving instructions.
+- **Collectors and `report --mode screen-reader` feed the reasoning; they never replace it.** The failure mode to guard against: the product drifting into "just surface what the collectors mechanically found" (focus traps, unlabeled controls) — that's axe-with-extra-steps and throws away the whole point. The deterministic layer handles what's mechanizable precisely so the LLM can spend its judgment on the contextual criteria no rule engine can touch. (Tracked as a risk in §18.)
 
 ---
 
@@ -389,36 +402,66 @@ WCAG Principles (POUR) and Guidelines (1.1, 1.2, ...) are derivable from any cri
 
 ### 6.5 `states.yml` — the page-state recipe (interop seam)
 
-A single page often has multiple audit-relevant *states* (modal open, accordion expanded, wizard step 2, post-login). A static URL audit misses them. `states.yml` is a Playwright-shaped manifest that drives the page into each state; the deterministic collectors and the SR session run against each.
+A single page often has multiple audit-relevant *states* (modal open, filter panel expanded, empty results, post-login). A static URL audit misses them. `states.yml` is a Playwright-shaped manifest that drives the page into each state; the deterministic collectors and the SR session run against each.
 
-**v2 adopts the existing state-sweep manifest shape** (open question §18 #2 — match the consumer's exact schema, don't reinvent). Indicative shape:
+**v2 matches the consumer's exact contract** (from the `SCSZ-8151-a11y-state-sweep` branch). Not a near-copy — the same schema, so the consumer's existing axe / responsive / Orca passes share one state model with no translation. The entry point is `a11y-auditor sr run-states --states states.yml ...` (and `run-states` for the full collector sweep).
 
 ```yaml
-# states.yml — actions vocabulary mirrors Playwright
 states:
-  - name: default
-    # no actions — the page as loaded
-  - name: menu-open
+  - name: initial
+    description: Default page load, no interactions
+  - name: filters-expanded
+    description: Filter panel expanded
     actions:
-      - click: "button#menu-toggle"
-      - waitFor: "[role=menu]"
-  - name: logged-in
+      - click: 'button:has-text("Filters")'
+      - waitFor: '[data-testid="filter-panel"]'
+  - name: row-modal-open
+    description: First row detail modal open
     actions:
-      - navigate: "/login"
-      - fill: { selector: "#email", value: "${TEST_EMAIL}" }
-      - fill: { selector: "#password", value: "${TEST_PASSWORD}" }
-      - click: "button[type=submit]"
-      - waitFor: "[data-testid=dashboard]"
+      - click: 'tbody tr:first-child a.student-name'
+      - waitFor: '[role="dialog"]'
+  - name: empty-state
+    description: Empty results state
+    navigate: '/students?search=zzzzznomatch'
 ```
 
-Supported actions (v2): `navigate`, `click`, `fill`, `press`, `waitFor`, `hover`. Env interpolation (`${VAR}`) for credentials.
+**Type shape (v2 schema mirrors this exactly):**
+
+```ts
+type StatesManifest = { states: State[] };
+type State = {
+  name: string;          // required, unique, filesystem-safe
+  description?: string;   // optional human context, copied into findings
+  navigate?: string;      // optional URL/path override for this state
+  actions?: StateAction[];// executed in order after navigation
+};
+type StateAction =
+  | { click: string }
+  | { fill: { selector: string; value: string } }
+  | { press: { selector: string; key: string } }
+  | { selectOption: { selector: string; value: string } }
+  | { hover: string }
+  | { waitFor: string }
+  | { waitForLoadState: 'load' | 'domcontentloaded' | 'networkidle' }
+  | { waitForTimeout: number };
+```
+
+**Semantics v2 honors (verbatim from the contract):**
+- `states` is the top-level YAML key.
+- `name` is **required, unique, filesystem-safe**: lowercase ASCII letters, digits, hyphens only; no spaces; no leading/trailing hyphens. (Enforced in the Zod schema.)
+- `description` is optional human context, copied into findings.
+- `navigate` is optional and overrides the default target URL for that state; absolute URL or app-relative path.
+- `actions` run in order after navigation. **No actions = "navigate and audit the base render."**
+- `initial` should normally be present and first.
+- **A failed action marks that state `skipped` with an action error — it does not fail the whole audit.** (Surfaces as a `skipped` entry in `sr-run.json` + the SR-concern report.)
+
+**One compatible extension, flagged for your sign-off (§18):** to let `states.yml` also carry login (so it subsumes the scripted-auth path), `value` and `navigate` strings would additionally support `${ENV_VAR}` interpolation. This is backward-compatible — literal strings are unaffected — but it *is* an addition to your contract. If you'd rather keep credentials out of `states.yml` entirely, we drop the extension and scripted login stays a separate concern; storage-state auth (`--auth <file>`) is unaffected either way.
 
 **Why this is the high-leverage piece:**
-- **One recipe, three checks.** The same `states.yml` feeds `run-states` (axe + a11y + SR collectors), so adding screen-reader coverage to an existing browser/axe state sweep is mechanical — pass the same file.
-- **It subsumes auth.** A login flow is just navigate + fill + click states, so `states.yml` replaces the separate `--auth login-script` path. Storage-state auth (`--auth <file>`) remains for the pre-captured-session case; the login-script form folds into `states.yml`. (See §13.)
-- **It fixes the static-`page`-scope gap.** A `page`-scoped audit becomes "page in state X" — the right unit for modals, wizards, and dynamic content, without needing flow scope.
+- **One recipe, three checks.** The same `states.yml` feeds `run-states` (axe + a11y + SR collectors), so adding screen-reader coverage to your existing browser/axe state sweep is mechanical — pass the same file.
+- **It fixes the static-`page`-scope gap.** A `page`-scoped audit becomes "page in state X" — the right unit for modals, filters, empty states, without needing flow scope.
 
-Each state's collector output is namespaced under `collectors/<state-name>/` in the run directory.
+Each state's collector output is namespaced under `collectors/<state-name>/` in the run directory (state names are filesystem-safe by contract, so they're directory-safe too).
 
 ---
 
@@ -662,9 +705,11 @@ a11y-auditor audit https://app.example.com/checkout --auth ./.a11y-auth/prod.jso
 
 Handles any login flow (OAuth, MFA, magic links, SAML) because the user does it themselves once. This stays a first-class `--auth <file>` because a pre-captured session can't be expressed as scripted actions.
 
-**2. Scripted login** — folds into `states.yml`. A login flow is just `navigate` + `fill` + `click` states, so it's expressed as a `logged-in` state in the recipe (see §6.5 example) rather than a separate `login.ts`. This both pre-conditions audits *and* lets the auditor evaluate the login experience itself (the `logged-in` state's collectors capture the login page's a11y/SR data en route).
+**2. Scripted login** — *conditionally* folds into `states.yml`, pending the §6.5 env-interpolation sign-off. A login flow is just `navigate` + `fill` + `click` states, so it's expressed as a state in the recipe rather than a separate `login.ts` — **but only if `value` strings support `${ENV_VAR}` interpolation** (otherwise credentials would be literal in the YAML, which we won't do). Two outcomes:
+- **If the extension is accepted:** scripted login is a `states.yml` state; `auth.type` enum is `'storage-state' | 'states' | 'none'`.
+- **If credentials stay out of `states.yml`:** scripted login remains a separate minimal mechanism (env-var-driven step) and `auth.type` keeps a distinct value for it. Storage-state auth is unaffected in both cases.
 
-The run header's `auth.type` enum becomes `'storage-state' | 'states' | 'none'` accordingly (`'login-script'` retired in favor of `'states'`).
+This is the one place the consumer's `states.yml` contract and our auth needs intersect, so it's a sign-off, not a unilateral decision.
 
 ### Deferred to v2.1
 
@@ -804,6 +849,7 @@ v2 ships when all six hold:
 | Orca headless (xvfb + dbus + at-spi) may not run in Codespaces/sprites | Spike is now **slice 0**, before anything depends on it. If it fails, SR gate moves to a dedicated runner and the Codespaces SR proof is descoped — the rest of Tier 0 (axe/a11y collectors) still runs headless. |
 | `states.yml` schema mismatch with the consumer's existing state-sweep skill | **Open question §18 #1** — adopt the consumer's *exact* schema, not a near-copy. Blocking input before slice 5. |
 | `states.yml` + `sr` + Tier 0 split expands scope | Cut 6 hand-authored fixtures + Continue verification to absorb; net +1.5 days (see §16). |
+| **Deterministic layer cannibalizes the WCAG reasoning** (product drifts into "surface what collectors found" = axe-with-extra-steps, losing the LLM's deep-WCAG value) | Hard rule (§4): Tier 0 makes no WCAG judgments; collectors *feed* reasoning, never replace it. Eval guards it — Tier B calibration measures judgment quality, not collector coverage. SKILL.md rewrite (slice 6) must preserve/deepen the v1 methodology, reviewed against the original. |
 | Skill drift across hosts (Cursor tool semantics differ from Claude Code) | Cursor + Claude Code verification slice with manual smoke + `run-states` smoke on each |
 | Confidence calibration data takes longer than 1 sprint | Human spot-checks run async; eval scorer ships before calibration data is complete |
 | Workshop instrumentation overhead | Spike before committing |
@@ -811,8 +857,8 @@ v2 ships when all six hold:
 
 ### Open questions for first review
 
-- **(BLOCKING, before slice 5) `states.yml` schema.** Adopt the consumer's *exact* existing state-sweep manifest shape — share the real schema so v2 matches it rather than a near-copy that needs translation. The §6.5 sketch is indicative only.
-- **(BLOCKING, affects slices 10–11) Host targeting at launch.** Plan now assumes **Cursor + Claude Code**, Continue deferred. Confirm Cursor is the integration target and Continue can wait.
+- **RESOLVED — `states.yml` schema.** Exact contract received from `SCSZ-8151-a11y-state-sweep` and matched verbatim in §6.5 (type shape + semantics, incl. filesystem-safe names and skip-on-action-failure). **One open sign-off:** the `${ENV_VAR}` interpolation extension that lets `states.yml` carry login credentials (§6.5/§13). Accept it → scripted login folds into `states.yml`; decline it → credentials stay out and scripted login is a separate minimal mechanism. Either way storage-state auth is unaffected.
+- **RESOLVED — Host targeting at launch.** Cursor + Claude Code verified; any-agent flexibility is a build constraint (§2); Continue deferred to v2.1.
 - **Repo name.** Working name `a11y-auditor-v2`. Real name TBD.
 - **License.** Default MIT for tooling; Apache-2.0 if we expect contributors who care about patent grants. Decide before repo init.
 - **npm scope.** `@org/a11y-auditor` or unscoped `a11y-auditor`? Affects squatting risk.
