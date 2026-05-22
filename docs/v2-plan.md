@@ -109,7 +109,9 @@ Subagents from the v1 prototype (`baseline-collector`, `keyboard-walker`, `visua
 
 ## 3. Data model
 
-### Decision record (per (run × page-or-element × criterion))
+### Decision record (per (run × page-or-element × state × criterion))
+
+When a `states.yml` recipe drives the run, a "page" verdict is really "page in state X" — so `state` is a first-class field on the record, not something aggregation has to infer from filenames. Aggregation keys on `(pageUrl, state.name, criterion)`; `state` is absent for plain single-render audits.
 
 Canonical source: a Zod schema in `src/schema/decisionLog.ts`. JSON Schema emitted at build time to `dist/schemas/decision-log.schema.json` for external consumers.
 
@@ -120,6 +122,10 @@ const DecisionRecord = z.object({
   scope:              z.enum(['site', 'flow', 'page', 'element']),  // v2 emits page/element only
   pageUrl:            z.string().url().optional(),     // required for page/element scopes
   elementSelector:    z.string().optional(),           // required for element scope
+  state:              z.object({                       // present when a states.yml recipe drove the run
+                        name:        z.string(),         // matches a states.yml state name (filesystem-safe)
+                        description: z.string().optional(),
+                      }).optional(),
   criterion:          z.string().regex(/^[1-4]\.[0-9]+\.[0-9]+$/),
   criterionLevel:     z.enum(['A', 'AA']),
   verdict:            z.enum([
@@ -235,22 +241,27 @@ const RunHeader = z.object({
 ```
 runs/
   2026-MM-DDTHH-MM-SSZ--<slug>/
-    run.json                       # the run header
-    decisions.jsonl                # TIER 1 — the LLM decision log
-    collectors/                    # TIER 0 — deterministic artifacts (no LLM)
-      axe.json                     #   raw axe-core output
-      focus-order.json             #   tab stops, in order, with names/roles
-      headings.json                #   heading tree
-      landmarks.json               #   landmark regions
-      forms.json                   #   form controls + label associations
-      sr-run.json                  #   states visited, SR session metadata
-      sr-transcripts/              #   per-state, per-driver .txt
+    run.json                                  # the run header
+    decisions.jsonl                           # TIER 1 — the LLM decision log
+    collectors/                               # TIER 0 — deterministic artifacts (no LLM)
+      states/                                 #   one subdir per states.yml state
+        <stateName>/                          #   filesystem-safe name from states.yml
+          sr-run.json                         #     SR session metadata + skipped-action errors
+          focus-order.json                    #     tab stops, in order, with names/roles
+          axe.json                            #     raw axe-core output
+          headings.json                       #     heading tree
+          landmarks.json                      #     landmark regions
+          forms.json                          #     form controls + label associations
+          sr-transcripts/
+            orca.txt                          #     per-driver transcript
+            voiceover.txt
     evidence/
-      screenshots/                 #   numeric prefix + slug, e.g. 001-button-focus.png
-      dom-snapshots/               #   rendered HTML at moment of audit
-    manifest.json                  # sha256 + size of every file under collectors/ + evidence/
+      screenshots/                            #   numeric prefix + slug, e.g. 001-button-focus.png
+      dom-snapshots/                          #   rendered HTML at moment of audit
+    manifest.json                             # sha256 + size of every file under collectors/ + evidence/
 ```
 
+- **Per-state layout is locked: `collectors/states/<stateName>/...`** — every state in `states.yml` gets its own subdirectory keyed by its filesystem-safe `name`. When no `--states` is given, a single implicit state named `initial` is used, so the shape is uniform (`collectors/states/initial/...`) and consumers never special-case the no-states path.
 - **`collectors/` is the Tier 0 contract** — first-class deterministic artifacts, written by `collect-baseline` / `sr run-states` with no LLM involved. A Cursor skill, Playwright spec, or CI job can consume these directly. `decisions.jsonl` references them by relative path; it does not duplicate their content.
 - Artifact paths in records are **relative to the run directory**.
 - Manifest is the integrity check; verify-script catches dangling refs, missing files, modified bytes.
@@ -324,7 +335,7 @@ For each criterion in scope:
 The three-tier split is what *preserves* the original auditor's core value — deep WCAG reasoning — by separating it cleanly from evidence collection. Two rules enforce that:
 
 - **Tier 0 makes no WCAG judgments.** It gathers focus order, headings, landmarks, forms, transcripts, contrast values. It never decides "this fails 1.3.1." All conformance reasoning — applicability, the judgment-heavy Tier B criteria, "does this announcement actually make sense to a screen-reader user," confidence calibration — lives only in this SKILL.md methodology + the criteria reference + chain-of-draft. Extracting tool-driving into Tier 0 *concentrates* the skill on WCAG judgment instead of diluting it with browser-driving instructions.
-- **Collectors and `report --mode screen-reader` feed the reasoning; they never replace it.** The failure mode to guard against: the product drifting into "just surface what the collectors mechanically found" (focus traps, unlabeled controls) — that's axe-with-extra-steps and throws away the whole point. The deterministic layer handles what's mechanizable precisely so the LLM can spend its judgment on the contextual criteria no rule engine can touch. (Tracked as a risk in §18.)
+- **A standalone deterministic report is fine; degraded *conformance verdicts* are not.** `report --mode screen-reader` legitimately runs off Tier 0 alone — "here's what the collectors found" is a useful artifact. The failure mode to guard against is the opposite: letting the *decision log's WCAG verdicts* degrade into mere collector surfacing (focus traps, unlabeled controls) — that's axe-with-extra-steps and throws away the whole point. The deterministic layer handles what's mechanizable precisely so the LLM can spend its judgment on the contextual criteria no rule engine can touch. The report enriches with the decision log when present; the verdicts themselves must stay reasoned. (Tracked as a risk in §18.)
 
 ---
 
@@ -351,7 +362,7 @@ There are two classes of command, and the split is a hard contract:
 | `collect-baseline <url>` | 0 | Headless axe + a11y tree → `axe.json`, `headings.json`, `landmarks.json`, `forms.json`, `focus-order.json`, screenshots. |
 | `run-states <states.yml>` | 0 | Drive the page through a `states.yml` recipe and run all deterministic collectors (axe + a11y + SR) against each state. The unifying entry point — see §6.5. |
 | `cross-ref-visual <url>` | 0 | Compare rendered visuals to a11y tree. |
-| `report --mode screen-reader [--format json\|md]` | 0 | Project the decision log + collectors into an SR-concern report (skipped states, transcript summaries, focus traps, unlabeled controls, unexpected announcements, heading/landmark issues). JSON first, markdown optional. Renders `findings/screen-reader.md`. |
+| `report --mode screen-reader [--format json\|md]` | 0 | SR-concern report (skipped states, transcript summaries, focus traps, unlabeled controls, unexpected announcements, heading/landmark issues). **Reads Tier 0 collectors directly — works with no decision log present** (e.g. before any LLM run); enriches with `decisions.jsonl` if it exists. JSON first, markdown optional. Renders `findings/screen-reader.md`. |
 | `log append <record>` | 0 | Validate + append decision record. Used by the skill. |
 | `eval <fixture-dir>` | 0 | Run eval suite against a fixture set, output calibration report. |
 | `capture-auth <login-url>` | 0 | Open browser, user logs in, save storage state. |
@@ -459,7 +470,7 @@ type StateAction =
 - **One recipe, three checks.** The same `states.yml` feeds `run-states` (axe + a11y + SR collectors), so adding screen-reader coverage to your existing browser/axe state sweep is mechanical — pass the same file.
 - **It fixes the static-`page`-scope gap.** A `page`-scoped audit becomes "page in state X" — the right unit for modals, filters, empty states, without needing flow scope.
 
-Each state's collector output is namespaced under `collectors/<state-name>/` in the run directory (state names are filesystem-safe by contract, so they're directory-safe too).
+Each state's collector output is namespaced under `collectors/states/<stateName>/` in the run directory — e.g. `collectors/states/filters-expanded/sr-run.json`, `collectors/states/filters-expanded/focus-order.json`, `collectors/states/filters-expanded/sr-transcripts/orca.txt`. State names are filesystem-safe by contract, so they're directory-safe too. (Full layout in §3.) No `--states` ⇒ a single implicit `initial` state, same shape.
 
 ---
 
