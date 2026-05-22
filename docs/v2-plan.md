@@ -133,7 +133,11 @@ const DecisionRecord = z.object({
                         'not-applicable', 'not-evaluated',
                       ]),
   confidence:         z.enum(['high', 'medium', 'low', 'needs-human-review']),
-  reasoningDrafts:    z.array(z.string().max(40)).max(5),    // Chain-of-Draft
+  reasoningDrafts:    z.array(                                // Chain-of-Draft: ≤5 drafts, ≤5 words each
+                        z.string().max(40)
+                          .refine(s => s.trim().split(/\s+/).filter(Boolean).length <= 5,
+                                  'each draft is ≤5 words')
+                      ).max(5),
   reasoning:          z.string().min(1).max(200),             // 1-sentence synthesis
   uncertaintyNotes:   z.string().min(1).max(500).optional(),  // required when confidence ∈ {low, needs-human-review}
   applicableButUntested: z.boolean().optional(),
@@ -386,11 +390,11 @@ Uses whatever model the host has selected. The skill can't pick. Document clearl
 
 ## 6. Categories & taxonomy
 
-User-facing category names (axe-style), mapped to criterion sets in our own config:
+User-facing category names (axe-style), mapped to criterion sets. The canonical file is **`skills/auditor/data/categories.json`** — part of the published skill payload, same place as `criteria.json`, so `/auditor --criteria <category>` resolves outside the dev repo layout (authored directly as JSON per bootstrap §19). The TS object below is just an illustrative sketch of the content:
 
 ```ts
-// src/data/categories.ts (sketch)
-export const CATEGORIES = {
+// content of skills/auditor/data/categories.json (shown as TS for readability)
+const CATEGORIES = {
   contrast:        ['1.4.3', '1.4.11'],
   keyboard:        ['2.1.1', '2.1.2', '2.1.4', '2.4.3', '2.4.7'],
   forms:           ['1.3.1', '2.4.6', '3.3.1', '3.3.2', '3.3.3', '3.3.4', '3.3.7', '3.3.8', '4.1.2'],
