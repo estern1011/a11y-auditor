@@ -265,7 +265,7 @@ runs/
 - **`collectors/` is the Tier 0 contract** — first-class deterministic artifacts, written by `collect-baseline` / `sr run-states` with no LLM involved. A Cursor skill, Playwright spec, or CI job can consume these directly. `decisions.jsonl` references them by relative path; it does not duplicate their content.
 - Artifact paths in records are **relative to the run directory**.
 - Manifest is the integrity check; verify-script catches dangling refs, missing files, modified bytes.
-- `./runs/` is `.gitignore`d. `decisions.jsonl` and `collectors/*.json` may be committed selectively as regression baselines (both are text, both diff cleanly).
+- `./runs/` is `.gitignore`d. `decisions.jsonl` and the per-state collector JSON (`collectors/states/**/*.json`) may be committed selectively as regression baselines (both are text, both diff cleanly).
 
 ### Archival
 
@@ -324,7 +324,7 @@ skills/auditor/
 For each criterion in scope:
 
 1. **Determine applicability.** Is this criterion meaningfully evaluable on this target?
-2. **Gather evidence from Tier 0.** Run the deterministic collectors (`collect-baseline`, `run-states` for multi-state, `sr` session for screen-reader transcripts, `cross-ref-visual`). These write `collectors/*.json` + transcripts + screenshots with no LLM involved; the agent reads those artifacts and references them by relative path in the record. The agent does not re-derive what Tier 0 already measured.
+2. **Gather evidence from Tier 0.** Run the deterministic collectors (`collect-baseline`, `run-states` for multi-state, `sr` session for screen-reader transcripts, `cross-ref-visual`). These write per-state artifacts under `collectors/states/<stateName>/` (JSON + transcripts) plus screenshots, with no LLM involved; the agent reads those artifacts and references them by relative path in the record. The agent does not re-derive what Tier 0 already measured.
 3. **Reason in drafts.** Produce ≤5 chain-of-draft steps (≤5 words each) leading to the verdict.
 4. **Synthesize.** Write the 1-sentence reasoning, pick verdict + confidence.
 5. **Append.** Call `a11y-auditor log append <record>` (validates against schema, fails fast on missing evidence).
@@ -367,7 +367,7 @@ There are two classes of command, and the split is a hard contract:
 | `eval <fixture-dir>` | 0 | Run eval suite against a fixture set, output calibration report. |
 | `capture-auth <login-url>` | 0 | Open browser, user logs in, save storage state. |
 | `archive <runDir>` | 0 | Compress run to `.tar.zst`. |
-| `view <runArchive> --evidence-path <relative-path>` | 0 | Decode one file from archive. The path is the same relative string that appears in the decision record (e.g., `collectors/sr-transcripts/...` or `evidence/screenshots/001-button-focus.png`) and as a manifest key — stable, unique within a run, no separate id field. |
+| `view <runArchive> --evidence-path <relative-path>` | 0 | Decode one file from archive. The path is the same relative string that appears in the decision record (e.g., `collectors/states/initial/sr-transcripts/orca.txt` or `evidence/screenshots/001-button-focus.png`) and as a manifest key — stable, unique within a run, no separate id field. |
 
 `walk-keyboard` from earlier drafts is now a thin convenience wrapper over `sr start → tab-loop → sr transcript → sr stop`; the session surface is the real contract.
 
