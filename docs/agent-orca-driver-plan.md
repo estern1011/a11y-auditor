@@ -20,7 +20,7 @@ Both v1 (this repo) and the v2 plan (#22) bundle three things together: the *dri
 
 ### What `agent-orca-driver` is
 
-- A Node CLI (`npx agent-orca-driver`) that spawns Orca + headless Chromium under Xvfb and exposes a single HTTP daemon on a localhost port.
+- A Node CLI (`npx agent-orca-driver`) that spawns Orca + a windowed Chromium on a virtual X display (Xvfb) and exposes a single HTTP daemon on a localhost port. *Headless from the operator's POV — no physical display required — but Chromium itself runs as a normal X11 windowed process, because Orca tracks focus via AT-SPI on a real window and the noVNC live view needs something to render.*
 - A shared `setup.sh` that provisions everything Orca needs in a fresh Linux container (apt packages, xvfb, dbus, at-spi2, pulseaudio, x11vnc, noVNC, websockify) with one command.
 - The same HTTP API the existing `drivers/server.ts` in v1 already exposes — `/navigate`, `/next`, `/previous`, `/act`, `/perform`, `/press`, `/enter`, `/item-text`, `/transcript`, `/audit`, `/loading-state`, `/observe`, `/wait-for-selector`, `/commands`, `/stop`. Byte-identical.
 - A live-view URL (noVNC over forwarded port) so the human watching Cursor can see Orca + Chromium working in real time.
@@ -47,8 +47,9 @@ One process, one port, three responsibilities:
 │                                                              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐    │
 │  │  Chromium    │  │  Orca SR     │  │  HTTP daemon     │    │
-│  │  (headless,  │◀▶│  (AT-SPI +   │◀▶│  /next /act      │    │
-│  │   CDP on N)  │  │   xdotool)   │  │  /transcript ... │    │
+│  │  (windowed   │◀▶│  (AT-SPI +   │◀▶│  /next /act      │    │
+│  │   on Xvfb,   │  │   xdotool)   │  │  /transcript ... │    │
+│  │   CDP on N)  │  │              │  │                  │    │
 │  └──────────────┘  └──────────────┘  └──────────────────┘    │
 │         │                  │                   ▲             │
 │         ▼                  ▼                   │             │
@@ -98,7 +99,7 @@ Copied verbatim from v1's `drivers/server.ts`. Stable contract — any v1 consum
 | POST | `/enter` | Focus into web area (after load) |
 | POST | `/next` / `/previous` | Move SR focus one item |
 | POST | `/act` | Activate the focused item |
-| POST | `/perform` | `{command}` — named SR action (e.g. `read-item`, `tab`, `shift-tab`) |
+| POST | `/perform` | `{command}` — named SR action from the driver's command catalog (e.g. `FIND_NEXT_HEADING`, `READ_CURRENT_ITEM`, `FIND_NEXT_LANDMARK`, `OPEN_WEB_ROTOR`). See `GET /commands` for the full list. Raw keypresses (Tab, Escape, etc.) go through `/press`, not `/perform`. |
 | POST | `/press` | `{key, modifiers?}` — raw keypress |
 | GET | `/item-text` | Read text/role/state of current SR focus |
 | GET | `/transcript?since=N` | SR announcement log (incremental) |
@@ -120,7 +121,7 @@ Security (carried from v1): bound to `127.0.0.1`, host + origin allow-list, navi
 
 ```bash
 # In scripts/setup.sh (added to existing start-env):
-x11vnc -display :99 -forever -shared -nopw -bg -quiet -ncache 10
+x11vnc -display :99 -localhost -forever -shared -nopw -bg -quiet -ncache 10
 websockify -D ${VNC_PORT:-6080} localhost:5900 \
   --web=/usr/share/novnc
 ```
@@ -129,7 +130,7 @@ Codespaces auto-forwards both `--port` (HTTP API) and `--vnc-port` (noVNC HTTP).
 
 **Why x11vnc + noVNC and not CDP screencast:** CDP only shows the browser viewport. We want the full Xvfb display so Orca's focus indicator, system caret, and any overlay UI are all visible — exactly what a sighted dev would see if they sat next to a screen-reader user.
 
-**Security note:** `-nopw` is acceptable because x11vnc binds to `localhost:5900` only; the only public surface is the websockify port, which Codespaces gates behind the user's GitHub auth. Outside Codespaces, the operator is responsible for not exposing `--vnc-port` publicly. The CLI prints a warning if `--vnc-port` is bound to `0.0.0.0` without `--vnc-password`.
+**Security note:** `-nopw` is acceptable because `-localhost` is passed explicitly (without it, `x11vnc` would listen on all interfaces — `-nopw` alone does *not* imply loopback binding, per the x11vnc man page). VNC sits on `127.0.0.1:5900` only; the only public surface is the `websockify` port, which Codespaces gates behind the user's GitHub auth. Outside Codespaces, the operator is responsible for not exposing `--vnc-port` publicly — the CLI prints a warning if `--vnc-port` is bound to `0.0.0.0` without `--vnc-password`, and refuses to start if `--vnc-port` is `0.0.0.0` AND `--vnc-password` is empty.
 
 ---
 
@@ -169,7 +170,7 @@ agent-orca-driver/
 │   │   ├── atspi.ts
 │   │   └── types.ts
 │   ├── browser/
-│   │   └── chromium.ts             # launch headless Chromium with CDP
+│   │   └── chromium.ts             # launch Chromium windowed on Xvfb (NOT --headless) with CDP
 │   ├── audit.ts                    # axe-core injection (port from v1)
 │   ├── wait.ts                     # loading-state, observer, waitForSelector
 │   └── lib/
@@ -264,7 +265,7 @@ This is the actual deliverable. Outline:
 | **v1 (`estern1011/a11y-auditor`)** | The existing methodology skill, `audit.ts` / `collect.ts` orchestration, the eval queue, batch tooling, the `acr` report generator. Refactored to depend on `agent-orca-driver` instead of embedding `drivers/orca/` directly. |
 | **v2 (`#22` plan, if revived)** | Decision-log JSONL schema, Tier-0 collector taxonomy, `states.yml` runner, Agent-SDK `audit` command, eval scorer, chain-of-draft methodology. Built as a separate package that depends on `agent-orca-driver` for the SR hands. |
 
-The driver doesn't know or care which is calling. Its job is to make Orca + Chromium + Xvfb + AT-SPI work reliably in a headless Linux env and expose a stable HTTP API. Any of the three consumers can ship, evolve, or be replaced independently without touching the driver.
+The driver doesn't know or care which is calling. Its job is to make Orca + Chromium + Xvfb + AT-SPI work reliably in a no-physical-display Linux env (Chromium runs windowed on the virtual X display so Orca + VNC both function) and expose a stable HTTP API. Any of the three consumers can ship, evolve, or be replaced independently without touching the driver.
 
 ### Migration path for v1
 
