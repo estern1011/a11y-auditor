@@ -22,7 +22,7 @@ Both v1 (this repo) and the v2 plan (#22) bundle three things together: the *dri
 
 - **A skills.sh skill, installable via `npx skills add`.** The skill is the published surface; the host (Cursor, Claude Code, Continue, etc.) loads it through its normal skill-discovery path, and the agent reads `SKILL.md` to learn the API.
 - A bundled Node CLI (invoked by the skill, also directly callable for CI / power users) that spawns Orca + a windowed Chromium on a virtual X display (Xvfb) and exposes a single HTTP daemon on a localhost port. *Headless from the operator's POV — no physical display required — but Chromium itself runs as a normal X11 windowed process, because Orca tracks focus via AT-SPI on a real window and the noVNC live view needs something to render.*
-- A shared `setup.sh` that provisions everything Orca needs in a fresh Linux container (apt packages, xvfb, dbus, at-spi2, pulseaudio, x11vnc, noVNC, websockify) with one command.
+- A shared `setup.sh` that provisions everything Orca + the daemon need in a fresh Linux container with one command: apt packages (xvfb, dbus, at-spi2, pulseaudio, x11vnc, noVNC, websockify, orca) **plus Playwright's Chromium binary** (`npx playwright install --with-deps chromium` — the daemon launches Chromium via Playwright, so the browser binary has to land in setup, not at first `start`).
 - The same HTTP API the existing `drivers/server.ts` in v1 already exposes — `/navigate`, `/next`, `/previous`, `/act`, `/perform`, `/press`, `/enter`, `/item-text`, `/transcript`, `/audit`, `/loading-state`, `/observe`, `/wait-for-selector`, `/commands`, `/stop`. Byte-identical.
 - A live-view URL (noVNC over forwarded port) so the human watching the agent can see Orca + Chromium working in real time.
 
@@ -101,7 +101,7 @@ Copied verbatim from v1's `drivers/server.ts`. Stable contract — any v1 consum
 | POST | `/enter` | Focus into web area (after load) |
 | POST | `/next` / `/previous` | Move SR focus one item |
 | POST | `/act` | Activate the focused item |
-| POST | `/perform` | `{command}` — named SR action from the driver's command catalog (e.g. `FIND_NEXT_HEADING`, `READ_CURRENT_ITEM`, `FIND_NEXT_LANDMARK`, `OPEN_WEB_ROTOR`). See `GET /commands` for the full list. Raw keypresses (Tab, Escape, etc.) go through `/press`, not `/perform`. |
+| POST | `/perform` | `{command}` — named SR action from the Orca command catalog (e.g. `FIND_NEXT_HEADING`, `FIND_NEXT_LANDMARK`, `READ_CURRENT_LINE`, `SAY_ALL`, `FIND_NEXT_BUTTON`). See `GET /commands` for the full Orca-specific list. Raw keypresses not in the catalog (Tab, arbitrary letters) go through `/press`. |
 | POST | `/press` | `{key, modifiers?}` — raw keypress |
 | GET | `/item-text` | Read text/role/state of current SR focus |
 | GET | `/transcript?since=N` | SR announcement log (incremental) |
@@ -122,7 +122,15 @@ Security (carried from v1): bound to `127.0.0.1`, host + origin allow-list, navi
 `setup.sh` provisions, `start` boots:
 
 ```bash
-# In scripts/setup.sh (added to existing start-env):
+# In scripts/setup.sh — install side (apt + Playwright browser binary):
+apt-get install -y --no-install-recommends \
+  orca xvfb xdotool at-spi2-core dbus-x11 libatk-adaptor \
+  espeak-ng speech-dispatcher pulseaudio openbox \
+  x11vnc novnc websockify \
+  libnss3 libnspr4   # plus other Chromium runtime deps
+npx playwright install --with-deps chromium
+
+# In scripts/setup.sh — start-env (launchers, run on every fresh shell):
 x11vnc -display :99 -localhost -forever -shared -nopw -bg -quiet -ncache 10
 websockify -D ${VNC_PORT:-6080} localhost:5900 \
   --web=/usr/share/novnc
@@ -245,7 +253,7 @@ Outline:
 | `drivers/wait.ts` | `src/wait.ts` | Direct port |
 | `drivers/runtime-paths.ts` | `src/lib/runtime-paths.ts` | Direct port |
 | `audit.ts` (axe injection) | `src/audit.ts` | Port the axe-core wiring; drop the WCAG-tag filter taxonomy (consumer's concern) |
-| `drivers/orca/setup.sh` | `scripts/setup.sh` | Extend with x11vnc + websockify + noVNC blocks |
+| `drivers/orca/setup.sh` | `scripts/setup.sh` | Extend install side with x11vnc + novnc + websockify apt packages **and `npx playwright install --with-deps chromium`** (v1 setup.sh omits Playwright provisioning — the driver currently relies on Playwright Chromium being preinstalled elsewhere); extend start-env with x11vnc + websockify launchers |
 | `.claude/skills/vo-driver/SKILL.md` | `SKILL.md` | Rewrite host-agnostically (drop Claude-Code-specific frontmatter, use the skills.sh manifest shape); expand 3 canonical loops |
 
 ### What we don't copy
@@ -263,7 +271,7 @@ Outline:
 | Day | Slice | Acceptance gate |
 |---|---|---|
 | 1 | Bootstrap repo + package.json + tsconfig + bin entry. Port driver code from v1 to Node (drop Bun calls). | `tsc` clean. `npm pack` produces a tarball. Daemon boots locally, `/` returns status. |
-| 2 | `scripts/setup.sh`: apt install + xvfb/dbus/at-spi2 + x11vnc + noVNC + websockify. `doctor` subcommand. | Fresh Codespace: `npx agent-orca-driver setup` then `npx agent-orca-driver doctor` exits 0. |
+| 2 | `scripts/setup.sh`: apt install + xvfb/dbus/at-spi2 + x11vnc + noVNC + websockify + **Playwright Chromium binary** (`npx playwright install --with-deps chromium`). `doctor` subcommand verifies all of the above. | Fresh Codespace: `npx agent-orca-driver setup` then `npx agent-orca-driver doctor` exits 0; `agent-orca-driver start <fixture>` launches Chromium successfully without a separate `playwright install` step. |
 | 3 | Smoke test: `start <fixture>`, walk 2 tab stops, verify transcript. End-to-end Codespace run with VNC. | `test/smoke.test.ts` passes in CI. Open noVNC URL in browser, see Chromium + Orca. |
 | 4 | `SKILL.md` (skills.sh-shaped, host-agnostic body), `AGENTS.md` (contributor brief), `README.md` (quickstart). Manual smoke with Cursor against a real page. | Cursor, after `npx skills add`, picks up the skill and drives a focus-order walk + axe audit successfully reading only `SKILL.md`. |
 | 5 | Publish to npm + register on skills.sh. GitHub Action runs smoke on every PR. Buffer for issues. | `npx skills add agent-orca-driver` installs cleanly on Cursor + Claude Code; `npm install -g agent-orca-driver && agent-orca-driver setup && agent-orca-driver doctor` works on a vanilla Ubuntu container. |
