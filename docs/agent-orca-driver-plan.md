@@ -10,7 +10,7 @@
 
 Both v1 (this repo) and the v2 plan (#22) bundle three things together: the *driver* (Orca + Chromium + Xvfb plumbing), the *methodology* (WCAG reasoning, criteria taxonomy, confidence rubric), and the *orchestration* (target selection, multi-state recipes, report generation). Bundling them couples decisions that should be separable — v1 can't easily be used outside Claude Code, v2's spec re-implements the driver layer from scratch, and the work-codebase Cursor skill (the immediate consumer) can't use either because both assume their own methodology rather than composing with one already in place.
 
-`agent-orca-driver` extracts the bottom layer cleanly. It's an HTTP daemon — same shape as `agent-browser`, but driving Orca + Chromium under Xvfb instead of just Chromium — that any orchestration layer can sit on top of. Install in any Linux env (Codespaces first-class), `npx agent-orca-driver start <url>`, point any code agent at `http://localhost:8001`, watch live over VNC on a forwarded port.
+`agent-orca-driver` extracts the bottom layer cleanly. It ships as a **skills.sh skill that bundles the CLI it needs** — same packaging shape as `agent-browser`. The host installs the skill via `npx skills add`; the skill's `SKILL.md` teaches the agent how to invoke the bundled CLI; the CLI spawns Orca + a windowed Chromium on Xvfb and exposes an HTTP daemon any orchestration layer can drive. Live view over VNC on a forwarded port.
 
 **Nothing in the driver layer makes WCAG judgments, picks targets, or writes reports.** That's the orchestrator's job — and there can be many orchestrators in parallel: the work-codebase Cursor skill is the immediate one; v1 refactored to consume this package is another; v2's planned auditor (if revived) is a third. All three share the same HTTP API; the driver doesn't know or care which is calling.
 
@@ -20,20 +20,20 @@ Both v1 (this repo) and the v2 plan (#22) bundle three things together: the *dri
 
 ### What `agent-orca-driver` is
 
-- A Node CLI (`npx agent-orca-driver`) that spawns Orca + a windowed Chromium on a virtual X display (Xvfb) and exposes a single HTTP daemon on a localhost port. *Headless from the operator's POV — no physical display required — but Chromium itself runs as a normal X11 windowed process, because Orca tracks focus via AT-SPI on a real window and the noVNC live view needs something to render.*
+- **A skills.sh skill, installable via `npx skills add`.** The skill is the published surface; the host (Cursor, Claude Code, Continue, etc.) loads it through its normal skill-discovery path, and the agent reads `SKILL.md` to learn the API.
+- A bundled Node CLI (invoked by the skill, also directly callable for CI / power users) that spawns Orca + a windowed Chromium on a virtual X display (Xvfb) and exposes a single HTTP daemon on a localhost port. *Headless from the operator's POV — no physical display required — but Chromium itself runs as a normal X11 windowed process, because Orca tracks focus via AT-SPI on a real window and the noVNC live view needs something to render.*
 - A shared `setup.sh` that provisions everything Orca needs in a fresh Linux container (apt packages, xvfb, dbus, at-spi2, pulseaudio, x11vnc, noVNC, websockify) with one command.
 - The same HTTP API the existing `drivers/server.ts` in v1 already exposes — `/navigate`, `/next`, `/previous`, `/act`, `/perform`, `/press`, `/enter`, `/item-text`, `/transcript`, `/audit`, `/loading-state`, `/observe`, `/wait-for-selector`, `/commands`, `/stop`. Byte-identical.
-- A live-view URL (noVNC over forwarded port) so the human watching Cursor can see Orca + Chromium working in real time.
-- An `AGENTS.md` host-agnostic doc explaining the API + canonical loops, so Cursor, Claude Code, Continue, or any agent that can `curl` can drive it from day one.
+- A live-view URL (noVNC over forwarded port) so the human watching the agent can see Orca + Chromium working in real time.
 
 ### What `agent-orca-driver` is NOT
 
-- Not a WCAG knowledge base. Doesn't ship `criteria.json`, `categories.json`, a confidence rubric, or any methodology. That's the consumer's skill's job.
-- Not an LLM-orchestrated auditor. No Agent SDK, no API key, no chain-of-draft. The agent driving it brings its own intelligence.
+- Not a WCAG knowledge base. Doesn't ship `criteria.json`, `categories.json`, a confidence rubric, or any methodology. That's the consumer's skill's job — the orchestration skill that *uses* `agent-orca-driver` carries the WCAG reasoning.
+- Not an LLM-orchestrated auditor. No Agent SDK call inside the CLI, no API key. The agent host driving it brings its own intelligence.
 - Not a decision-log / VPAT / ACR generator. Doesn't define any output schema beyond the HTTP responses themselves.
-- Not a `states.yml` runner. Playwright already runs `states.yml`-shaped recipes; the consumer's skill calls `agent-orca-driver` from inside a Playwright script if it needs SR coverage of each state.
-- Not a macOS tool. **Linux/Orca only.** VoiceOver stays in v1; a future `vo-driver` sibling can mirror the same HTTP API if/when macOS demand appears.
-- Not a `skills.sh` skill. It's a CLI tool. The agent's skill (which lives in the consumer's codebase) calls into it.
+- Not a `states.yml` runner. Playwright already runs `states.yml`-shaped recipes; the consumer's orchestration skill calls into `agent-orca-driver` from inside a Playwright script if it needs SR coverage of each state.
+- Not a macOS tool. **Linux/Orca only.** VoiceOver stays in v1; a future `agent-voiceover` sibling skill can mirror the same HTTP API if/when macOS demand appears.
+- Not a standalone end-user tool. The CLI is callable for power users and CI, but the intended consumer is an agent driving via the skill — humans-running-it-directly is an incidental path, not the design target.
 
 ---
 
@@ -68,13 +68,15 @@ Three boundaries to respect:
 
 ## 4. CLI surface
 
+The CLI is the skill's bundled implementation. The skill's `SKILL.md` teaches the agent to invoke it; power users and CI can call it directly with the same commands.
+
 ```
-npx agent-orca-driver setup           # apt install + provision xvfb/dbus/at-spi2/pulseaudio/x11vnc/noVNC
-npx agent-orca-driver start <url>     # spawn Chromium + Orca + daemon; print listening URLs
-                              # options: --port 8001  --cdp-port 9222  --vnc-port 6080
-npx agent-orca-driver stop            # tear down daemon + child processes
-npx agent-orca-driver status          # is daemon up? what URL is loaded? on what ports?
-npx agent-orca-driver doctor          # preflight: xvfb running? dbus? at-spi2? orca on PATH?
+agent-orca-driver setup           # apt install + provision xvfb/dbus/at-spi2/pulseaudio/x11vnc/noVNC
+agent-orca-driver start <url>     # spawn Chromium + Orca + daemon; print listening URLs
+                                  # options: --port 8001  --cdp-port 9222  --vnc-port 6080
+agent-orca-driver stop            # tear down daemon + child processes
+agent-orca-driver status          # is daemon up? what URL is loaded? on what ports?
+agent-orca-driver doctor          # preflight: xvfb running? dbus? at-spi2? orca on PATH?
 ```
 
 `setup` is sudo-required (apt) and idempotent. `start` is non-sudo. `doctor` exits non-zero with a one-line diagnosis if anything's missing — useful in CI gates.
@@ -136,30 +138,45 @@ Codespaces auto-forwards both `--port` (HTTP API) and `--vnc-port` (noVNC HTTP).
 
 ## 7. Distribution
 
+Two channels for the same artifact — skills.sh is primary (the design target), npm is secondary (powers the bundled CLI + CI use cases).
+
+| Channel | Surface | Audience |
+|---|---|---|
+| `npx skills add <source>` (skills.sh) | `SKILL.md` + bundled CLI + `scripts/` | **Primary.** Agents in any code agent host — Cursor, Claude Code, Continue, etc. |
+| `npm install -g agent-orca-driver` / `npx agent-orca-driver` | Bundled CLI as a standalone bin | Power users, CI pipelines, the skill itself when invoked from within a host that doesn't ship the bin on PATH |
+
+Both ship from the same git repository. `skills add` symlinks the published skill directory into the host's skills location; npm publishes the CLI binary with the skill payload in its `files` array. `SKILL.md` lives at the repo root and is the agent-facing contract.
+
 ```jsonc
 // package.json
 {
   "name": "agent-orca-driver",
   "type": "module",
   "bin": { "agent-orca-driver": "dist/bin/agent-orca-driver.js" },
-  "files": ["dist/", "scripts/"],
+  "files": ["dist/", "scripts/", "SKILL.md"],
   "engines": { "node": ">=20.0.0" }
 }
 ```
 
-- Single npm package. `npx agent-orca-driver` or `npm i -g agent-orca-driver`.
 - Built with `tsc` (no Bun runtime dep — Node-only ship target, same migration v2-plan §10 already scoped at ½ day).
-- `scripts/setup.sh` ships in the package (`files` array) so `npx agent-orca-driver setup` resolves to it.
-- No `skills.sh` integration. The consumer's skill (which lives in their codebase) shells out to `npx agent-orca-driver`.
+- `scripts/setup.sh` ships in the package (`files` array) so the skill's bundled setup path resolves to it.
+- `SKILL.md` is in `files` so it travels with the npm package too — a host that prefers to discover skills out of installed npm packages (rather than skills.sh) still finds it.
 
 ---
 
 ## 8. Repo layout
 
+The repo *is* the skill — `SKILL.md` at the root, skills.sh frontmatter declares it as an installable skill, the body teaches the API.
+
 ```
 agent-orca-driver/
+├── SKILL.md                        # AGENT-FACING — the skill payload. Frontmatter + body
+│                                   #   teaches the agent how to drive the bundled CLI.
+├── AGENTS.md                       # CONTRIBUTOR-FACING — repo brief for anyone working
+│                                   #   ON this project (architecture, dev setup, code map).
+├── README.md                       # HUMAN-FACING — quickstart for power users + CI
 ├── bin/
-│   └── agent-orca-driver.ts                # CLI entry (commands: setup/start/stop/status/doctor)
+│   └── agent-orca-driver.ts        # CLI entry (commands: setup/start/stop/status/doctor)
 ├── src/
 │   ├── server.ts                   # HTTP daemon (Node port of v1's drivers/server.ts)
 │   ├── interface.ts                # ScreenReaderDriver type
@@ -182,32 +199,39 @@ agent-orca-driver/
 │   └── smoke.test.ts               # boot driver against fixtures/, walk 2 tab stops
 ├── fixtures/
 │   └── smoke.html                  # minimal page for the smoke test
-├── AGENTS.md                       # the host-agnostic doc agents read
-├── README.md                       # quickstart + Cursor recipe
 ├── package.json
 └── tsconfig.json
 ```
 
+Three audience-distinct docs at the root, each with a different reader in mind:
+- **`SKILL.md`** — what the agent reads when the skill is loaded. Skills.sh frontmatter + the three canonical loops + API reference.
+- **`AGENTS.md`** — what humans (or agents) read when they open the repo to *work on* it. Codebase architecture, where to add a new SR command, how to run the smoke test locally.
+- **`README.md`** — what humans read when they land on the GitHub page or `npm view`. Install instructions, what the project does, link to SKILL.md and AGENTS.md.
+
 ---
 
-## 9. `AGENTS.md` — the asset that gives Cursor autonomy
+## 9. `SKILL.md` — the agent-facing contract
 
-This is the actual deliverable. Outline:
+This is the actual deliverable. It's what the agent loads when the skill activates, and it's what gives Cursor / Claude Code / Continue the autonomy to drive the daemon without us pre-scripting every audit.
+
+Outline:
+
+0. **Skills.sh frontmatter.** Standard skill manifest — `name`, `description`, `triggers`, declared bundled commands. Activation hints tell the host when to surface the skill.
 
 1. **Mental model (1 paragraph).** "agent-orca-driver is to Orca what agent-browser is to Chromium. HTTP API, JSON in/out, session-style. The daemon owns Orca + Chromium; you own the reasoning."
 
-2. **Quickstart.** `npx agent-orca-driver setup` → `npx agent-orca-driver start https://...` → curl the API. Three commands.
+2. **Quickstart.** `agent-orca-driver setup` → `agent-orca-driver start https://...` → curl the API. Three commands.
 
 3. **HTTP route table.** Same table as §5, with one-line example curl per route.
 
-4. **Three canonical loops** (the patterns Cursor will pick from):
+4. **Three canonical loops** (the patterns the agent will pick from):
    - **Walk focus order.** `POST /navigate` → `POST /enter` → loop `POST /next` + `GET /item-text` until `/transcript` shows the cycle restarting.
    - **Audit + announce.** `POST /navigate` → `POST /audit` (axe-core findings) → `POST /enter` → walk transcript → cross-reference axe violations with what SR actually announced.
-   - **Drive through states.** Use Playwright separately to drive the page (via the same CDP port — `--cdp-port` is the Chromium CDP, exposed precisely so Cursor can drive Chromium *and* Orca against the same browser). For each state: `POST /transcript DELETE` → trigger state → `POST /enter` → walk → snapshot transcript.
+   - **Drive through states.** Use Playwright separately to drive the page (via the same CDP port — `--cdp-port` is the Chromium CDP, exposed precisely so the agent can drive Chromium *and* Orca against the same browser). For each state: `DELETE /transcript` → trigger state → `POST /enter` → walk → snapshot transcript.
 
-5. **What agent-orca-driver is NOT** (anti-instructions): doesn't pick targets, doesn't make WCAG verdicts, doesn't write findings reports, doesn't ship project context. Those are the consumer's job.
+5. **What agent-orca-driver is NOT** (anti-instructions for the agent): doesn't pick targets, doesn't make WCAG verdicts, doesn't write findings reports, doesn't ship project context. Those are the orchestrating skill's job.
 
-6. **Recipes for specific hosts** (a few lines each, not a host-port-of-everything): Cursor (`.cursor/rules` snippet linking to the AGENTS.md sections), Claude Code (skill-style call pattern), shell/CI (curl examples).
+6. **Host activation notes.** A few lines on how each host surfaces the skill — Cursor reads frontmatter from `~/.cursor/skills/`, Claude Code from `~/.claude/skills/`, etc. Not a per-host re-implementation; just enough for an agent to recognize "yes, I have this capability."
 
 ---
 
@@ -222,7 +246,7 @@ This is the actual deliverable. Outline:
 | `drivers/runtime-paths.ts` | `src/lib/runtime-paths.ts` | Direct port |
 | `audit.ts` (axe injection) | `src/audit.ts` | Port the axe-core wiring; drop the WCAG-tag filter taxonomy (consumer's concern) |
 | `drivers/orca/setup.sh` | `scripts/setup.sh` | Extend with x11vnc + websockify + noVNC blocks |
-| `.claude/skills/vo-driver/SKILL.md` | `AGENTS.md` | Rewrite host-agnostically; expand 3 canonical loops |
+| `.claude/skills/vo-driver/SKILL.md` | `SKILL.md` | Rewrite host-agnostically (drop Claude-Code-specific frontmatter, use the skills.sh manifest shape); expand 3 canonical loops |
 
 ### What we don't copy
 
@@ -241,8 +265,8 @@ This is the actual deliverable. Outline:
 | 1 | Bootstrap repo + package.json + tsconfig + bin entry. Port driver code from v1 to Node (drop Bun calls). | `tsc` clean. `npm pack` produces a tarball. Daemon boots locally, `/` returns status. |
 | 2 | `scripts/setup.sh`: apt install + xvfb/dbus/at-spi2 + x11vnc + noVNC + websockify. `doctor` subcommand. | Fresh Codespace: `npx agent-orca-driver setup` then `npx agent-orca-driver doctor` exits 0. |
 | 3 | Smoke test: `start <fixture>`, walk 2 tab stops, verify transcript. End-to-end Codespace run with VNC. | `test/smoke.test.ts` passes in CI. Open noVNC URL in browser, see Chromium + Orca. |
-| 4 | `AGENTS.md` (host-agnostic), `README.md` (quickstart). Manual smoke with Cursor against a real page. | Cursor, given only AGENTS.md, drives a focus-order walk + axe audit successfully. |
-| 5 | Publish to npm. Add a GitHub Action that runs the smoke test on every PR. Buffer for issues. | `npm install -g agent-orca-driver && agent-orca-driver setup && agent-orca-driver doctor` works on a vanilla Ubuntu container. |
+| 4 | `SKILL.md` (skills.sh-shaped, host-agnostic body), `AGENTS.md` (contributor brief), `README.md` (quickstart). Manual smoke with Cursor against a real page. | Cursor, after `npx skills add`, picks up the skill and drives a focus-order walk + axe audit successfully reading only `SKILL.md`. |
+| 5 | Publish to npm + register on skills.sh. GitHub Action runs smoke on every PR. Buffer for issues. | `npx skills add agent-orca-driver` installs cleanly on Cursor + Claude Code; `npm install -g agent-orca-driver && agent-orca-driver setup && agent-orca-driver doctor` works on a vanilla Ubuntu container. |
 
 ### Out of scope for v1.0
 
@@ -283,11 +307,12 @@ This turns the temporary code duplication (driver lives in two places between pu
 ## 13. Open questions
 
 1. **Repo home.** New repo under `estern1011/agent-orca-driver`, or under an org (`@a11y-tools/agent-orca-driver`)?
-2. **npm scope.** Unscoped `agent-orca-driver` (squat risk; check availability) or scoped `@estern1011/agent-orca-driver` / `@a11y-tools/agent-orca-driver`?
-3. **License.** MIT (default for tooling) vs Apache-2.0 (patent grant). Decide before publish.
-4. **CDP port handling.** Should `start` always launch its own Chromium, or accept `--cdp-port` to attach to a Chromium the consumer already launched (so Playwright + Orca share one browser)? My lean: ship "launch own Chromium" in v1.0; add "attach to existing" in v1.1 once we see how Cursor actually wants to wire it.
-5. **VNC password default.** No password by default (Codespaces gates the port behind GitHub auth) vs require `--vnc-password` to start? My lean: no password by default, big printed warning if `--vnc-port` is on `0.0.0.0`.
-6. **Smoke fixture content.** A canned static HTML in the repo, or fetch a public page (e.g., `example.com`) in the smoke test? My lean: bundled HTML — no network dependency in CI.
+2. **Skill name on skills.sh.** `agent-orca-driver` (matches the package), `orca-driver`, or something more verb-shaped (`audit-with-orca`)? Decides what users type after `npx skills add`.
+3. **npm scope.** Unscoped `agent-orca-driver` (squat risk; check availability) or scoped `@estern1011/agent-orca-driver` / `@a11y-tools/agent-orca-driver`?
+4. **License.** MIT (default for tooling) vs Apache-2.0 (patent grant). Decide before publish.
+5. **CDP port handling.** Should `start` always launch its own Chromium, or accept `--cdp-port` to attach to a Chromium the consumer already launched (so Playwright + Orca share one browser)? My lean: ship "launch own Chromium" in v1.0; add "attach to existing" in v1.1 once we see how the consumer skill actually wants to wire it.
+6. **VNC password default.** No password by default (Codespaces gates the port behind GitHub auth) vs require `--vnc-password` to start? My lean: no password by default, big printed warning if `--vnc-port` is on `0.0.0.0` (already addressed in §6 — refuses to start if `0.0.0.0` without `--vnc-password`).
+7. **Smoke fixture content.** A canned static HTML in the repo, or fetch a public page (e.g., `example.com`) in the smoke test? My lean: bundled HTML — no network dependency in CI.
 
 ---
 
