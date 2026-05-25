@@ -135,7 +135,7 @@ npx playwright install --with-deps chromium
 
 # In scripts/setup.sh — start-env (launchers, run on every fresh shell):
 x11vnc -display :99 -localhost -forever -shared -nopw -bg -quiet -ncache 10
-websockify -D ${VNC_PORT:-6080} localhost:5900 \
+websockify -D 127.0.0.1:${VNC_PORT:-6080} localhost:5900 \
   --web=/usr/share/novnc
 ```
 
@@ -143,7 +143,7 @@ Codespaces auto-forwards both `--port` (HTTP API) and `--vnc-port` (noVNC HTTP).
 
 **Why x11vnc + noVNC and not CDP screencast:** CDP only shows the browser viewport. We want the full Xvfb display so Orca's focus indicator, system caret, and any overlay UI are all visible — exactly what a sighted dev would see if they sat next to a screen-reader user.
 
-**Security note:** `-nopw` is acceptable because `-localhost` is passed explicitly (without it, `x11vnc` would listen on all interfaces — `-nopw` alone does *not* imply loopback binding, per the x11vnc man page). VNC sits on `127.0.0.1:5900` only; the only public surface is the `websockify` port, which Codespaces gates behind the user's GitHub auth. Outside Codespaces, the operator is responsible for not exposing `--vnc-port` publicly — the CLI prints a warning if `--vnc-port` is bound to `0.0.0.0` without `--vnc-password`, and refuses to start if `--vnc-port` is `0.0.0.0` AND `--vnc-password` is empty.
+**Security note:** Both `x11vnc` (VNC on 5900) and `websockify` (noVNC HTTP on `${VNC_PORT}`, default 6080) bind to `127.0.0.1` explicitly. `-nopw` on x11vnc is acceptable *because* the listener is loopback-only — `-nopw` alone does *not* imply loopback binding (per the x11vnc man page), and websockify's `[source_addr:]source_port` syntax defaults to all interfaces when `source_addr` is omitted. In Codespaces, the auto-port-forwarding mechanism bridges `127.0.0.1:6080` to a GitHub-authenticated proxy URL; nothing is exposed to the public internet. Outside Codespaces, the operator must explicitly opt into network exposure by passing `--vnc-port 0.0.0.0:6080` — the CLI prints a warning if that's done without `--vnc-password`, and refuses to start if `--vnc-port` is `0.0.0.0` with an empty password.
 
 ---
 
