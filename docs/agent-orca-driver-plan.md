@@ -10,7 +10,7 @@
 
 Both v1 (this repo) and the v2 plan (#22) bundle three things together: the *driver* (Orca + Chromium + Xvfb plumbing), the *methodology* (WCAG reasoning, criteria taxonomy, confidence rubric), and the *orchestration* (target selection, multi-state recipes, report generation). Bundling them couples decisions that should be separable — v1 can't easily be used outside Claude Code, v2's spec re-implements the driver layer from scratch, and the work-codebase Cursor skill (the immediate consumer) can't use either because both assume their own methodology rather than composing with one already in place.
 
-`agent-orca-driver` extracts the bottom layer cleanly. It ships in the same packaging shape as `agent-browser`: a CLI on PATH (`npm install -g agent-orca-driver`) plus a thin skills.sh skill stub (`npx skills add agent-orca-driver`) for host auto-discovery. The stub points the agent at `agent-orca-driver skills get core` at runtime to fetch the canonical API reference, which is bundled in the npm package as `AGENTS.md` — that same reference is what consumer-side orchestration skills inline into their own skill bodies. The CLI spawns Orca + a windowed Chromium on Xvfb and exposes an HTTP daemon any orchestration layer can drive. Live view over VNC on a forwarded port.
+`agent-orca-driver` extracts the bottom layer cleanly. It ships in the same packaging shape as `agent-browser`: a CLI on PATH (`npm install -g agent-orca-driver`) plus a thin skills.sh skill stub (`npx skills add agent-orca-driver`) for host auto-discovery. The stub points the agent at `agent-orca-driver skills get core` at runtime to fetch the canonical API reference, which is bundled in the npm package as `AGENTS.md` — that same reference is what consumer-side orchestration skills inline into their own skill bodies. The CLI spawns Orca + a windowed Chromium on Xvfb and exposes an HTTP daemon any orchestration layer can drive. Live view as a real-time WebRTC video of the Xvfb framebuffer, served on the same HTTP port as the API, with synthetic focus-rectangle and transcript overlays layered on top.
 
 **Nothing in the driver layer makes WCAG judgments, picks targets, or writes reports.** That's the orchestrator's job — and there can be many orchestrators in parallel: the work-codebase Cursor skill is the immediate one; v1 refactored to consume this package is another; v2's planned auditor (if revived) is a third. All three share the same HTTP API; the driver doesn't know or care which is calling.
 
@@ -20,12 +20,12 @@ Both v1 (this repo) and the v2 plan (#22) bundle three things together: the *dri
 
 ### What `agent-orca-driver` is
 
-- **A Node CLI on PATH** (`npm install -g agent-orca-driver`) that spawns Orca + a windowed Chromium on a virtual X display (Xvfb) and exposes a single HTTP daemon on a localhost port. *Headless from the operator's POV — no physical display required — but Chromium itself runs as a normal X11 windowed process, because Orca tracks focus via AT-SPI on a real window and the noVNC live view needs something to render.* Standalone use is first-class: an agent can drive it directly via `agent-orca-driver --help` without any skill wrapper.
+- **A Node CLI on PATH** (`npm install -g agent-orca-driver`) that spawns Orca + a windowed Chromium on a virtual X display (Xvfb) and exposes a single HTTP daemon on a localhost port. *Headless from the operator's POV — no physical display required — but Chromium itself runs as a normal X11 windowed process, because Orca tracks focus via AT-SPI on a real window and the live-view WebRTC stream captures the Xvfb framebuffer to render.* Standalone use is first-class: an agent can drive it directly via `agent-orca-driver --help` without any skill wrapper.
 - **A thin skills.sh skill stub** (`npx skills add agent-orca-driver`) for host auto-discovery. The stub is intentionally minimal — it points the agent at `agent-orca-driver skills get core` at runtime to fetch the canonical API reference, which is bundled in the npm package as `AGENTS.md`. This keeps the reference aligned with the installed CLI version (no stale cached docs in the host's skill directory).
 - **An embeddable canonical reference** (`AGENTS.md` in the package) — the same content `skills get core` prints — that orchestration skills inline into their own skill bodies when composing the driver knowledge with their own methodology.
-- A shared `setup.sh` that provisions everything Orca + the daemon need in a fresh Linux container with one command: apt packages (xvfb, dbus, at-spi2, pulseaudio, x11vnc, noVNC, websockify, orca) **plus Playwright's Chromium binary** (`npx playwright install --with-deps chromium` — the daemon launches Chromium via Playwright, so the browser binary has to land in setup, not at first `start`).
+- A shared `setup.sh` that provisions everything Orca + the daemon need in a fresh Linux container with one command: apt packages (xvfb, dbus, at-spi2, pulseaudio, ffmpeg, orca) **plus Playwright's Chromium binary** (`npx playwright install --with-deps chromium` — the daemon launches Chromium via Playwright, so the browser binary has to land in setup, not at first `start`).
 - The same HTTP API the existing `drivers/server.ts` in v1 already exposes — `/navigate`, `/next`, `/previous`, `/act`, `/perform`, `/press`, `/enter`, `/item-text`, `/transcript`, `/audit`, `/loading-state`, `/observe`, `/wait-for-selector`, `/commands`, `/stop`. Byte-identical. CLI commands support `--json` for agent consumption.
-- A live-view URL (noVNC over forwarded port) so the human watching the agent can see Orca + Chromium working in real time.
+- A live-view URL on the *same* HTTP port as the API: a viewer page at `/live` that renders a WebRTC video of the Xvfb framebuffer plus a synthetic focus rectangle (AT-SPI bbox) and a live transcript panel (speech-dispatcher tap). The human watching sees Chromium + Orca + any OS-level overlay UI in real time, with the agent's reading position highlighted larger and more legibly than Orca's native indicator.
 
 ### What `agent-orca-driver` is NOT
 
@@ -42,20 +42,20 @@ Both v1 (this repo) and the v2 plan (#22) bundle three things together: the *dri
 One process, one port, three responsibilities:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  npx agent-orca-driver start <url> --port 8001 --vnc-port 6080       │
-│                                                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐    │
-│  │  Chromium    │  │  Orca SR     │  │  HTTP daemon     │    │
-│  │  (windowed   │◀▶│  (AT-SPI +   │◀▶│  /next /act      │    │
-│  │   on Xvfb,   │  │   xdotool)   │  │  /transcript ... │    │
-│  │   CDP on N)  │  │              │  │                  │    │
-│  └──────────────┘  └──────────────┘  └──────────────────┘    │
-│         │                  │                   ▲             │
-│         ▼                  ▼                   │             │
-│       Xvfb :99 ──── x11vnc ──── websockify ── noVNC HTTP     │
-│                         (forwarded port: live view in browser)│
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  npx agent-orca-driver start <url> --port 8001                   │
+│                                                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐    │
+│  │  Chromium    │  │  Orca SR     │  │  HTTP daemon         │    │
+│  │  (windowed   │◀▶│  (AT-SPI +   │◀▶│  /next /act          │    │
+│  │   on Xvfb,   │  │   xdotool +  │  │  /transcript ...     │    │
+│  │   CDP on N)  │  │   speech-d)  │  │  /live  /events  WS  │    │
+│  └──────────────┘  └──────────────┘  │  /webrtc/offer  SDP  │    │
+│         │                  │         └──────────┬───────────┘    │
+│         ▼                  ▼                    │                │
+│       Xvfb :99 ──── ffmpeg x11grab ──── werift ─┘                │
+│                  (VP8 over WebRTC; viewer at /live, one port)    │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 Three boundaries to respect:
@@ -71,9 +71,9 @@ Three boundaries to respect:
 The CLI is on PATH after `npm install -g agent-orca-driver`. Standalone invocation is first-class — agents can `agent-orca-driver --help` to discover it without any skill wrapper.
 
 ```
-agent-orca-driver setup           # apt install + provision xvfb/dbus/at-spi2/pulseaudio/x11vnc/noVNC/chromium
-agent-orca-driver start <url>     # spawn Chromium + Orca + daemon; print listening URLs
-                                  # options: --port 8001  --cdp-port 9222  --vnc-port 6080
+agent-orca-driver setup           # apt install + provision xvfb/dbus/at-spi2/pulseaudio/ffmpeg/chromium
+agent-orca-driver start <url>     # spawn Chromium + Orca + daemon; print listening URL
+                                  # options: --port 8001  --cdp-port 9222  --auth-token <tok>
 agent-orca-driver stop            # tear down daemon + child processes
 agent-orca-driver status          # is daemon up? what URL is loaded? on what ports?
 agent-orca-driver doctor          # preflight: xvfb running? dbus? at-spi2? orca on PATH? chromium installed?
@@ -84,11 +84,11 @@ All commands support `--json` for agent consumption (parsed by orchestration ski
 
 `setup` is sudo-required (apt) and idempotent. `start` is non-sudo. `doctor` exits non-zero with a one-line diagnosis if anything's missing.
 
-After `start`, two URLs print:
+After `start`, one URL prints (API + viewer are on the same port):
 ```
 HTTP API:   http://localhost:8001
-Live view:  http://localhost:6080/vnc.html?autoconnect=1
-            (Codespaces auto-forwards both — open in any browser tab)
+Live view:  http://localhost:8001/live
+            (Codespaces auto-forwards the port — open in any browser tab)
 ```
 
 ---
@@ -120,30 +120,58 @@ Security (carried from v1): bound to `127.0.0.1`, host + origin allow-list, navi
 
 ---
 
-## 6. Live view (VNC) — the new piece
+## 6. Live view (WebRTC) — the new piece
+
+The live view is a purpose-built viewer page at `/live` on the *same* HTTP port as the API. It renders three streams correlated by timestamp:
+
+1. **Real-time video of the Xvfb framebuffer** — `ffmpeg -f x11grab` encoded as VP8 and bridged into a WebRTC PeerConnection by [`werift`](https://github.com/shinyoshiaki/werift-webrtc) (pure-Node WebRTC, no native deps). Renders into a `<video>` element in the viewer. ~30 fps, ~100 ms localhost latency.
+2. **Synthetic focus rectangle** — an absolutely-positioned `<div>` over the video whose `top/left/width/height` track the latest AT-SPI focus-changed event. Bigger and more legible than Orca's native indicator; correlates the transcript to a specific element on screen.
+3. **Live transcript panel** — sibling DOM element rendering speech-dispatcher lines (and optional agent action narration from orchestrators), color-coded by source, auto-scrolling, latest line highlighted.
+
+Streams (2) and (3) ride a single WebSocket at `/events`:
+
+| Event | Payload |
+|---|---|
+| `transcript` | `{t, source, text}` — every SR speech line, plus orchestrator-emitted action lines if it chooses to push them |
+| `focus` | `{t, bbox: {x,y,w,h}, role, name}` — AT-SPI focus-changed event |
+| `phase` | `{t, name}` — orchestrator has entered a phase (optional, no-op if not emitted) |
 
 `setup.sh` provisions, `start` boots:
 
 ```bash
-# In scripts/setup.sh — install side (apt + Playwright browser binary):
+# scripts/setup.sh — install side (apt + Playwright Chromium):
 apt-get install -y --no-install-recommends \
   orca xvfb xdotool at-spi2-core dbus-x11 libatk-adaptor \
   espeak-ng speech-dispatcher pulseaudio openbox \
-  x11vnc novnc websockify \
-  libnss3 libnspr4   # plus other Chromium runtime deps
+  ffmpeg \                # NEW: encodes the Xvfb framebuffer
+  libnss3 libnspr4        # plus other Chromium runtime deps
 npx playwright install --with-deps chromium
 
-# In scripts/setup.sh — start-env (launchers, run on every fresh shell):
-x11vnc -display :99 -localhost -forever -shared -nopw -bg -quiet -ncache 10
-websockify -D 127.0.0.1:${VNC_PORT:-6080} localhost:5900 \
-  --web=/usr/share/novnc
+# scripts/setup.sh — start-env:
+# Nothing extra. The HTTP daemon spawns ffmpeg + werift on demand
+# when the first viewer opens /live; tears them down when the last
+# viewer disconnects. No persistent VNC server, no separate port.
 ```
 
-Codespaces auto-forwards both `--port` (HTTP API) and `--vnc-port` (noVNC HTTP). The user opens the noVNC URL in any browser tab and sees Chromium + Orca's caret tracking live — same UX as opening a dev-server URL.
+On the wire, opening `/live` does:
 
-**Why x11vnc + noVNC and not CDP screencast:** CDP only shows the browser viewport. We want the full Xvfb display so Orca's focus indicator, system caret, and any overlay UI are all visible — exactly what a sighted dev would see if they sat next to a screen-reader user.
+1. Browser fetches `/live` (static HTML + JS bundled in the npm package).
+2. Browser opens a `RTCPeerConnection`, POSTs an SDP offer to `/webrtc/offer`.
+3. Daemon spawns `ffmpeg -f x11grab -i :99 -r 30 -c:v libvpx ...` piping VP8 RTP into a werift `MediaStreamTrack`, returns the SDP answer.
+4. Browser opens a WebSocket to `/events` for transcript + focus events.
+5. Viewer renders: `<video>` plays the WebRTC stream; overlay `<div>` follows focus events; transcript panel appends events.
 
-**Security note:** Both `x11vnc` (VNC on 5900) and `websockify` (noVNC HTTP on `${VNC_PORT}`, default 6080) bind to `127.0.0.1` explicitly. `-nopw` on x11vnc is acceptable *because* the listener is loopback-only — `-nopw` alone does *not* imply loopback binding (per the x11vnc man page), and websockify's `[source_addr:]source_port` syntax defaults to all interfaces when `source_addr` is omitted. In Codespaces, the auto-port-forwarding mechanism bridges `127.0.0.1:6080` to a GitHub-authenticated proxy URL; nothing is exposed to the public internet. Outside Codespaces, the operator must explicitly opt into network exposure by passing `--vnc-port 0.0.0.0:6080` — the CLI prints a warning if that's done without `--vnc-password`, and refuses to start if `--vnc-port` is `0.0.0.0` with an empty password.
+The `/events` log is also persisted as JSONL alongside the run (under the same run-id directory the orchestrator uses for screenshots). Same viewer page can replay a past audit by pointing it at a recorded log instead of the live WebSocket — recording lands in v1.0; scrubber UI in v1.1.
+
+**Why x11grab + WebRTC and not CDP screencast.** CDP captures only Chromium's compositor — it misses native popovers, native `<select>` chrome, the system cursor, Orca's own focus indicator (drawn by Orca onto the X display, not by Chrome), and anything else the X server paints. `x11grab` captures the framebuffer that all of these share, so the live view shows what a sighted dev would see if they sat next to a screen-reader user. WebRTC gives smooth ~30 fps at ~100 ms latency, which matters because the human's eye is correlating the video with the transcript and focus rectangle in real time. MJPEG would work but feels choppy at typical bandwidths; HLS adds multi-second segment buffering that kills the correlation.
+
+**Why x11grab + WebRTC and not x11vnc + noVNC** (an earlier direction in this spec). VNC ships a generic remote-desktop UI we don't control — no way to layer a synthetic focus rectangle over the video, no way to put a transcript panel beside it, no way to correlate events to frames. With a viewer page we own, the overlays come for free and the layout is designed for the audit-watching use case instead of generic desktop access. It also collapses two forwarded ports (HTTP API + noVNC HTTP) into one.
+
+**Why one port.** Viewer HTML (`GET /live`), SDP signaling (`POST /webrtc/offer`), event stream (`GET /events`, WebSocket-upgraded), and the existing API routes (`/navigate`, `/transcript`, etc.) are all served by the same Node HTTP daemon on `--port` (default 8001). The WebRTC media channel is UDP/SRTP, negotiated against a loopback ICE candidate, so it stays on the same host without a second listening TCP port. One forwarded port in Codespaces, one bound surface to secure.
+
+**Library choice on the driver side.** [`werift`](https://github.com/shinyoshiaki/werift-webrtc) is the pure-Node WebRTC implementation we use. It ingests the ffmpeg RTP output and bridges it into the PeerConnection. The alternative — `wrtc` (Node bindings to libwebrtc) — is faster but adds a native build step that complicates the `npm install -g` story; we use werift to keep the install path as clean as `agent-browser`'s. If profiling shows werift is the bottleneck for a real audit, switching to `wrtc` is a v1.1 swap behind the same `/webrtc/offer` route.
+
+**Security note.** All four surfaces (API, viewer, signaling, events WebSocket) bind to `127.0.0.1`. The WebRTC PeerConnection negotiates a loopback-only ICE candidate (no STUN/TURN configured), so the media stream itself stays on the loopback interface even though it's a UDP/SRTP transport. In Codespaces, the auto-port-forwarding mechanism bridges `127.0.0.1:<port>` to a GitHub-authenticated proxy URL; nothing is exposed to the public internet. Outside Codespaces, the operator must explicitly opt into network exposure by passing `--port 0.0.0.0:8001` — the CLI prints a warning if `--port` is non-loopback and `--auth-token` is unset, and refuses to start if `--port` is `0.0.0.0` with no auth token. When `--auth-token` is set, every endpoint (including `/live`, `/webrtc/offer`, `/events`, and the API routes) requires `Authorization: Bearer <tok>`; the viewer page reads the token from its query string on first load and reuses it for subsequent fetches.
 
 ---
 
@@ -206,7 +234,7 @@ agent-orca-driver/
 │   └── lib/
 │       └── runtime-paths.ts        # pidfile + logfile locations
 ├── scripts/
-│   ├── setup.sh                    # apt + start-env + x11vnc + noVNC + playwright chromium
+│   ├── setup.sh                    # apt + start-env + ffmpeg + playwright chromium
 │   └── devcontainer/               # optional: drop-in .devcontainer for users
 ├── test/
 │   └── smoke.test.ts               # local-only smoke (no CI gating in v1.0)
@@ -263,7 +291,7 @@ Outline:
 | `drivers/wait.ts` | `src/wait.ts` | Direct port |
 | `drivers/runtime-paths.ts` | `src/lib/runtime-paths.ts` | Direct port |
 | `audit.ts` (axe injection) | `src/audit.ts` | Port the axe-core wiring; drop the WCAG-tag filter taxonomy (consumer's concern) |
-| `drivers/orca/setup.sh` | `scripts/setup.sh` | Extend install side with x11vnc + novnc + websockify apt packages **and `npx playwright install --with-deps chromium`** (v1 setup.sh omits Playwright provisioning — the driver currently relies on Playwright Chromium being preinstalled elsewhere); extend start-env with x11vnc + websockify launchers |
+| `drivers/orca/setup.sh` | `scripts/setup.sh` | Extend install side with `ffmpeg` apt package **and `npx playwright install --with-deps chromium`** (v1 setup.sh omits Playwright provisioning — the driver currently relies on Playwright Chromium being preinstalled elsewhere). No extra start-env launchers — the WebRTC pipeline (ffmpeg + werift) starts on demand from the HTTP daemon when the first viewer opens `/live`. |
 | `.claude/skills/vo-driver/SKILL.md` | `SKILL.md` | Rewrite host-agnostically (drop Claude-Code-specific frontmatter, use the skills.sh manifest shape); expand 3 canonical loops |
 
 ### What we don't copy
@@ -281,8 +309,8 @@ Outline:
 | Day | Slice | Acceptance gate |
 |---|---|---|
 | 1 | Bootstrap repo + package.json + tsconfig + bin entry. Port driver code from v1 to Node (drop Bun calls). Add `skills get core` subcommand stub that reads `AGENTS.md` from the package root and prints to stdout. | `tsc` clean. `npm pack` produces a tarball. Daemon boots locally, `/` returns status. `agent-orca-driver skills get core` prints `AGENTS.md` content. |
-| 2 | `scripts/setup.sh`: apt install + xvfb/dbus/at-spi2 + x11vnc + noVNC + websockify + **Playwright Chromium binary** (`npx playwright install --with-deps chromium`). `doctor` subcommand verifies all of the above. | Fresh Codespace: `agent-orca-driver setup` then `agent-orca-driver doctor` exits 0; `agent-orca-driver start <fixture>` launches Chromium successfully without a separate `playwright install` step. |
-| 3 | Smoke (manual): `start <fixture>`, walk 2 tab stops, verify transcript JSON. End-to-end Codespace run with VNC live view. Add `--json` to CLI commands. | In a fresh Codespace, operator walks the smoke fixture end-to-end and sees Chromium + Orca in the noVNC tab. `agent-orca-driver status --json` returns parseable JSON. No CI gate — that's a v1.1 concern. |
+| 2 | `scripts/setup.sh`: apt install + xvfb/dbus/at-spi2 + `ffmpeg` + **Playwright Chromium binary** (`npx playwright install --with-deps chromium`). Add `werift` npm dep. `doctor` subcommand verifies all of the above, including that `ffmpeg -f x11grab -i :99 -frames:v 1 /dev/null` succeeds against the running Xvfb. | Fresh Codespace: `agent-orca-driver setup` then `agent-orca-driver doctor` exits 0; `agent-orca-driver start <fixture>` launches Chromium successfully without a separate `playwright install` step. |
+| 3 | Build the `/live` viewer (static HTML + JS: `<video>` bound to the WebRTC stream, absolutely-positioned focus rectangle driven by `/events`, transcript panel). Wire `/webrtc/offer` (SDP exchange, werift PeerConnection backed by an ffmpeg x11grab pipe) and `/events` (WebSocket: transcript + focus). Smoke (manual): `start <fixture>`, walk 2 tab stops, verify transcript JSON. End-to-end Codespace run with the `/live` tab open. Add `--json` to CLI commands. | In a fresh Codespace, operator walks the smoke fixture end-to-end and sees Chromium + Orca in the `/live` tab with the focus rectangle tracking the SR caret and the transcript panel scrolling as Orca speaks. `agent-orca-driver status --json` returns parseable JSON. No CI gate — that's a v1.1 concern. |
 | 4 | `SKILL.md` (thin stub with frontmatter + pointer), `AGENTS.md` (the substantive canonical reference per §9b), `README.md` (two-step install + quickstart). Manual smoke with Cursor against a real page. | Cursor, after the two-step install, picks up the skill stub, fetches `AGENTS.md` via `skills get core`, and drives a focus-order walk + axe audit successfully. |
 | 5 | Publish to npm + register skill on skills.sh. Buffer for issues. | `npm install -g agent-orca-driver && npx skills add agent-orca-driver` installs cleanly on Cursor + Claude Code; a fresh Codespace install + smoke walk succeeds. |
 
@@ -308,7 +336,7 @@ Outline:
 | **v1 (`estern1011/a11y-auditor`)** | The existing methodology skill, `audit.ts` / `collect.ts` orchestration, the eval queue, batch tooling, the `acr` report generator. Refactored to depend on `agent-orca-driver` instead of embedding `drivers/orca/` directly. |
 | **v2 (`#22` plan, if revived)** | Decision-log JSONL schema, Tier-0 collector taxonomy, `states.yml` runner, Agent-SDK `audit` command, eval scorer, chain-of-draft methodology. Built as a separate package that depends on `agent-orca-driver` for the SR hands. |
 
-The driver doesn't know or care which is calling. Its job is to make Orca + Chromium + Xvfb + AT-SPI work reliably in a no-physical-display Linux env (Chromium runs windowed on the virtual X display so Orca + VNC both function) and expose a stable HTTP API. Any of the three consumers can ship, evolve, or be replaced independently without touching the driver.
+The driver doesn't know or care which is calling. Its job is to make Orca + Chromium + Xvfb + AT-SPI work reliably in a no-physical-display Linux env (Chromium runs windowed on the virtual X display so Orca tracks focus via AT-SPI and ffmpeg/x11grab can capture the framebuffer for the live view) and expose a stable HTTP API. Any of the three consumers can ship, evolve, or be replaced independently without touching the driver.
 
 **How consumers consume:** each orchestration-skill author runs `agent-orca-driver skills get core` (or reads `AGENTS.md` from the installed npm package) and inlines the route table + canonical loop(s) they care about into their own skill body. That keeps the orchestration skill self-contained — it works whether or not `agent-orca-driver`'s SKILL.md stub is also loaded in the host. The driver bin only needs to be on PATH.
 
@@ -332,7 +360,8 @@ This turns the temporary code duplication (driver lives in two places between pu
 3. **npm scope.** Unscoped `agent-orca-driver` (squat risk; check availability) or scoped `@estern1011/agent-orca-driver` / `@a11y-tools/agent-orca-driver`?
 4. **License.** MIT (default for tooling) vs Apache-2.0 (patent grant). Decide before publish.
 5. **CDP port handling.** Should `start` always launch its own Chromium, or accept `--cdp-port` to attach to a Chromium the consumer already launched (so Playwright + Orca share one browser)? My lean: ship "launch own Chromium" in v1.0; add "attach to existing" in v1.1 once we see how the consumer skill actually wants to wire it.
-6. **VNC password default.** No password by default (Codespaces gates the port behind GitHub auth) vs require `--vnc-password` to start? My lean: no password by default, big printed warning if `--vnc-port` is on `0.0.0.0` (already addressed in §6 — refuses to start if `0.0.0.0` without `--vnc-password`).
+6. **Auth gate when binding non-loopback.** No auth by default (Codespaces gates the forwarded port behind GitHub auth) vs require `--auth-token` to start? My lean: no auth by default, big printed warning if `--port` is non-loopback, and refuse to start if `--port` is `0.0.0.0` without `--auth-token` (handled in §6). When `--auth-token` is set, every endpoint requires `Authorization: Bearer <tok>`, including `/live`, `/webrtc/offer`, `/events`, and the API routes. Open sub-question: should the `/events` WebSocket also require a per-connection token rotation, or is the initial bearer-on-upgrade sufficient?
+7. **werift vs wrtc for v1.0.** Ship werift (pure Node, clean install) or wrtc (native bindings, better perf)? My lean: ship werift in v1.0 since the audit live view doesn't need libwebrtc's perf headroom; revisit only if profiling shows werift is the bottleneck. Either way the same `/webrtc/offer` route holds; swap is invisible to the viewer.
 7. **Smoke fixture content.** A canned static HTML in the repo, or fetch a public page (e.g., `example.com`) in the smoke test? My lean: bundled HTML — no network dependency in CI.
 
 ---
