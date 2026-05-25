@@ -116,7 +116,7 @@ Copied verbatim from v1's `drivers/server.ts`. Stable contract — any v1 consum
 | GET | `/commands?filter=` | List of `/perform` commands the driver supports |
 | POST | `/stop` | Graceful shutdown |
 
-Security (carried from v1): bound to `127.0.0.1`, host + origin allow-list, navigation URL scheme allow-list (`http`/`https`/`data` only).
+Security (carried from v1, default loopback mode): bound to `127.0.0.1`, host + origin allow-list (localhost / 127.0.0.1 only), navigation URL scheme allow-list (`http`/`https`/`data` only). When the daemon is opted into non-loopback binding (`--port 0.0.0.0:...`), token auth replaces the host/origin check — see §6's security note for the full rules.
 
 ---
 
@@ -192,10 +192,19 @@ The `/events` log is persisted as JSONL alongside the run (under the same run-id
 
 **Browser dependency.** MSE requires Chrome/Edge/Firefox 42+/Safari 8+ — effectively any modern browser. Codespaces' "open in browser" flows use whatever the user's local browser is; the viewer page does a feature detection (`MediaSource && MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E"')`) on load and shows a degraded MJPEG fallback if unsupported. (Fallback ships in v1.1; v1.0 logs and refuses.)
 
-**Security note.** All surfaces (API, viewer, `/events`, `/stream`) bind to `127.0.0.1`. In Codespaces, the auto-port-forwarding mechanism bridges `127.0.0.1:<port>` to a GitHub-authenticated proxy URL; nothing is exposed to the public internet. Outside Codespaces, the operator must explicitly opt into network exposure by passing `--port 0.0.0.0:8001` — the CLI prints a warning if `--port` is non-loopback and `--auth-token` is unset, and refuses to start if `--port` is `0.0.0.0` with no auth token. When `--auth-token` is set:
+**Security note.** Two modes:
 
-- `/live` and the API routes require `Authorization: Bearer <tok>`. The viewer page reads the token from its query string on first load and reuses it for subsequent fetches.
-- `/events` and `/stream` (both WebSockets) take the token as a query-string parameter (`/events?token=<tok>`, `/stream?token=<tok>`) — the browser `WebSocket` constructor can't set arbitrary upgrade headers, so we accept the token in the URL and validate it on the upgrade handshake. The viewer constructs both WebSocket URLs by reusing the same token it loaded itself with.
+**Default (loopback) mode.** All surfaces (API, viewer, `/events`, `/stream`) bind to `127.0.0.1`. The v1-inherited host + origin allow-list applies (see §5). In Codespaces, the auto-port-forwarding mechanism bridges `127.0.0.1:<port>` to a GitHub-authenticated proxy URL; nothing is exposed to the public internet, and the allow-list is satisfied because the request `Host` header still reads as the localhost-shaped forwarded URL. No `--auth-token` needed.
+
+**Non-loopback mode.** Operator passes `--port 0.0.0.0:8001` (or any non-loopback address). The CLI prints a warning if `--auth-token` is unset, and refuses to start if the bind is `0.0.0.0` with no token. In this mode:
+
+- The v1 host + origin allow-list is **replaced** by token auth — every request must carry the token. An optional `--allowed-origin <list>` further restricts the `Origin` header for browser clients; without it, the token is the sole gate.
+- Token transport per endpoint (different surfaces have different mechanisms because browsers limit what can carry the token):
+  - `/live` (initial page navigation) — query string: `/live?token=<tok>`. A normal browser navigation (typing the URL, clicking a link, opening in a new tab) can't attach an `Authorization` header, so the token rides in the URL. The bundled viewer JS reads it from `window.location.search` for all downstream calls. The server returns a same-origin auth cookie on the `/live` response so a casual reload doesn't strip auth, and the JS still has the token in-memory for WebSocket URL construction.
+  - `/events` and `/stream` (both WebSockets) — query string: `?token=<tok>`. The browser `WebSocket` constructor can't set arbitrary upgrade headers; the token rides in the URL and is validated on the upgrade handshake.
+  - API routes (`/navigate`, `/act`, `/transcript`, etc.) — `Authorization: Bearer <tok>`. Called by the viewer JS (which sets the header from its in-memory token) or by external orchestrator clients (which set Bearer normally).
+
+The viewer page treats the query-string token from `/live` as its session token: it adds it to `/events` and `/stream` URLs and sends it as a Bearer header on API fetches. The token never leaves the same-origin browser context.
 
 ---
 
