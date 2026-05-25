@@ -10,7 +10,7 @@
 
 Both v1 (this repo) and the v2 plan (#22) bundle three things together: the *driver* (Orca + Chromium + Xvfb plumbing), the *methodology* (WCAG reasoning, criteria taxonomy, confidence rubric), and the *orchestration* (target selection, multi-state recipes, report generation). Bundling them couples decisions that should be separable — v1 can't easily be used outside Claude Code, v2's spec re-implements the driver layer from scratch, and the work-codebase Cursor skill (the immediate consumer) can't use either because both assume their own methodology rather than composing with one already in place.
 
-`agent-orca-driver` extracts the bottom layer cleanly. It ships in the same packaging shape as `agent-browser`: a CLI on PATH (`npm install -g agent-orca-driver`) plus a thin skills.sh skill stub (`npx skills add agent-orca-driver`) for host auto-discovery. The stub points the agent at `agent-orca-driver skills get core` at runtime to fetch the canonical API reference, which is bundled in the npm package as `AGENTS.md` — that same reference is what consumer-side orchestration skills inline into their own skill bodies. The CLI spawns Orca + a windowed Chromium on Xvfb and exposes an HTTP daemon any orchestration layer can drive. Live view as a real-time WebRTC video of the Xvfb framebuffer, served on the same HTTP port as the API, with synthetic focus-rectangle and transcript overlays layered on top.
+`agent-orca-driver` extracts the bottom layer cleanly. It ships in the same packaging shape as `agent-browser`: a CLI on PATH (`npm install -g agent-orca-driver`) plus a thin skills.sh skill stub (`npx skills add agent-orca-driver`) for host auto-discovery. The stub points the agent at `agent-orca-driver skills get core` at runtime to fetch the canonical API reference, which is bundled in the npm package as `AGENTS.md` — that same reference is what consumer-side orchestration skills inline into their own skill bodies. The CLI spawns Orca + a windowed Chromium on Xvfb and exposes an HTTP daemon any orchestration layer can drive. Live view as a real-time h264-in-fragmented-MP4 video stream over WebSocket (rendered via Media Source Extensions), served on the same HTTP port as the API, with synthetic focus-rectangle and transcript overlays layered on top.
 
 **Nothing in the driver layer makes WCAG judgments, picks targets, or writes reports.** That's the orchestrator's job — and there can be many orchestrators in parallel: the work-codebase Cursor skill is the immediate one; v1 refactored to consume this package is another; v2's planned auditor (if revived) is a third. All three share the same HTTP API; the driver doesn't know or care which is calling.
 
@@ -20,12 +20,12 @@ Both v1 (this repo) and the v2 plan (#22) bundle three things together: the *dri
 
 ### What `agent-orca-driver` is
 
-- **A Node CLI on PATH** (`npm install -g agent-orca-driver`) that spawns Orca + a windowed Chromium on a virtual X display (Xvfb) and exposes a single HTTP daemon on a localhost port. *Headless from the operator's POV — no physical display required — but Chromium itself runs as a normal X11 windowed process, because Orca tracks focus via AT-SPI on a real window and the live-view WebRTC stream captures the Xvfb framebuffer to render.* Standalone use is first-class: an agent can drive it directly via `agent-orca-driver --help` without any skill wrapper.
+- **A Node CLI on PATH** (`npm install -g agent-orca-driver`) that spawns Orca + a windowed Chromium on a virtual X display (Xvfb) and exposes a single HTTP daemon on a localhost port. *Headless from the operator's POV — no physical display required — but Chromium itself runs as a normal X11 windowed process, because Orca tracks focus via AT-SPI on a real window and the live-view stream captures the Xvfb framebuffer to render.* Standalone use is first-class: an agent can drive it directly via `agent-orca-driver --help` without any skill wrapper.
 - **A thin skills.sh skill stub** (`npx skills add agent-orca-driver`) for host auto-discovery. The stub is intentionally minimal — it points the agent at `agent-orca-driver skills get core` at runtime to fetch the canonical API reference, which is bundled in the npm package as `AGENTS.md`. This keeps the reference aligned with the installed CLI version (no stale cached docs in the host's skill directory).
 - **An embeddable canonical reference** (`AGENTS.md` in the package) — the same content `skills get core` prints — that orchestration skills inline into their own skill bodies when composing the driver knowledge with their own methodology.
 - A shared `setup.sh` that provisions everything Orca + the daemon need in a fresh Linux container with one command: apt packages (xvfb, dbus, at-spi2, pulseaudio, ffmpeg, orca) **plus Playwright's Chromium binary** (`npx playwright install --with-deps chromium` — the daemon launches Chromium via Playwright, so the browser binary has to land in setup, not at first `start`).
 - The same HTTP API the existing `drivers/server.ts` in v1 already exposes — `/navigate`, `/next`, `/previous`, `/act`, `/perform`, `/press`, `/enter`, `/item-text`, `/transcript`, `/audit`, `/loading-state`, `/observe`, `/wait-for-selector`, `/commands`, `/stop`. Byte-identical. CLI commands support `--json` for agent consumption.
-- A live-view URL on the *same* HTTP port as the API: a viewer page at `/live` that renders a WebRTC video of the Xvfb framebuffer plus a synthetic focus rectangle (AT-SPI bbox) and a live transcript panel (speech-dispatcher tap). The human watching sees Chromium + Orca + any OS-level overlay UI in real time, with the agent's reading position highlighted larger and more legibly than Orca's native indicator.
+- A live-view URL on the *same* HTTP port as the API: a viewer page at `/live` that renders a video of the Xvfb framebuffer (h264-in-fMP4 over WebSocket, played via Media Source Extensions) plus a synthetic focus rectangle (AT-SPI bbox) and a live transcript panel (speech-dispatcher tap). The human watching sees Chromium + Orca + any OS-level overlay UI in real time, with the agent's reading position highlighted larger and more legibly than Orca's native indicator.
 
 ### What `agent-orca-driver` is NOT
 
@@ -42,20 +42,20 @@ Both v1 (this repo) and the v2 plan (#22) bundle three things together: the *dri
 One process, one port, three responsibilities:
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│  npx agent-orca-driver start <url> --port 8001                   │
-│                                                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐    │
-│  │  Chromium    │  │  Orca SR     │  │  HTTP daemon         │    │
-│  │  (windowed   │◀▶│  (AT-SPI +   │◀▶│  /next /act          │    │
-│  │   on Xvfb,   │  │   xdotool +  │  │  /transcript ...     │    │
-│  │   CDP on N)  │  │   speech-d)  │  │  /live  /events  WS  │    │
-│  └──────────────┘  └──────────────┘  │  /webrtc/offer  SDP  │    │
-│         │                  │         └──────────┬───────────┘    │
-│         ▼                  ▼                    │                │
-│       Xvfb :99 ──── ffmpeg x11grab ──── werift ─┘                │
-│                  (VP8 over WebRTC; viewer at /live, one port)    │
-└──────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│  npx agent-orca-driver start <url> --port 8001                     │
+│                                                                    │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐    │
+│  │  Chromium    │  │  Orca SR     │  │  HTTP daemon           │    │
+│  │  (windowed   │◀▶│  (AT-SPI +   │◀▶│  /next /act            │    │
+│  │   on Xvfb,   │  │   xdotool +  │  │  /transcript ...       │    │
+│  │   CDP on N)  │  │   speech-d)  │  │  /live    (HTML)       │    │
+│  └──────────────┘  └──────────────┘  │  /events  (WS, JSON)   │    │
+│         │                  │         │  /stream  (WS, fMP4)   │    │
+│         ▼                  ▼         └────────────┬───────────┘    │
+│       Xvfb :99 ──── ffmpeg x11grab (h264 fMP4) ───┘                │
+│       (one port; viewer plays /stream via MSE, overlays via /events)│
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 Three boundaries to respect:
@@ -120,15 +120,15 @@ Security (carried from v1): bound to `127.0.0.1`, host + origin allow-list, navi
 
 ---
 
-## 6. Live view (WebRTC) — the new piece
+## 6. Live view (MSE over WebSocket) — the new piece
 
 The live view is a purpose-built viewer page at `/live` on the *same* HTTP port as the API. It renders three streams correlated by timestamp:
 
-1. **Real-time video of the Xvfb framebuffer** — `ffmpeg -f x11grab` encoded as VP8 and bridged into a WebRTC PeerConnection by [`werift`](https://github.com/shinyoshiaki/werift-webrtc) (pure-Node WebRTC, no native deps). Renders into a `<video>` element in the viewer. ~30 fps, ~100 ms localhost latency.
+1. **Real-time video of the Xvfb framebuffer** — `ffmpeg -f x11grab` encoded as h264 in a fragmented MP4 (fMP4) container, pushed as binary chunks over a `/stream` WebSocket. The viewer feeds each chunk into a `MediaSource.appendBuffer` bound to a `<video>` element. ~30 fps, ~200–500 ms end-to-end latency (one fMP4 fragment ≈ 200 ms + browser jitter buffer).
 2. **Synthetic focus rectangle** — an absolutely-positioned `<div>` over the video whose `top/left/width/height` track the latest AT-SPI focus-changed event. Bigger and more legible than Orca's native indicator; correlates the transcript to a specific element on screen.
 3. **Live transcript panel** — sibling DOM element rendering speech-dispatcher lines (and optional agent action narration from orchestrators), color-coded by source, auto-scrolling, latest line highlighted.
 
-Streams (2) and (3) ride a single WebSocket at `/events`:
+Streams (2) and (3) ride a separate WebSocket at `/events`:
 
 | Event | Payload |
 |---|---|
@@ -148,38 +148,54 @@ sudo apt-get install -y --no-install-recommends \
   espeak-ng speech-dispatcher pulseaudio openbox \
   ffmpeg \
   libnss3 libnspr4
-# ffmpeg encodes the Xvfb framebuffer for the WebRTC live view;
-# libnss3/libnspr4 are Chromium runtime deps.
+# ffmpeg (with libx264) encodes the Xvfb framebuffer for the live-view
+# stream; libnss3/libnspr4 are Chromium runtime deps. Most distro ffmpeg
+# builds include libx264; `doctor` verifies the encoder is available.
 npx playwright install --with-deps chromium
 
 # scripts/setup.sh — start-env:
-# Nothing extra. The HTTP daemon spawns ffmpeg + werift on demand
-# when the first viewer opens /live; tears them down when the last
-# viewer disconnects. No persistent VNC server, no separate port.
+# Nothing extra. The HTTP daemon spawns ffmpeg on demand when the first
+# viewer opens /live; tears it down when the last viewer disconnects.
+# No persistent video server, no separate port.
 ```
 
 On the wire, opening `/live` does:
 
 1. Browser fetches `/live` (static HTML + JS bundled in the npm package).
-2. Browser opens a `RTCPeerConnection`, POSTs an SDP offer to `/webrtc/offer`.
-3. Daemon spawns `ffmpeg -f x11grab -i :99 -r 30 -c:v libvpx ...` piping VP8 RTP into a werift `MediaStreamTrack`, returns the SDP answer.
-4. Browser opens a WebSocket to `/events` for transcript + focus events.
-5. Viewer renders: `<video>` plays the WebRTC stream; overlay `<div>` follows focus events; transcript panel appends events.
+2. Browser opens two WebSockets: `/stream` (binary fMP4 chunks) and `/events` (JSON: transcript + focus + phase).
+3. Daemon spawns ffmpeg with roughly the following invocation and pipes its stdout into the `/stream` WebSocket:
+   ```
+   ffmpeg -f x11grab -i :99 -r 30 \
+     -c:v libx264 -preset ultrafast -tune zerolatency \
+     -profile:v baseline -pix_fmt yuv420p \
+     -f mp4 -movflags +frag_keyframe+empty_moov+default_base_moof \
+     -frag_duration 200000 \
+     pipe:1
+   ```
+   `frag_duration 200000` (µs) = 200 ms fragments — the lower bound of the end-to-end latency.
+4. Viewer creates a `MediaSource`, attaches it to a `<video>` element, and on each `/stream` binary message calls `sourceBuffer.appendBuffer(chunk)`. The `<video>` plays continuously.
+5. Overlay `<div>` follows `focus` events from `/events`; transcript panel appends `transcript` events.
 
-The `/events` log is also persisted as JSONL alongside the run (under the same run-id directory the orchestrator uses for screenshots). Same viewer page can replay a past audit by pointing it at a recorded log instead of the live WebSocket — recording lands in v1.0; scrubber UI in v1.1.
+The `/events` log is persisted as JSONL alongside the run (under the same run-id directory the orchestrator uses for screenshots). Same viewer page can replay a past audit by pointing it at a recorded log instead of the live WebSocket — recording lands in v1.0; scrubber UI in v1.1. Video isn't persisted by default (large); `--record-video` writes the same fMP4 byte stream to a sibling `.mp4` file for the run.
 
-**Why x11grab + WebRTC and not CDP screencast.** CDP captures only Chromium's compositor — it misses native popovers, native `<select>` chrome, the system cursor, Orca's own focus indicator (drawn by Orca onto the X display, not by Chrome), and anything else the X server paints. `x11grab` captures the framebuffer that all of these share, so the live view shows what a sighted dev would see if they sat next to a screen-reader user. WebRTC gives smooth ~30 fps at ~100 ms latency, which matters because the human's eye is correlating the video with the transcript and focus rectangle in real time. MJPEG would work but feels choppy at typical bandwidths; HLS adds multi-second segment buffering that kills the correlation.
+**Why MSE over WebSocket and not WebRTC** (an earlier direction in this spec). WebRTC media is UDP/SRTP. Codespaces port-forwarding terminates HTTPS at the GitHub proxy and tunnels HTTP/TCP into the container — UDP doesn't traverse it, and a loopback ICE candidate inside the container isn't reachable from the user's remote browser. WebRTC's HTTPS signaling would succeed but the `<video>` element would stay blank. MSE-over-WebSocket runs entirely over the existing HTTPS + WebSocket plumbing Codespaces already proxies, so the live view works through the forwarded URL without a second transport or TURN relay. Trade-off: ~200–500 ms latency vs WebRTC's ~100 ms — invisible for focus-tracking, well below the threshold where eye-correlation between video and transcript breaks down.
 
-**Why x11grab + WebRTC and not x11vnc + noVNC** (an earlier direction in this spec). VNC ships a generic remote-desktop UI we don't control — no way to layer a synthetic focus rectangle over the video, no way to put a transcript panel beside it, no way to correlate events to frames. With a viewer page we own, the overlays come for free and the layout is designed for the audit-watching use case instead of generic desktop access. It also collapses two forwarded ports (HTTP API + noVNC HTTP) into one.
+**Why x11grab and not CDP screencast.** CDP captures only Chromium's compositor — it misses native popovers, native `<select>` chrome, the system cursor, Orca's own focus indicator (drawn by Orca onto the X display, not by Chrome), and anything else the X server paints. `x11grab` captures the framebuffer that all of these share, so the live view shows what a sighted dev would see if they sat next to a screen-reader user.
 
-**Why one port.** Viewer HTML (`GET /live`), SDP signaling (`POST /webrtc/offer`), event stream (`GET /events`, WebSocket-upgraded), and the existing API routes (`/navigate`, `/transcript`, etc.) are all served by the same Node HTTP daemon on `--port` (default 8001). The WebRTC media channel is UDP/SRTP, negotiated against a loopback ICE candidate, so it stays on the same host without a second listening TCP port. One forwarded port in Codespaces, one bound surface to secure.
+**Why MSE over WebSocket and not VNC** (an even earlier direction). VNC ships a generic remote-desktop UI we don't control — no way to layer a synthetic focus rectangle, no transcript panel, no event correlation. With a viewer page we own, the overlays come for free, the layout is designed for the audit-watching use case, and the two forwarded ports (HTTP API + noVNC HTTP) collapse into one.
 
-**Library choice on the driver side.** [`werift`](https://github.com/shinyoshiaki/werift-webrtc) is the pure-Node WebRTC implementation we use. It ingests the ffmpeg RTP output and bridges it into the PeerConnection. The alternative — `wrtc` (Node bindings to libwebrtc) — is faster but adds a native build step that complicates the `npm install -g` story; we use werift to keep the install path as clean as `agent-browser`'s. If profiling shows werift is the bottleneck for a real audit, switching to `wrtc` is a v1.1 swap behind the same `/webrtc/offer` route.
+**Why MSE and not MJPEG.** MJPEG is simpler (single `<img>` tag, no MSE state machine) but tops out at ~10–15 fps practical and has no inter-frame compression, which inflates Codespaces bandwidth significantly. h264 in fMP4 gets ~30 fps at a small fraction of MJPEG's bandwidth. If MSE proves fragile in practice (Safari edge cases, sourceBuffer overflow), MJPEG remains a clean fallback behind the same `/stream` URL — only the codec/container changes.
 
-**Security note.** All four surfaces (API, viewer, signaling, events WebSocket) bind to `127.0.0.1`. The WebRTC PeerConnection negotiates a loopback-only ICE candidate (no STUN/TURN configured), so the media stream itself stays on the loopback interface even though it's a UDP/SRTP transport. In Codespaces, the auto-port-forwarding mechanism bridges `127.0.0.1:<port>` to a GitHub-authenticated proxy URL; nothing is exposed to the public internet. Outside Codespaces, the operator must explicitly opt into network exposure by passing `--port 0.0.0.0:8001` — the CLI prints a warning if `--port` is non-loopback and `--auth-token` is unset, and refuses to start if `--port` is `0.0.0.0` with no auth token. When `--auth-token` is set:
+**Why one port.** Viewer HTML (`GET /live`), event stream (`GET /events`, WebSocket-upgraded), video stream (`GET /stream`, WebSocket-upgraded), and the existing API routes (`/navigate`, `/transcript`, etc.) are all served by the same Node HTTP daemon on `--port` (default 8001). One forwarded port in Codespaces, one bound surface to secure.
 
-- `/live`, `/webrtc/offer`, and the API routes require `Authorization: Bearer <tok>`. The viewer page reads the token from its query string on first load and reuses it for subsequent fetches.
-- `/events` (WebSocket) takes the token as a query-string parameter (`/events?token=<tok>`) — the browser `WebSocket` constructor can't set arbitrary upgrade headers, so we accept the token in the URL and validate it on the upgrade handshake. The viewer constructs the WebSocket URL by reusing the same token it loaded itself with.
+**Codec choice.** h264 (baseline profile) in fragmented MP4 is universally supported in `<video>` + MSE across Chrome, Edge, Firefox, and Safari. VP9 encodes faster but Safari MSE support is newer and patchier; h264 is the safe default. The encoder lives in the daemon's ffmpeg invocation — switchable behind a flag if a deployment can drop Safari support.
+
+**Browser dependency.** MSE requires Chrome/Edge/Firefox 42+/Safari 8+ — effectively any modern browser. Codespaces' "open in browser" flows use whatever the user's local browser is; the viewer page does a feature detection (`MediaSource && MediaSource.isTypeSupported('video/mp4; codecs="avc1.42E01E"')`) on load and shows a degraded MJPEG fallback if unsupported. (Fallback ships in v1.1; v1.0 logs and refuses.)
+
+**Security note.** All surfaces (API, viewer, `/events`, `/stream`) bind to `127.0.0.1`. In Codespaces, the auto-port-forwarding mechanism bridges `127.0.0.1:<port>` to a GitHub-authenticated proxy URL; nothing is exposed to the public internet. Outside Codespaces, the operator must explicitly opt into network exposure by passing `--port 0.0.0.0:8001` — the CLI prints a warning if `--port` is non-loopback and `--auth-token` is unset, and refuses to start if `--port` is `0.0.0.0` with no auth token. When `--auth-token` is set:
+
+- `/live` and the API routes require `Authorization: Bearer <tok>`. The viewer page reads the token from its query string on first load and reuses it for subsequent fetches.
+- `/events` and `/stream` (both WebSockets) take the token as a query-string parameter (`/events?token=<tok>`, `/stream?token=<tok>`) — the browser `WebSocket` constructor can't set arbitrary upgrade headers, so we accept the token in the URL and validate it on the upgrade handshake. The viewer constructs both WebSocket URLs by reusing the same token it loaded itself with.
 
 ---
 
@@ -299,7 +315,7 @@ Outline:
 | `drivers/wait.ts` | `src/wait.ts` | Direct port |
 | `drivers/runtime-paths.ts` | `src/lib/runtime-paths.ts` | Direct port |
 | `audit.ts` (axe injection) | `src/audit.ts` | Port the axe-core wiring; drop the WCAG-tag filter taxonomy (consumer's concern) |
-| `drivers/orca/setup.sh` | `scripts/setup.sh` | Extend install side with `ffmpeg` apt package **and `npx playwright install --with-deps chromium`** (v1 setup.sh omits Playwright provisioning — the driver currently relies on Playwright Chromium being preinstalled elsewhere). No extra start-env launchers — the WebRTC pipeline (ffmpeg + werift) starts on demand from the HTTP daemon when the first viewer opens `/live`. |
+| `drivers/orca/setup.sh` | `scripts/setup.sh` | Extend install side with `ffmpeg` apt package **and `npx playwright install --with-deps chromium`** (v1 setup.sh omits Playwright provisioning — the driver currently relies on Playwright Chromium being preinstalled elsewhere); the script `sudo`s internally for the apt step only, so the Playwright cache lands in the invoking user's home. No extra start-env launchers — the video pipeline (ffmpeg piping fMP4 into the `/stream` WebSocket) starts on demand from the HTTP daemon when the first viewer opens `/live`. |
 | `.claude/skills/vo-driver/SKILL.md` | `SKILL.md` | Rewrite host-agnostically (drop Claude-Code-specific frontmatter, use the skills.sh manifest shape); expand 3 canonical loops |
 
 ### What we don't copy
@@ -317,8 +333,8 @@ Outline:
 | Day | Slice | Acceptance gate |
 |---|---|---|
 | 1 | Bootstrap repo + package.json + tsconfig + bin entry. Port driver code from v1 to Node (drop Bun calls). Add `skills get core` subcommand stub that reads `AGENTS.md` from the package root and prints to stdout. | `tsc` clean. `npm pack` produces a tarball. Daemon boots locally, `/` returns status. `agent-orca-driver skills get core` prints `AGENTS.md` content. |
-| 2 | `scripts/setup.sh`: apt install + xvfb/dbus/at-spi2 + `ffmpeg` + **Playwright Chromium binary** (`npx playwright install --with-deps chromium`). Add `werift` npm dep. `doctor` subcommand verifies all of the above, including that `ffmpeg -f x11grab -i :99 -frames:v 1 /dev/null` succeeds against the running Xvfb. | Fresh Codespace: `agent-orca-driver setup` then `agent-orca-driver doctor` exits 0; `agent-orca-driver start <fixture>` launches Chromium successfully without a separate `playwright install` step. |
-| 3 | Build the `/live` viewer (static HTML + JS: `<video>` bound to the WebRTC stream, absolutely-positioned focus rectangle driven by `/events`, transcript panel). Wire `/webrtc/offer` (SDP exchange, werift PeerConnection backed by an ffmpeg x11grab pipe) and `/events` (WebSocket: transcript + focus). Smoke (manual): `start <fixture>`, walk 2 tab stops, verify transcript JSON. End-to-end Codespace run with the `/live` tab open. Add `--json` to CLI commands. | In a fresh Codespace, operator walks the smoke fixture end-to-end and sees Chromium + Orca in the `/live` tab with the focus rectangle tracking the SR caret and the transcript panel scrolling as Orca speaks. `agent-orca-driver status --json` returns parseable JSON. No CI gate — that's a v1.1 concern. |
+| 2 | `scripts/setup.sh`: apt install + xvfb/dbus/at-spi2 + `ffmpeg` + **Playwright Chromium binary** (`npx playwright install --with-deps chromium`). `doctor` subcommand verifies all of the above, including that `ffmpeg -f x11grab -i :99 -frames:v 1 -f null -` succeeds against the running Xvfb and that the ffmpeg build advertises `libx264`. | Fresh Codespace: `agent-orca-driver setup` then `agent-orca-driver doctor` exits 0; `agent-orca-driver start <fixture>` launches Chromium successfully without a separate `playwright install` step. |
+| 3 | Build the `/live` viewer (static HTML + JS: `<video>` bound via `MediaSource` to the `/stream` WebSocket; absolutely-positioned focus rectangle driven by `/events`; transcript panel). Wire `/stream` (WebSocket, binary fMP4 chunks from ffmpeg's stdout) and `/events` (WebSocket: transcript + focus, JSON). Smoke (manual): `start <fixture>`, walk 2 tab stops, verify transcript JSON. End-to-end Codespace run with the `/live` tab open. Add `--json` to CLI commands. | In a fresh Codespace, operator walks the smoke fixture end-to-end and sees Chromium + Orca in the `/live` tab with the focus rectangle tracking the SR caret and the transcript panel scrolling as Orca speaks. Initial video frame appears within ~1 s of opening `/live`. `agent-orca-driver status --json` returns parseable JSON. No CI gate — that's a v1.1 concern. |
 | 4 | `SKILL.md` (thin stub with frontmatter + pointer), `AGENTS.md` (the substantive canonical reference per §9b), `README.md` (two-step install + quickstart). Manual smoke with Cursor against a real page. | Cursor, after the two-step install, picks up the skill stub, fetches `AGENTS.md` via `skills get core`, and drives a focus-order walk + axe audit successfully. |
 | 5 | Publish to npm + register skill on skills.sh. Buffer for issues. | `npm install -g agent-orca-driver && npx skills add agent-orca-driver` installs cleanly on Cursor + Claude Code; a fresh Codespace install + smoke walk succeeds. |
 
@@ -368,8 +384,8 @@ This turns the temporary code duplication (driver lives in two places between pu
 3. **npm scope.** Unscoped `agent-orca-driver` (squat risk; check availability) or scoped `@estern1011/agent-orca-driver` / `@a11y-tools/agent-orca-driver`?
 4. **License.** MIT (default for tooling) vs Apache-2.0 (patent grant). Decide before publish.
 5. **CDP port handling.** Should `start` always launch its own Chromium, or accept `--cdp-port` to attach to a Chromium the consumer already launched (so Playwright + Orca share one browser)? My lean: ship "launch own Chromium" in v1.0; add "attach to existing" in v1.1 once we see how the consumer skill actually wants to wire it.
-6. **Auth gate when binding non-loopback.** No auth by default (Codespaces gates the forwarded port behind GitHub auth) vs require `--auth-token` to start? My lean: no auth by default, big printed warning if `--port` is non-loopback, and refuse to start if `--port` is `0.0.0.0` without `--auth-token` (handled in §6). When `--auth-token` is set, every endpoint requires `Authorization: Bearer <tok>`, including `/live`, `/webrtc/offer`, `/events`, and the API routes. Open sub-question: should the `/events` WebSocket also require a per-connection token rotation, or is the initial bearer-on-upgrade sufficient?
-7. **werift vs wrtc for v1.0.** Ship werift (pure Node, clean install) or wrtc (native bindings, better perf)? My lean: ship werift in v1.0 since the audit live view doesn't need libwebrtc's perf headroom; revisit only if profiling shows werift is the bottleneck. Either way the same `/webrtc/offer` route holds; swap is invisible to the viewer.
+6. **Auth gate when binding non-loopback.** No auth by default (Codespaces gates the forwarded port behind GitHub auth) vs require `--auth-token` to start? My lean: no auth by default, big printed warning if `--port` is non-loopback, and refuse to start if `--port` is `0.0.0.0` without `--auth-token` (handled in §6). Open sub-question: should the `/events` and `/stream` WebSockets rotate their query-string tokens per connection, or is the initial token-on-upgrade sufficient for a localhost-scoped tool? My lean: initial only; rotation is overkill for the loopback default and Codespaces auth covers the forwarded case.
+7. **Codec choice.** Ship h264 baseline-only (current §6 default, broadest browser compat including Safari) or also offer VP9 behind a flag? My lean: h264 only in v1.0; revisit if a deployment hits patent-anxious environments where VP9 is preferred. The fMP4 pipeline doesn't change; only the `-c:v` flag does.
 7. **Smoke fixture content.** A canned static HTML in the repo, or fetch a public page (e.g., `example.com`) in the smoke test? My lean: bundled HTML — no network dependency in CI.
 
 ---
