@@ -82,7 +82,7 @@ agent-orca-driver skills get core # print the canonical AGENTS.md reference (wha
 
 All commands support `--json` for agent consumption (parsed by orchestration skills; `setup`/`start`/`doctor`'s human-readable output becomes a structured object).
 
-`setup` is sudo-required (apt) and idempotent. `start` is non-sudo. `doctor` exits non-zero with a one-line diagnosis if anything's missing.
+`setup` runs as the invoking user — the script `sudo`s internally for the apt step only, so Playwright's Chromium binary lands in that user's cache (`~/.cache/ms-playwright`). `start` is non-sudo and inherits the same cache. The whole script is idempotent. `doctor` exits non-zero with a one-line diagnosis if anything's missing.
 
 After `start`, one URL prints (API + viewer are on the same port):
 ```
@@ -139,12 +139,17 @@ Streams (2) and (3) ride a single WebSocket at `/events`:
 `setup.sh` provisions, `start` boots:
 
 ```bash
-# scripts/setup.sh — install side (apt + Playwright Chromium):
-apt-get install -y --no-install-recommends \
+# scripts/setup.sh — install side. apt step runs via sudo internally;
+# the Playwright install step is intentionally NOT under sudo so the
+# Chromium binary lands in the invoking user's cache (~/.cache/ms-playwright),
+# which is the same user that later runs `start`.
+sudo apt-get install -y --no-install-recommends \
   orca xvfb xdotool at-spi2-core dbus-x11 libatk-adaptor \
   espeak-ng speech-dispatcher pulseaudio openbox \
-  ffmpeg \                # NEW: encodes the Xvfb framebuffer
-  libnss3 libnspr4        # plus other Chromium runtime deps
+  ffmpeg \
+  libnss3 libnspr4
+# ffmpeg encodes the Xvfb framebuffer for the WebRTC live view;
+# libnss3/libnspr4 are Chromium runtime deps.
 npx playwright install --with-deps chromium
 
 # scripts/setup.sh — start-env:
@@ -171,7 +176,10 @@ The `/events` log is also persisted as JSONL alongside the run (under the same r
 
 **Library choice on the driver side.** [`werift`](https://github.com/shinyoshiaki/werift-webrtc) is the pure-Node WebRTC implementation we use. It ingests the ffmpeg RTP output and bridges it into the PeerConnection. The alternative — `wrtc` (Node bindings to libwebrtc) — is faster but adds a native build step that complicates the `npm install -g` story; we use werift to keep the install path as clean as `agent-browser`'s. If profiling shows werift is the bottleneck for a real audit, switching to `wrtc` is a v1.1 swap behind the same `/webrtc/offer` route.
 
-**Security note.** All four surfaces (API, viewer, signaling, events WebSocket) bind to `127.0.0.1`. The WebRTC PeerConnection negotiates a loopback-only ICE candidate (no STUN/TURN configured), so the media stream itself stays on the loopback interface even though it's a UDP/SRTP transport. In Codespaces, the auto-port-forwarding mechanism bridges `127.0.0.1:<port>` to a GitHub-authenticated proxy URL; nothing is exposed to the public internet. Outside Codespaces, the operator must explicitly opt into network exposure by passing `--port 0.0.0.0:8001` — the CLI prints a warning if `--port` is non-loopback and `--auth-token` is unset, and refuses to start if `--port` is `0.0.0.0` with no auth token. When `--auth-token` is set, every endpoint (including `/live`, `/webrtc/offer`, `/events`, and the API routes) requires `Authorization: Bearer <tok>`; the viewer page reads the token from its query string on first load and reuses it for subsequent fetches.
+**Security note.** All four surfaces (API, viewer, signaling, events WebSocket) bind to `127.0.0.1`. The WebRTC PeerConnection negotiates a loopback-only ICE candidate (no STUN/TURN configured), so the media stream itself stays on the loopback interface even though it's a UDP/SRTP transport. In Codespaces, the auto-port-forwarding mechanism bridges `127.0.0.1:<port>` to a GitHub-authenticated proxy URL; nothing is exposed to the public internet. Outside Codespaces, the operator must explicitly opt into network exposure by passing `--port 0.0.0.0:8001` — the CLI prints a warning if `--port` is non-loopback and `--auth-token` is unset, and refuses to start if `--port` is `0.0.0.0` with no auth token. When `--auth-token` is set:
+
+- `/live`, `/webrtc/offer`, and the API routes require `Authorization: Bearer <tok>`. The viewer page reads the token from its query string on first load and reuses it for subsequent fetches.
+- `/events` (WebSocket) takes the token as a query-string parameter (`/events?token=<tok>`) — the browser `WebSocket` constructor can't set arbitrary upgrade headers, so we accept the token in the URL and validate it on the upgrade handshake. The viewer constructs the WebSocket URL by reusing the same token it loaded itself with.
 
 ---
 
