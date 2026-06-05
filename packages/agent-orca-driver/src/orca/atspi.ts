@@ -17,6 +17,8 @@ export interface AccessibleElement {
   role: string;
   state: string[];
   app?: string;
+  /** AT-SPI screen-coordinate bounding box, if the Component iface answered. */
+  bbox?: { x: number; y: number; w: number; h: number };
 }
 
 const ROLE_NAMES: Record<number, string> = {
@@ -463,6 +465,38 @@ async function getAccessibleState(bus: any, dest: string, path: string): Promise
   }
 }
 
+// ATSPI_COORD_TYPE_SCREEN — extents relative to the X screen, which lines up
+// with what ffmpeg's x11grab captures (the whole framebuffer).
+const COORD_TYPE_SCREEN = 0;
+
+async function getExtents(
+  bus: any,
+  dest: string,
+  path: string,
+): Promise<{ x: number; y: number; w: number; h: number } | undefined> {
+  try {
+    const result = await callMethod(
+      bus,
+      dest,
+      path,
+      "org.a11y.atspi.Component",
+      "GetExtents",
+      "u",
+      [COORD_TYPE_SCREEN],
+    );
+    // dbus-native may hand back the (iiii) struct as [x,y,w,h] or [[x,y,w,h]].
+    const tuple = Array.isArray(result?.[0]) ? result[0] : result;
+    if (Array.isArray(tuple) && tuple.length >= 4) {
+      const [x, y, w, h] = tuple.map((n: unknown) => (typeof n === "number" ? n : 0));
+      // AT-SPI returns (-1,-1,-1,-1)-ish for off-screen/unrendered nodes.
+      if (w > 0 && h > 0 && x >= 0 && y >= 0) return { x, y, w, h };
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function getChildCount(bus: any, dest: string, path: string): Promise<number> {
   try {
     const result = await getProperty(bus, dest, path, "org.a11y.atspi.Accessible", "ChildCount");
@@ -547,7 +581,8 @@ async function findFocused(
     if (states.includes("focused")) {
       const name = await getAccessibleName(bus, dest, path);
       const role = await getAccessibleRole(bus, dest, path);
-      return { name, role, state: states };
+      const bbox = await getExtents(bus, dest, path);
+      return { name, role, state: states, bbox };
     }
   } catch {}
 

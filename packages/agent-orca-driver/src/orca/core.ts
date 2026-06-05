@@ -28,6 +28,7 @@ import {
 } from "../types.js";
 import * as speech from "./speech.js";
 import * as atspi from "./atspi.js";
+import { liveEvents } from "../live/events.js";
 
 export type { VoResponse, VoError, VoResult, TranscriptEntry } from "../types.js";
 export { isVoError, ORCA_COMMANDS } from "../types.js";
@@ -191,11 +192,13 @@ async function readCurrentElement(speechMarker: number): Promise<VoResponse> {
   let name = "",
     role = "",
     elementState: string[] = [];
+  let bbox: { x: number; y: number; w: number; h: number } | undefined;
   try {
     const element = await atspi.getItemInfo();
     if (element) {
       name = element.name;
       role = element.role;
+      bbox = element.bbox;
       elementState = element.state.filter((s) =>
         [
           "focused",
@@ -215,6 +218,14 @@ async function readCurrentElement(speechMarker: number): Promise<VoResponse> {
   }
 
   if (!spoken) spoken = [name, role].filter(Boolean).join(", ");
+
+  // Feed the live view's focus rectangle (no-op if no viewer is connected).
+  try {
+    liveEvents.emitFocus({ role, name, bbox });
+  } catch {
+    /* never let the live view break a read */
+  }
+
   return { spoken, name, role, state: elementState };
 }
 

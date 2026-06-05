@@ -6,7 +6,9 @@
  * back a future `agent-voiceover` sibling on macOS.
  */
 
-import { createServer, type IncomingMessage, type ServerResponse } from "http";
+import { createServer, type IncomingMessage, type ServerResponse, type Server } from "http";
+import type { Socket } from "net";
+import { WebSocketServer, type WebSocket } from "ws";
 import type { ScreenReaderDriver } from "./interface.js";
 import { safeWriteSync } from "./lib/runtime-paths.js";
 import { runAxeAudit } from "./audit.js";
@@ -16,6 +18,14 @@ import {
   waitForSelector,
   type ObserverHandle,
 } from "./wait.js";
+import { viewerHtml } from "./live/viewer.js";
+import {
+  addStreamClient,
+  configureStreamLogger,
+  streamStatus,
+  stopStream,
+} from "./live/stream.js";
+import { liveEvents, type LiveEvent } from "./live/events.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -284,6 +294,21 @@ export function createHandler(driver: ScreenReaderDriver, port: number) {
         return;
       }
 
+      if (path === "/live" && method === "GET") {
+        const html = viewerHtml();
+        res.writeHead(200, {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-store",
+        });
+        res.end(html);
+        return;
+      }
+
+      if (path === "/live-status" && method === "GET") {
+        json(res, 200, streamStatus());
+        return;
+      }
+
       if (path === "/commands" && method === "GET") {
         let commands = driver.getCommandNames();
         const filter = url.searchParams.get("filter");
@@ -298,6 +323,7 @@ export function createHandler(driver: ScreenReaderDriver, port: number) {
       if (path === "/stop" && method === "POST") {
         json(res, 200, { success: true });
         setTimeout(async () => {
+          stopStream();
           await driver.cleanup();
           driver.removePidFile();
           process.exit(0);
@@ -312,6 +338,55 @@ export function createHandler(driver: ScreenReaderDriver, port: number) {
       json(res, 500, { error: msg });
     }
   };
+}
+
+// ---------------------------------------------------------------------------
+// Live-view WebSockets (/stream binary fMP4, /events JSON)
+// ---------------------------------------------------------------------------
+
+function attachLiveView(server: Server, port: number, driver: ScreenReaderDriver) {
+  configureStreamLogger((msg, err) => driver.log(msg, err));
+
+  // noServer mode: we route upgrades ourselves so the host allow-list (the
+  // same DNS-rebinding defense the HTTP routes use) applies before any
+  // WebSocket handshake completes.
+  const streamWss = new WebSocketServer({ noServer: true });
+  const eventsWss = new WebSocketServer({ noServer: true });
+
+  streamWss.on("connection", (ws: WebSocket) => {
+    const display = process.env.DISPLAY || ":99";
+    const send = (chunk: Buffer) => {
+      if (ws.readyState === ws.OPEN) ws.send(chunk);
+    };
+    const dispose = addStreamClient(send, display);
+    ws.on("close", dispose);
+    ws.on("error", dispose);
+  });
+
+  eventsWss.on("connection", (ws: WebSocket) => {
+    const unsubscribe = liveEvents.subscribe((e: LiveEvent) => {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(e));
+    });
+    ws.on("close", unsubscribe);
+    ws.on("error", unsubscribe);
+  });
+
+  server.on("upgrade", (req: IncomingMessage, socket: Socket, head: Buffer) => {
+    if (!isHostAllowed(req.headers.host, port)) {
+      socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+    const { pathname } = new URL(req.url || "/", "http://localhost");
+    if (pathname === "/stream") {
+      streamWss.handleUpgrade(req, socket, head, (ws) => streamWss.emit("connection", ws, req));
+    } else if (pathname === "/events") {
+      eventsWss.handleUpgrade(req, socket, head, (ws) => eventsWss.emit("connection", ws, req));
+    } else {
+      socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+      socket.destroy();
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -331,6 +406,7 @@ export async function startServer(
   await driver.initialize(url, cdpPort);
 
   const server = createServer(createHandler(driver, port));
+  attachLiveView(server, port, driver);
   await new Promise<void>((resolve, reject) => {
     server.on("error", async (e) => {
       driver.log(`Server listen failed: ${e.message}`, true);
@@ -359,6 +435,7 @@ export async function startServer(
 
   const shutdown = async () => {
     server.close();
+    stopStream();
     const timer = setTimeout(() => process.exit(1), 5000);
     await driver.cleanup();
     clearTimeout(timer);
