@@ -59,10 +59,7 @@ export function viewerHtml(): string {
 (function () {
   var FB_W = ${FRAMEBUFFER_WIDTH}, FB_H = ${FRAMEBUFFER_HEIGHT};
   var MIME = ${JSON.stringify(MIME)};
-  var qs = new URLSearchParams(location.search);
-  var token = qs.get("token") || "";
   var wsBase = (location.protocol === "https:" ? "wss://" : "ws://") + location.host;
-  var tokenQS = token ? ("?token=" + encodeURIComponent(token)) : "";
 
   var video = document.getElementById("v");
   var focusEl = document.getElementById("focus");
@@ -91,7 +88,7 @@ export function viewerHtml(): string {
     try { sb.appendBuffer(queue.shift()); } catch (e) { /* overflow — drop */ queue.length = 0; }
   }
   function connectStream() {
-    var ws = new WebSocket(wsBase + "/stream" + tokenQS);
+    var ws = new WebSocket(wsBase + "/stream");
     ws.binaryType = "arraybuffer";
     ws.onopen = function () { dotEl.classList.add("on"); statusEl.textContent = "streaming"; };
     ws.onmessage = function (ev) { queue.push(new Uint8Array(ev.data)); pump(); };
@@ -127,7 +124,7 @@ export function viewerHtml(): string {
   }
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>]/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]; }); }
   function connectEvents() {
-    var ws = new WebSocket(wsBase + "/events" + tokenQS);
+    var ws = new WebSocket(wsBase + "/events");
     ws.onmessage = function (ev) {
       var m; try { m = JSON.parse(ev.data); } catch (e) { return; }
       if (m.type === "transcript") addLine("", '<span class="src">' + esc(m.source) + '</span>' + esc(m.text));
