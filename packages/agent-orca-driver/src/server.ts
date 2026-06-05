@@ -483,13 +483,11 @@ export async function startServer(
     });
   });
 
-  if (url) {
-    try {
-      await driver.enter();
-    } catch (e) {
-      driver.log(`auto-enter: ${e instanceof Error ? e.message : e}`, true);
-    }
-  }
+  // No auto-enter here. The caller is responsible for POST /enter (matches
+  // the documented Loop 1 in AGENTS.md). A silent auto-enter would mean a
+  // consumer following the canonical loop literally produces a duplicate
+  // transcript entry on the first read — first entry from auto-enter,
+  // second from their explicit /enter call.
 
   const shutdown = async () => {
     server.close();

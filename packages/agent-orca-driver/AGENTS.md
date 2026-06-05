@@ -34,6 +34,7 @@ agent-orca-driver start https://example.com
 
 # 5. Drive it over HTTP from another shell or your agent:
 curl http://127.0.0.1:8001/
+curl -X POST http://127.0.0.1:8001/enter      # focus into the web area (required after start)
 curl -X POST http://127.0.0.1:8001/next
 curl 'http://127.0.0.1:8001/transcript?since=0'
 ```
