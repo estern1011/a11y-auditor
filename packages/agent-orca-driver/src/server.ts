@@ -87,18 +87,50 @@ export function isAllowedNavigationUrl(value: string): boolean {
   }
 }
 
+// GitHub Codespaces port-forwarding rewrites neither Host nor Origin — the
+// browser sees a hostname like `<port>-<codespace>.app.github.dev` and uses
+// it for both. The daemon is still bound to 127.0.0.1, so external traffic
+// can only arrive via GitHub's authenticated proxy; admitting the forwarded
+// hostname here matches the plan's design intent ("loopback + Codespaces
+// auto-forwarding works without a token", §6) without widening the attack
+// surface — a page on evil.com still can't satisfy this hostname pattern,
+// and Codespaces auth gates who can reach the proxy in the first place.
+// Recognized patterns (Codespaces historical + current):
+//   - <name>.app.github.dev
+//   - <name>.preview.app.github.dev
+//   - <name>.githubpreview.dev
+const CODESPACES_HOST_RE =
+  /^[a-z0-9-]+(?:\.preview)?\.app\.github\.dev(?::\d+)?$/i;
+const CODESPACES_PREVIEW_RE = /^[a-z0-9-]+\.githubpreview\.dev(?::\d+)?$/i;
+
+function isCodespacesForwardedHost(host: string): boolean {
+  return CODESPACES_HOST_RE.test(host) || CODESPACES_PREVIEW_RE.test(host);
+}
+
 // Reject the literal string "null" (sent by sandboxed iframes / data: /
-// file: documents) and any origin that isn't this exact daemon port.
+// file: documents) and any origin that isn't this exact daemon port — except
+// Codespaces forwarded URLs, which the daemon's own viewer reaches over.
 function isOriginAllowed(origin: string | undefined, port: number): boolean {
   if (origin === undefined) return true;
   const lower = origin.toLowerCase();
-  return lower === `http://127.0.0.1:${port}` || lower === `http://localhost:${port}`;
+  if (lower === `http://127.0.0.1:${port}` || lower === `http://localhost:${port}`) return true;
+  try {
+    const u = new URL(lower);
+    return (
+      (u.protocol === "https:" || u.protocol === "http:") &&
+      isCodespacesForwardedHost(u.host)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isHostAllowed(host: string | undefined, port: number): boolean {
   if (!host) return false;
   const lower = host.toLowerCase();
-  return lower === `127.0.0.1:${port}` || lower === `localhost:${port}`;
+  if (lower === `127.0.0.1:${port}` || lower === `localhost:${port}`) return true;
+  // Codespaces forwarded URL — Host header reflects the public hostname.
+  return isCodespacesForwardedHost(lower);
 }
 
 // ---------------------------------------------------------------------------
