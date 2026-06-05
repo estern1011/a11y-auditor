@@ -162,7 +162,10 @@ export function log(msg: string, err = false) {
 }
 
 function recordTranscript(entry: VoResponse): TranscriptEntry {
-  const indexed: TranscriptEntry = { ...entry, index: state.transcriptIndex++ };
+  // Pre-increment: first entry's index is 1, not 0. Lets callers use
+  // `since=0` as a natural "give me everything" sentinel without losing the
+  // first announcement (entries are returned where `index > since`).
+  const indexed: TranscriptEntry = { ...entry, index: ++state.transcriptIndex };
   state.transcript.push(indexed);
   if (state.transcript.length > MAX_TRANSCRIPT_ENTRIES) {
     state.transcript = state.transcript.slice(-MAX_TRANSCRIPT_ENTRIES);

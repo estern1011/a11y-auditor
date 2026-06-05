@@ -69,7 +69,7 @@ is single-session and serializes all screen-reader operations.
 | POST   | `/observe`         | `{ settleMs?: number }` | `{ started: true, settleMs: number }` |
 | GET    | `/observe`         | — | `ObserverPoll` |
 | DELETE | `/observe`         | — | `{ stopped: true }` |
-| POST   | `/wait-for-selector` | `{ selector: string, state?: "visible" \| "hidden" \| "attached", timeout?: number }` | `{ ok: true, state: string }` |
+| POST   | `/wait-for-selector` | `{ selector: string, state?: "visible" \| "hidden" \| "attached", timeout?: number }` | `WaitResult` |
 | GET    | `/commands?filter=` | — | `{ commands: string[] }` |
 | GET    | `/live`            | — | `text/html` viewer page |
 | GET    | `/live-status`     | — | `{ running: boolean, viewers: number, display: string \| null }` |
@@ -133,9 +133,26 @@ AxeAuditResult = {
                            // includeTree:false was requested.
 }
 
+// GET /loading-state — targeted SC 4.1.3 evidence. NOT a single "busy"
+// boolean; instead, structured findings the orchestrator interprets:
 LoadingState = {
-  busy: boolean,           // true if anything obviously async is in flight
-  reasons: string[],       // e.g. ["aria-busy=true on <main>", "spinner labeled 'Loading'"]
+  hasAriaBusy: boolean,
+  ariaBusyElements: { selector: string, tagName: string, role: string | null }[],
+  hasLiveRegions: boolean,
+  liveRegions: {
+    selector: string, tagName: string, ariaLive: string,
+    role: string | null, textContent: string,
+  }[],
+  statusRoles: {
+    selector: string, tagName: string, role: string,
+    textContent: string, hasAccessibleName: boolean,
+  }[],
+  loadingIndicators: {
+    selector: string, tagName: string,
+    hasAccessibleName: boolean, accessibleName: string,
+    detectedBy: string,
+  }[],
+  summary: string,         // human-readable rollup of the above
 }
 
 ObserverPoll = {
@@ -145,6 +162,14 @@ ObserverPoll = {
   msSinceLastMutation: number,
   elapsed: number,
   settleMs: number,
+}
+
+// POST /wait-for-selector — same shape for success and timeout; check
+// `success`, not a 4xx status. Timeouts return 200 + success:false.
+WaitResult = {
+  success: boolean,
+  elapsed: number,         // ms
+  detail: string,          // e.g. `${selector} reached state "${state}"` or "Timeout: ..."
 }
 ```
 
