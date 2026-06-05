@@ -175,15 +175,12 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
     // Walk EVERY element looking for class-name matches. TreeWalker (not
     // querySelectorAll("*"), which materializes a NodeList for the whole DOM
     // up front and defeats the visit cap on a million-node page) lets us
-    // stop incrementally at the budget.
+    // stop incrementally at the budget. nextNode() starts AFTER the root,
+    // so process the root explicitly first — `<body class="loading">` is a
+    // common SPA pattern that the previous querySelectorAll-based walk
+    // included.
     const MAX_VISITED = 50_000;
-    const walker = document.createTreeWalker(
-      document.body || document.documentElement,
-      NodeFilter.SHOW_ELEMENT,
-    );
-    let visited = 0;
-    for (let el = walker.nextNode() as Element | null; el; el = walker.nextNode() as Element | null) {
-      if (++visited > MAX_VISITED) break;
+    function inspect(el: Element): void {
       const cls = el.className && typeof el.className === "string" ? el.className : "";
       if (loadingPatterns.test(cls)) {
         addIndicator(
@@ -196,6 +193,17 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
               .find((c) => loadingPatterns.test(c)) || ""
           }"`,
         );
+      }
+    }
+    const root = document.body || document.documentElement;
+    let visited = 0;
+    if (root) {
+      inspect(root);
+      visited++;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+      for (let el = walker.nextNode() as Element | null; el; el = walker.nextNode() as Element | null) {
+        if (++visited > MAX_VISITED) break;
+        inspect(el);
       }
     }
 
