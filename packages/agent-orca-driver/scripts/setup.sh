@@ -105,8 +105,16 @@ install_chromium() {
   # OS-level deps for Chromium need root (apt); the browser binary itself is
   # fetched as the invoking user so it lands in ~/.cache.
   echo "==> Installing Chromium OS dependencies (Playwright)..."
-  install_chromium_deps \
-    || echo "    (install-deps reported issues — continuing; curated apt list may already cover them)"
+  if ! install_chromium_deps; then
+    # Don't hard-fail: the curated apt list above may already cover Chromium's
+    # needs, and install-deps can fail for benign reasons (distro not
+    # recognized, non-interactive sudo). But don't swallow it silently either
+    # — `doctor` now actually launches Chromium, so a genuinely missing
+    # library is caught there rather than only at `start`.
+    echo "    WARNING: 'playwright install-deps chromium' did not complete cleanly." >&2
+    echo "    Continuing — verify the browser actually launches with:" >&2
+    echo "      agent-orca-driver doctor" >&2
+  fi
 
   echo "==> Downloading Chromium browser binary (user cache)..."
   playwright install chromium

@@ -253,24 +253,54 @@ function checkLibx264(): DoctorCheck {
   };
 }
 
-// Verify the Playwright Chromium browser binary is provisioned (the daemon
-// launches Chromium via Playwright; the binary must already be on disk).
+// Verify Chromium isn't just present but actually *launches*. An
+// existence-only check misses a binary that can't dynamically link (a
+// missing shared library only surfaces when `start` tries to launch it),
+// which is exactly the gap a fresh image hits when Playwright's OS-dep
+// install was incomplete. Launching headlessly here catches it at `doctor`
+// time. Honors PLAYWRIGHT_BROWSERS_PATH (so doctor and the daemon agree on
+// where the browser lives).
 async function checkChromium(): Promise<DoctorCheck> {
+  let chromium;
   try {
-    const { chromium } = await import("playwright");
-    const exe = chromium.executablePath();
-    const ok = !!exe && existsSync(exe);
-    return {
-      name: "Playwright Chromium",
-      ok,
-      detail: ok ? exe : `missing (${exe || "no path"}) — run: agent-orca-driver setup`,
-    };
+    ({ chromium } = await import("playwright"));
   } catch (e) {
     return {
       name: "Playwright Chromium",
       ok: false,
       detail: `playwright not importable: ${e instanceof Error ? e.message : String(e)}`,
     };
+  }
+
+  const exe = chromium.executablePath();
+  if (!exe || !existsSync(exe)) {
+    return {
+      name: "Playwright Chromium",
+      ok: false,
+      detail: `browser binary missing (${exe || "no path"}) — run: agent-orca-driver setup`,
+    };
+  }
+
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-gpu"] });
+    const version = browser.version();
+    return { name: "Playwright Chromium", ok: true, detail: `launches (v${version})` };
+  } catch (e) {
+    const msg = (e instanceof Error ? e.message : String(e)).split("\n")[0];
+    return {
+      name: "Playwright Chromium",
+      ok: false,
+      detail: `binary present but failed to launch (missing OS deps?): ${msg}`,
+    };
+  } finally {
+    if (browser) {
+      try {
+        await browser.close();
+      } catch {
+        /* best-effort */
+      }
+    }
   }
 }
 
