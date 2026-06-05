@@ -112,19 +112,25 @@ TranscriptEntry = VoResponse & { index: number }
 // `since=0` returns the whole buffer.
 
 AxeAuditOptions = {
+  selector?: string,       // CSS selector to scope axe to a region (axe `include`)
   tags?: string[],         // axe rule tags, e.g. ["wcag2a","wcag2aa","wcag21aa"]
+  rules?: string[],        // run only these axe rules
+  disableRules?: string[], // skip these axe rules
   includeTree?: boolean,   // default true; set false to omit the aria-snapshot
 }
 
 AxeAuditResult = {
   url: string,
+  selector: string,        // echoes the scoping selector, or "(full page)" when unset
   axe: {
     violations: AxeViolation[],
     incomplete: AxeViolation[],
     passes: number,        // count, not the full nodes
     inapplicable: number,
   },
-  tree?: string,           // Playwright aria-snapshot of the page (text), if included
+  tree?: string,           // aria-snapshot — Playwright "ai" mode for full page,
+                           // scoped to `selector` if one was provided. Omitted when
+                           // includeTree:false was requested.
 }
 
 LoadingState = {
