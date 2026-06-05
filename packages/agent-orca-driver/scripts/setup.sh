@@ -116,10 +116,40 @@ install_chromium() {
     echo "      agent-orca-driver doctor" >&2
   fi
 
-  echo "==> Downloading Chromium browser binary (user cache)..."
-  playwright install chromium
+  download_browser
 
   echo "==> Chromium ready."
+}
+
+# Download the Chromium browser binary into the cache of the user who will
+# actually RUN the driver. If setup was invoked via `sudo` (EUID 0 with
+# SUDO_USER set to a non-root user — a common mistake, since the command does
+# apt installs), drop back to that user so the binary lands in their
+# ~/.cache/ms-playwright, not root's. `doctor`/`start` run as that same user
+# and would otherwise resolve an empty cache. Genuine root (Docker/CI, no
+# SUDO_USER) installs as root, which is correct because the driver also runs
+# as root there.
+download_browser() {
+  if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+    local user_home
+    user_home="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
+    echo "==> Downloading Chromium as $SUDO_USER (into $user_home/.cache)..."
+    # Preserve PLAYWRIGHT_BROWSERS_PATH if the operator set one.
+    sudo -u "$SUDO_USER" env \
+      "PATH=$PATH" \
+      "HOME=$user_home" \
+      "PKG_ROOT=$PKG_ROOT" \
+      ${PLAYWRIGHT_BROWSERS_PATH:+"PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH"} \
+      bash -c '
+        if [ -x "$PKG_ROOT/node_modules/.bin/playwright" ]; then
+          "$PKG_ROOT/node_modules/.bin/playwright" install chromium
+        else
+          npx --yes playwright install chromium
+        fi'
+  else
+    echo "==> Downloading Chromium browser binary (user cache)..."
+    playwright install chromium
+  fi
 }
 
 # ---------------------------------------------------------------------------
