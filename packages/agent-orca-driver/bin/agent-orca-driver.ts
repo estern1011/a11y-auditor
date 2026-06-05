@@ -3,7 +3,7 @@
  * agent-orca-driver CLI.
  *
  * Subcommands:
- *   setup           Provision apt packages + Xvfb + AT-SPI2 + ffmpeg + Chromium
+ *   setup           Run scripts/setup.sh: apt packages + ffmpeg + Playwright Chromium
  *   start <url>     Spawn Chromium + Orca + daemon
  *   stop            Tear down the running daemon
  *   status          Print daemon status (URL loaded, ports)
@@ -14,7 +14,7 @@
  */
 
 import { spawnSync } from "child_process";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -234,51 +234,134 @@ function checkExe(name: string): DoctorCheck {
   };
 }
 
-function cmdDoctor(args: ParsedArgs): number {
-  // Day-1 doctor: a thin preflight. Day-2 expands this to verify Xvfb is
-  // running, ffmpeg supports libx264, Playwright Chromium is provisioned, etc.
-  const checks: DoctorCheck[] = [
+// Verify the ffmpeg build advertises the libx264 encoder — the /live stream
+// (Day 3) encodes the Xvfb framebuffer as h264.
+function checkLibx264(): DoctorCheck {
+  const r = spawnSync("ffmpeg", ["-hide_banner", "-encoders"], {
+    encoding: "utf-8",
+    timeout: 10_000,
+  });
+  if (r.status !== 0) {
+    return { name: "ffmpeg libx264", ok: false, detail: "ffmpeg not runnable" };
+  }
+  const ok = (r.stdout || "").includes("libx264");
+  return {
+    name: "ffmpeg libx264",
+    ok,
+    detail: ok ? "h264 encoder available" : "libx264 encoder NOT in this ffmpeg build",
+  };
+}
+
+// Verify the Playwright Chromium browser binary is provisioned (the daemon
+// launches Chromium via Playwright; the binary must already be on disk).
+async function checkChromium(): Promise<DoctorCheck> {
+  try {
+    const { chromium } = await import("playwright");
+    const exe = chromium.executablePath();
+    const ok = !!exe && existsSync(exe);
+    return {
+      name: "Playwright Chromium",
+      ok,
+      detail: ok ? exe : `missing (${exe || "no path"}) — run: agent-orca-driver setup`,
+    };
+  } catch (e) {
+    return {
+      name: "Playwright Chromium",
+      ok: false,
+      detail: `playwright not importable: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+}
+
+// Soft check: if a display is available, confirm ffmpeg can grab one frame
+// off it via x11grab. Skipped (and treated as non-fatal) when DISPLAY is
+// unset — doctor runs after `setup`, before any daemon has started Xvfb.
+function checkX11grab(): DoctorCheck {
+  const display = process.env.DISPLAY;
+  if (!display) {
+    return { name: "ffmpeg x11grab", ok: true, detail: "skipped (no DISPLAY yet)" };
+  }
+  const r = spawnSync(
+    "ffmpeg",
+    ["-hide_banner", "-loglevel", "error", "-f", "x11grab", "-i", display, "-frames:v", "1", "-f", "null", "-"],
+    { encoding: "utf-8", timeout: 15_000 },
+  );
+  const ok = r.status === 0;
+  return {
+    name: "ffmpeg x11grab",
+    ok,
+    detail: ok ? `captured a frame from ${display}` : `failed against ${display}: ${(r.stderr || "").trim().split("\n")[0] || "unknown"}`,
+  };
+}
+
+async function cmdDoctor(args: ParsedArgs): Promise<number> {
+  // Hard checks gate the exit code; soft checks are informational so that
+  // `doctor` exits 0 right after `setup` (before any display/daemon exists).
+  const hard: DoctorCheck[] = [
     checkExe("Xvfb"),
     checkExe("xdotool"),
     checkExe("dbus-launch"),
     checkExe("orca"),
     checkExe("ffmpeg"),
+    checkExe("pulseaudio"),
+    checkLibx264(),
+    await checkChromium(),
+  ];
+  const soft: DoctorCheck[] = [
     {
       name: "DISPLAY",
       ok: !!process.env.DISPLAY,
-      detail: process.env.DISPLAY || "unset",
+      detail: process.env.DISPLAY || "unset (the daemon starts Xvfb on :99)",
     },
     {
       name: "DBUS_SESSION_BUS_ADDRESS",
       ok: !!process.env.DBUS_SESSION_BUS_ADDRESS,
-      detail: process.env.DBUS_SESSION_BUS_ADDRESS || "unset",
+      detail: process.env.DBUS_SESSION_BUS_ADDRESS || "unset (the daemon launches dbus)",
     },
+    checkX11grab(),
   ];
 
-  const allOk = checks.every((c) => c.ok);
+  const allOk = hard.every((c) => c.ok);
   if (args.json) {
-    process.stdout.write(JSON.stringify({ ok: allOk, checks }) + "\n");
+    process.stdout.write(JSON.stringify({ ok: allOk, hard, soft }) + "\n");
   } else {
-    for (const c of checks) {
+    process.stdout.write("required:\n");
+    for (const c of hard) {
       process.stdout.write(`  [${c.ok ? "OK" : "MISSING"}] ${c.name}: ${c.detail}\n`);
     }
-    process.stdout.write(allOk ? "\nall checks passed\n" : "\nsome checks failed — run: agent-orca-driver setup\n");
+    process.stdout.write("informational:\n");
+    for (const c of soft) {
+      process.stdout.write(`  [${c.ok ? "OK" : "info"}] ${c.name}: ${c.detail}\n`);
+    }
+    process.stdout.write(
+      allOk ? "\nall required checks passed\n" : "\nsome required checks failed — run: agent-orca-driver setup\n",
+    );
   }
   return allOk ? 0 : 1;
 }
 
 function cmdSetup(args: ParsedArgs): number {
-  // Day-1 stub. The full setup.sh provisioner (apt + ffmpeg + Playwright
-  // Chromium + helper scripts) lands in the next slice — see
-  // docs/agent-orca-driver-plan.md §11 day 2.
-  const msg =
-    "setup is not yet implemented in this slice — run drivers/orca/setup.sh from the parent repo, or wait for the Day-2 slice that ships scripts/setup.sh.";
-  if (args.json) {
-    process.stdout.write(JSON.stringify({ ok: false, error: msg }) + "\n");
-  } else {
-    process.stderr.write(msg + "\n");
+  const script = join(PACKAGE_ROOT, "scripts", "setup.sh");
+  if (!existsSync(script)) {
+    const msg = `setup.sh not found at ${script}`;
+    if (args.json) process.stdout.write(JSON.stringify({ ok: false, error: msg }) + "\n");
+    else process.stderr.write(msg + "\n");
+    return 1;
   }
-  return 2;
+
+  if (args.json) {
+    // Capture combined output for structured consumption.
+    const r = spawnSync("bash", [script], { encoding: "utf-8" });
+    const ok = r.status === 0;
+    process.stdout.write(
+      JSON.stringify({ ok, code: r.status, output: (r.stdout || "") + (r.stderr || "") }) + "\n",
+    );
+    return ok ? 0 : (r.status ?? 1);
+  }
+
+  // Human mode: stream the provisioner's output live.
+  const r = spawnSync("bash", [script], { stdio: "inherit" });
+  return r.status ?? 1;
 }
 
 async function main(): Promise<number> {
@@ -305,7 +388,7 @@ async function main(): Promise<number> {
     case "status":
       return cmdStatus(args);
     case "doctor":
-      return cmdDoctor(args);
+      return await cmdDoctor(args);
     case "skills": {
       const sub = args.positionals[0];
       const target = args.positionals[1];
