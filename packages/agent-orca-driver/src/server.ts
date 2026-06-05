@@ -179,7 +179,7 @@ export function createHandler(driver: ScreenReaderDriver, port: number) {
         const s = driver.getStatus();
         json(res, 200, {
           status: "running",
-          voiceoverActive: s.screenReaderActive, // keep field name for API compat
+          screenReaderActive: s.screenReaderActive,
           currentUrl: s.currentUrl,
           cdpPort: s.cdpPort,
         });

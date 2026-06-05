@@ -34,10 +34,7 @@ export function isVoError(r: VoResult): r is VoError {
 
 export interface StatusResponse {
   status: string;
-  // Kept as `voiceoverActive` for HTTP API backward compatibility with v1
-  // consumers. New consumers should rely on `screenReaderActive` if/when
-  // we add it; for now, this is the stable field name.
-  voiceoverActive: boolean;
+  screenReaderActive: boolean;
   currentUrl: string | null;
   cdpPort: number;
 }

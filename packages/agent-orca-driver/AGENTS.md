@@ -40,41 +40,140 @@ curl 'http://127.0.0.1:8001/transcript?since=0'
 
 ## HTTP API
 
-All routes bind to `127.0.0.1` by default. Host + Origin allow-list applies:
-the request `Host` header must read as `127.0.0.1:<port>` or
-`localhost:<port>`, and any present `Origin` must match the same.
+All routes bind to `127.0.0.1` by default. The `Host` header must read as
+`127.0.0.1:<port>`, `localhost:<port>`, or a recognized Codespaces forwarded
+URL (`<name>.app.github.dev`, `<name>.preview.app.github.dev`,
+`<name>.githubpreview.dev`); any present `Origin` is checked against the same
+allow-list.
 
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/` | Status (daemon up, current URL, CDP port) |
-| POST | `/navigate` | `{url}` — load URL, focus into page |
-| POST | `/enter` | Focus into web area (after load) |
-| POST | `/next` / `/previous` | Move SR focus one item |
-| POST | `/act` | Activate the focused item |
-| POST | `/perform` | `{command}` — named SR action (`FIND_NEXT_HEADING`, `FIND_NEXT_LANDMARK`, `READ_CURRENT_LINE`, `SAY_ALL`, `FIND_NEXT_BUTTON`, …). See `GET /commands`. |
-| POST | `/press` | `{key, modifiers?}` — raw keypress (Tab, arbitrary letters) |
-| GET | `/item-text` | Read text/role/state of current SR focus |
-| GET | `/transcript?since=N` | SR announcement log (incremental) |
-| DELETE | `/transcript` | Clear transcript buffer |
-| POST | `/audit` | Run axe-core against current page |
-| GET | `/loading-state` | Targeted SC 4.1.3 check (aria-busy, aria-live, role=status, spinner labels) |
-| POST/GET/DELETE | `/observe` | Start/poll/stop a DOM mutation observer |
-| POST | `/wait-for-selector` | `{selector, state?, timeout?}` |
-| GET | `/commands?filter=` | Catalog of `/perform` command names |
-| GET | `/live` | Live-view HTML page (video + focus rect + transcript) |
-| GET | `/live-status` | JSON: is the video encoder running, how many viewers |
-| WS | `/stream` | Binary h264/fMP4 chunks of the Xvfb framebuffer (for MSE) |
-| WS | `/events` | JSON live events: `transcript`, `focus` (with AT-SPI bbox), `phase` |
-| POST | `/stop` | Graceful shutdown |
+Bodies are JSON unless noted (`Content-Type: application/json`). The driver
+is single-session and serializes all screen-reader operations.
+
+### Routes
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET    | `/`                | — | `StatusResponse` |
+| POST   | `/navigate`        | `{ url: string }` | `VoResponse` |
+| POST   | `/enter`           | — | `VoResponse` |
+| POST   | `/next`            | — | `VoResponse` |
+| POST   | `/previous`        | — | `VoResponse` |
+| POST   | `/act`             | — | `VoResponse` |
+| POST   | `/perform`         | `{ command: string }` (see `GET /commands`) | `VoResponse` |
+| POST   | `/press`           | `{ key: string, modifiers?: string \| string[] }` | `VoResponse` |
+| GET    | `/item-text`       | — | `VoResponse` |
+| GET    | `/transcript?since=N` | — | `{ entries: TranscriptEntry[], length: number }` |
+| DELETE | `/transcript`      | — | `{ cleared: number }` |
+| POST   | `/audit`           | `AxeAuditOptions` (see below; all fields optional) | `AxeAuditResult` |
+| GET    | `/loading-state`   | — | `LoadingState` |
+| POST   | `/observe`         | `{ settleMs?: number }` | `{ started: true, settleMs: number }` |
+| GET    | `/observe`         | — | `ObserverPoll` |
+| DELETE | `/observe`         | — | `{ stopped: true }` |
+| POST   | `/wait-for-selector` | `{ selector: string, state?: "visible" \| "hidden" \| "attached", timeout?: number }` | `{ ok: true, state: string }` |
+| GET    | `/commands?filter=` | — | `{ commands: string[] }` |
+| GET    | `/live`            | — | `text/html` viewer page |
+| GET    | `/live-status`     | — | `{ running: boolean, viewers: number, display: string \| null }` |
+| WS     | `/stream`          | (WebSocket upgrade — *not* a normal GET; plain HTTP returns 404) | binary fragmented-MP4 chunks |
+| WS     | `/events`          | (WebSocket upgrade — plain HTTP returns 404) | JSON live events (see below) |
+| POST   | `/stop`            | — | `{ success: true }`, then daemon exits |
+
+### Response shapes
+
+```ts
+// GET / status. (Field name is `screenReaderActive` even though this is
+// today an Orca-only driver, because a future agent-voiceover sibling will
+// share the same HTTP surface on macOS.)
+StatusResponse = {
+  status: "running",
+  screenReaderActive: boolean,
+  currentUrl: string | null,
+  cdpPort: number,
+}
+
+// Returned by every action route. `spoken` is whatever Orca actually
+// announced for this action (deduplicated). `name`/`role`/`state` come from
+// AT-SPI2 — `name` is the accessible name of the focused object (for a
+// document root this is the page title; for a control it's the accessible
+// name), `role` is the AT-SPI role, `state` is a filtered subset of AT-SPI
+// states: focused, checked, expanded, collapsed, selected, required,
+// visited, pressed, has-popup.
+VoResponse = {
+  spoken: string,
+  name: string,
+  role: string,
+  state: string[],
+  index?: number,    // present on transcript entries; see below
+}
+
+TranscriptEntry = VoResponse & { index: number }
+// `index` is a monotonic, per-session counter starting at 1. To page
+// incrementally, store the highest index you've seen and pass it as
+// `since=<that-value>` next time — entries are returned where `index > since`.
+// `since=0` returns the whole buffer.
+
+AxeAuditOptions = {
+  tags?: string[],         // axe rule tags, e.g. ["wcag2a","wcag2aa","wcag21aa"]
+  includeTree?: boolean,   // default true; set false to omit the aria-snapshot
+}
+
+AxeAuditResult = {
+  url: string,
+  axe: {
+    violations: AxeViolation[],
+    incomplete: AxeViolation[],
+    passes: number,        // count, not the full nodes
+    inapplicable: number,
+  },
+  tree?: string,           // Playwright aria-snapshot of the page (text), if included
+}
+
+LoadingState = {
+  busy: boolean,           // true if anything obviously async is in flight
+  reasons: string[],       // e.g. ["aria-busy=true on <main>", "spinner labeled 'Loading'"]
+}
+
+ObserverPoll = {
+  active: boolean,
+  settled: boolean,
+  mutationCount: number,
+  msSinceLastMutation: number,
+  elapsed: number,
+  settleMs: number,
+}
+```
+
+### `/events` WebSocket payloads
+
+Each frame is one JSON object, tagged by `type`:
+
+```ts
+{ type: "transcript", t: number, source: "orca" | string, text: string }
+{ type: "focus",      t: number, role: string, name: string, bbox?: { x, y, w, h } }
+{ type: "phase",      t: number, name: string }    // emitted by orchestrators, if any
+```
+
+`t` is epoch ms. `bbox` is screen-coordinate (AT-SPI screen coords, which
+match the Xvfb framebuffer the `/stream` video captures).
+
+### `/stream` WebSocket
+
+Binary frames. The first frames a viewer receives are the fragmented-MP4 init
+segment (`ftyp` + `moov`), then live `moof`/`mdat` fragments. Late joiners
+get the cached init segment replayed and are admitted at the next `moof`
+boundary, so they're always decodable. The MIME to hand `MediaSource` is
+`video/mp4; codecs="avc1.42E01E"` (h264 baseline, ~30 fps, 1280×1024).
 
 ### Example: walking a single tab stop
 
 ```
 curl -X POST http://127.0.0.1:8001/next
-# → {"spoken":"Main, navigation","name":"Main","role":"navigation","state":[],"index":0}
+# → {"spoken":"Main, navigation","name":"Main","role":"navigation","state":[],"index":1}
 
 curl 'http://127.0.0.1:8001/transcript?since=0'
 # → {"entries":[…],"length":1}
+
+# Next call: ask for entries after the last index you saw, not since=length.
+curl 'http://127.0.0.1:8001/transcript?since=1'
 ```
 
 ## Three canonical loops
@@ -123,6 +222,31 @@ The video encoder (ffmpeg) only runs while at least one viewer is connected.
 In Codespaces the port is auto-forwarded — open the forwarded URL. The same
 `/events` WebSocket can be consumed directly (JSON) if an orchestrator wants
 the transcript/focus stream without the HTML viewer.
+
+## Notes for fresh consumers
+
+- `/perform`'s `command` must be a name from `GET /commands` (or one of the
+  catalog names called out in the route table). Raw keypresses (Tab, letter
+  keys, arbitrary combinations) go through `/press` instead.
+- `/press`'s `modifiers` accepts either a single string (`"shift"`) or an
+  array (`["shift", "ctrl"]`); valid values are `shift`, `ctrl`, `alt`,
+  `super`.
+- `/wait-for-selector`'s `selector` is a standard CSS selector evaluated
+  against the page DOM. Use `state: "visible"` (default) or `"hidden"` to
+  wait for visibility transitions, `"attached"` to wait for presence.
+- `/audit`'s response counts `passes` and `inapplicable` (not the full node
+  lists, to keep payloads tractable); `violations` and `incomplete` carry
+  full axe records.
+- `since`-paging the transcript: store the **highest `index` you've seen**
+  and pass it as `since=`. Don't use the array length — `index` is a global
+  counter that survives `DELETE /transcript`.
+- `SAY_ALL` (and most `/perform` commands) returns *immediately* with the
+  current AT-SPI focus state — it dispatches the Orca command, it doesn't
+  block until Orca finishes speaking. Poll `/transcript` to follow what
+  Orca says.
+- The `/stream` and `/events` paths are **WebSocket-only** endpoints. A
+  plain `GET` returns 404 with `{"error":"Unknown route: GET /stream"}` —
+  that's expected; it's not a missing endpoint.
 
 ## What agent-orca-driver is NOT
 
