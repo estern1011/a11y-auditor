@@ -8,7 +8,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "http";
 import type { Socket } from "net";
-import { WebSocketServer, type WebSocket } from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 import type { ScreenReaderDriver } from "./interface.js";
 import { safeWriteSync } from "./lib/runtime-paths.js";
 import { runAxeAudit } from "./audit.js";
@@ -356,7 +356,7 @@ function attachLiveView(server: Server, port: number, driver: ScreenReaderDriver
   streamWss.on("connection", (ws: WebSocket) => {
     const display = process.env.DISPLAY || ":99";
     const send = (chunk: Buffer) => {
-      if (ws.readyState === ws.OPEN) ws.send(chunk);
+      if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
     };
     const dispose = addStreamClient(send, display);
     ws.on("close", dispose);
@@ -365,7 +365,7 @@ function attachLiveView(server: Server, port: number, driver: ScreenReaderDriver
 
   eventsWss.on("connection", (ws: WebSocket) => {
     const unsubscribe = liveEvents.subscribe((e: LiveEvent) => {
-      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(e));
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(e));
     });
     ws.on("close", unsubscribe);
     ws.on("error", unsubscribe);
