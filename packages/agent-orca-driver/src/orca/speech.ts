@@ -133,7 +133,15 @@ import orca.speechdispatcherfactory as sdf
 import orca.speech as speech_mod
 
 _log_path = "${SPEECH_LOG}"
-_seen = set()  # deduplicate within same call
+# Dedup window for a single utterance. We hook BOTH speech_mod._speak and
+# SpeechServer._speak; the former typically calls into the latter, so the
+# same string flows through both hooks. _seen lets the second hook skip
+# the duplicate. interrupt=True (the default) signals a fresh utterance,
+# at which point we reset the window so the same text in a NEW utterance
+# is logged again -- but the reset has to happen BEFORE this hook's _log
+# call (not after), otherwise it clears the entry we just added and the
+# SpeechServer hook re-logs the same line.
+_seen = set()
 
 def _log(text):
     if text and isinstance(text, str) and text.strip():
@@ -145,9 +153,9 @@ def _log(text):
 
 _orig_mod = speech_mod._speak
 def _hook_mod(text, acss=None, interrupt=True):
+    if interrupt: _seen.clear()
     try: _log(text)
     except: pass
-    if interrupt: _seen.clear()
     return _orig_mod(text, acss, interrupt)
 speech_mod._speak = _hook_mod
 
