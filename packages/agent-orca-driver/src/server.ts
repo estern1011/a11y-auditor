@@ -372,7 +372,12 @@ function attachLiveView(server: Server, port: number, driver: ScreenReaderDriver
   });
 
   server.on("upgrade", (req: IncomingMessage, socket: Socket, head: Buffer) => {
-    if (!isHostAllowed(req.headers.host, port)) {
+    // Apply the SAME host + origin allow-list the HTTP routes use. Without the
+    // origin check, any web page the user visits could open ws://127.0.0.1:
+    // <port>/events or /stream and read the live transcript + framebuffer
+    // (the Host header is satisfiable cross-origin; Origin is what gives the
+    // attacker away).
+    if (!isHostAllowed(req.headers.host, port) || !isOriginAllowed(req.headers.origin, port)) {
       socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
       socket.destroy();
       return;
