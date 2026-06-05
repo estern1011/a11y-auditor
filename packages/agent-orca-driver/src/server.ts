@@ -107,22 +107,40 @@ function isCodespacesForwardedHost(host: string): boolean {
   return CODESPACES_HOST_RE.test(host) || CODESPACES_PREVIEW_RE.test(host);
 }
 
-// Reject the literal string "null" (sent by sandboxed iframes / data: /
-// file: documents) and any origin that isn't this exact daemon port — except
-// Codespaces forwarded URLs, which the daemon's own viewer reaches over.
-function isOriginAllowed(origin: string | undefined, port: number): boolean {
-  if (origin === undefined) return true;
+// Origin must be CORRELATED with Host. A naive "Codespaces Origins are
+// always OK" check is exploitable: an attacker-controlled page in an
+// unrelated Codespace (Origin: https://attacker.app.github.dev) could
+// `fetch("http://127.0.0.1:<port>/transcript")`, the browser sends
+// `Host: 127.0.0.1:<port>` (passes localhost) and the attacker-controlled
+// Codespaces Origin would pass an independent allow-list — exposing the
+// local control API + transcript + framebuffer.
+//
+// Rule:
+//   - Host is localhost  →  Origin must be localhost (or absent).
+//   - Host is Codespaces →  Origin's host must EQUAL that exact Host (or absent).
+//   - Anything else → rejected. (Host already enforces the allow-set.)
+function isOriginAllowed(origin: string | undefined, host: string | undefined, port: number): boolean {
+  if (origin === undefined) return true; // non-browser caller (curl, agent CLI)
   const lower = origin.toLowerCase();
-  if (lower === `http://127.0.0.1:${port}` || lower === `http://localhost:${port}`) return true;
-  try {
-    const u = new URL(lower);
-    return (
-      (u.protocol === "https:" || u.protocol === "http:") &&
-      isCodespacesForwardedHost(u.host)
-    );
-  } catch {
-    return false;
+  const hostLower = (host || "").toLowerCase();
+
+  if (hostLower === `127.0.0.1:${port}` || hostLower === `localhost:${port}`) {
+    return lower === `http://127.0.0.1:${port}` || lower === `http://localhost:${port}`;
   }
+
+  if (isCodespacesForwardedHost(hostLower)) {
+    try {
+      const u = new URL(lower);
+      return (
+        (u.protocol === "https:" || u.protocol === "http:") &&
+        u.host === hostLower
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
 }
 
 function isHostAllowed(host: string | undefined, port: number): boolean {
@@ -151,7 +169,7 @@ export function createHandler(driver: ScreenReaderDriver, port: number) {
       json(res, 403, { error: "bad host" });
       return;
     }
-    if (!isOriginAllowed(req.headers.origin, port)) {
+    if (!isOriginAllowed(req.headers.origin, req.headers.host, port)) {
       json(res, 403, { error: "bad origin" });
       return;
     }
@@ -409,7 +427,10 @@ function attachLiveView(server: Server, port: number, driver: ScreenReaderDriver
     // <port>/events or /stream and read the live transcript + framebuffer
     // (the Host header is satisfiable cross-origin; Origin is what gives the
     // attacker away).
-    if (!isHostAllowed(req.headers.host, port) || !isOriginAllowed(req.headers.origin, port)) {
+    if (
+      !isHostAllowed(req.headers.host, port) ||
+      !isOriginAllowed(req.headers.origin, req.headers.host, port)
+    ) {
       socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
       socket.destroy();
       return;
