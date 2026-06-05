@@ -195,7 +195,11 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
         );
       }
     }
-    const root = document.body || document.documentElement;
+    // Walk from documentElement (the <html> node) so BOTH `<html class="…">`
+    // and `<body class="…">` get scanned — both are common SPA loading-state
+    // patterns that the previous querySelectorAll("*") covered. Inspect the
+    // root explicitly because TreeWalker.nextNode() starts after it.
+    const root = document.documentElement;
     let visited = 0;
     if (root) {
       inspect(root);
