@@ -66,10 +66,10 @@ is single-session and serializes all screen-reader operations.
 | DELETE | `/transcript`      | — | `{ cleared: number }` |
 | POST   | `/audit`           | `AxeAuditOptions` (see below; all fields optional) | `AxeAuditResult` |
 | GET    | `/loading-state`   | — | `LoadingState` |
-| POST   | `/observe`         | `{ settleMs?: number }` | `{ started: true, settleMs: number }` |
-| GET    | `/observe`         | — | `ObserverPoll` |
-| DELETE | `/observe`         | — | `{ stopped: true }` |
-| POST   | `/wait-for-selector` | `{ selector: string, state?: "visible" \| "hidden" \| "attached", timeout?: number }` | `WaitResult` |
+| POST   | `/observe`         | `{ settleMs?: number }` (default 2000) | `{ started: true, settleMs: number }` |
+| GET    | `/observe`         | — | `ObserverState` |
+| DELETE | `/observe`         | — | `ObserverState` (final snapshot at teardown) |
+| POST   | `/wait-for-selector` | `{ selector: string, state?: "visible" \| "hidden" \| "attached", timeout?: number }` | `WaitResult` (200 on success, **408 on timeout** — both with the same body) |
 | GET    | `/commands?filter=` | — | `{ commands: string[] }` |
 | GET    | `/live`            | — | `text/html` viewer page |
 | GET    | `/live-status`     | — | `{ running: boolean, viewers: number, display: string \| null }` |
@@ -155,7 +155,9 @@ LoadingState = {
   summary: string,         // human-readable rollup of the above
 }
 
-ObserverPoll = {
+// Both GET /observe (poll) and DELETE /observe (stop) return the same
+// ObserverState snapshot. DELETE just returns a final one and tears down.
+ObserverState = {
   active: boolean,
   settled: boolean,
   mutationCount: number,
@@ -164,8 +166,10 @@ ObserverPoll = {
   settleMs: number,
 }
 
-// POST /wait-for-selector — same shape for success and timeout; check
-// `success`, not a 4xx status. Timeouts return 200 + success:false.
+// POST /wait-for-selector — body shape is the same for success and timeout.
+// HTTP status is 200 on success, 408 on timeout. Wrappers that throw on
+// non-2xx must catch the 408 and read the WaitResult body to learn which
+// selector/state timed out.
 WaitResult = {
   success: boolean,
   elapsed: number,         // ms
