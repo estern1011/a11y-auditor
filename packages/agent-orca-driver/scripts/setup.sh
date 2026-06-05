@@ -82,15 +82,31 @@ install_packages() {
 # Chromium (Playwright)
 # ---------------------------------------------------------------------------
 
-install_chromium() {
-  # OS-level deps for Chromium go through sudo (apt); the browser binary
-  # itself is fetched as the invoking user so it lands in ~/.cache.
-  echo "==> Installing Chromium OS dependencies (Playwright)..."
+# Run `playwright install-deps chromium` with whatever privilege escalation
+# is needed: nothing when already root, sudo otherwise. PKG_ROOT is passed
+# through the environment rather than interpolated into the command string.
+install_chromium_deps() {
+  local runner='
+    if [ -x "$PKG_ROOT/node_modules/.bin/playwright" ]; then
+      "$PKG_ROOT/node_modules/.bin/playwright" install-deps chromium
+    else
+      npx --yes playwright install-deps chromium
+    fi'
   if [ -n "$SUDO" ]; then
-    $SUDO env "PATH=$PATH" bash -c "cd '$PKG_ROOT' && \
-      { [ -x node_modules/.bin/playwright ] && node_modules/.bin/playwright install-deps chromium || npx --yes playwright install-deps chromium; }" \
-      || echo "    (install-deps reported issues — continuing; curated apt list may already cover them)"
+    $SUDO env "PATH=$PATH" "PKG_ROOT=$PKG_ROOT" bash -c "$runner"
+  else
+    # Already root (SUDO empty) — run directly; do NOT skip, or Chromium OS
+    # deps outside the curated apt list never get installed.
+    PKG_ROOT="$PKG_ROOT" bash -c "$runner"
   fi
+}
+
+install_chromium() {
+  # OS-level deps for Chromium need root (apt); the browser binary itself is
+  # fetched as the invoking user so it lands in ~/.cache.
+  echo "==> Installing Chromium OS dependencies (Playwright)..."
+  install_chromium_deps \
+    || echo "    (install-deps reported issues — continuing; curated apt list may already cover them)"
 
   echo "==> Downloading Chromium browser binary (user cache)..."
   playwright install chromium

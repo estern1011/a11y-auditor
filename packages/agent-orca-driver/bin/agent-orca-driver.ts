@@ -14,7 +14,8 @@
  */
 
 import { spawnSync } from "child_process";
-import { existsSync, readFileSync } from "fs";
+import { closeSync, existsSync, openSync, readFileSync, rmSync } from "fs";
+import { tmpdir } from "os";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -350,12 +351,30 @@ function cmdSetup(args: ParsedArgs): number {
   }
 
   if (args.json) {
-    // Capture combined output for structured consumption.
-    const r = spawnSync("bash", [script], { encoding: "utf-8" });
+    // apt + Playwright produce far more than spawnSync's default ~1 MiB
+    // maxBuffer, which would ENOBUFS-kill the child. Stream combined output
+    // to a temp file (no buffer limit), then read it back for the JSON blob.
+    const logPath = join(tmpdir(), `agent-orca-driver-setup-${process.pid}-${Date.now()}.log`);
+    const fd = openSync(logPath, "w");
+    let r;
+    try {
+      r = spawnSync("bash", [script], { stdio: ["ignore", fd, fd] });
+    } finally {
+      closeSync(fd);
+    }
+    let output = "";
+    try {
+      output = readFileSync(logPath, "utf-8");
+    } catch {
+      /* best-effort */
+    }
+    try {
+      rmSync(logPath, { force: true });
+    } catch {
+      /* best-effort */
+    }
     const ok = r.status === 0;
-    process.stdout.write(
-      JSON.stringify({ ok, code: r.status, output: (r.stdout || "") + (r.stderr || "") }) + "\n",
-    );
+    process.stdout.write(JSON.stringify({ ok, code: r.status, output }) + "\n");
     return ok ? 0 : (r.status ?? 1);
   }
 
