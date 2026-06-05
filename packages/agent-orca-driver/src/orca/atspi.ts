@@ -580,17 +580,26 @@ async function findFocused(
   if (++budget.visited > MAX_TREE_VISITS) return null;
 
   try {
+    // Check THIS node's state BEFORE descending. Otherwise a focused high-
+    // level node with a huge subtree (e.g. `document web` after entering a
+    // large SPA) burns the whole budget on descendants and we return null
+    // even though the focused element was sitting at the current path the
+    // whole time. We still recurse afterwards — if a descendant is ALSO
+    // focused, we prefer the leafmost (which is what AT-SPI's focus
+    // semantics actually want).
+    const states = await getAccessibleState(bus, dest, path);
+    const selfFocused = states.includes("focused");
+
     const count = await getChildCount(bus, dest, path);
     for (let i = 0; i < Math.min(count, 50); i++) {
-      if (budget.visited > MAX_TREE_VISITS) return null;
+      if (budget.visited > MAX_TREE_VISITS) break;
       const child = await getChildAtIndex(bus, dest, path, i);
       if (!child) continue;
       const result = await findFocused(bus, child[0], child[1], depth + 1, budget);
       if (result) return result;
     }
 
-    const states = await getAccessibleState(bus, dest, path);
-    if (states.includes("focused")) {
+    if (selfFocused) {
       const name = await getAccessibleName(bus, dest, path);
       const role = await getAccessibleRole(bus, dest, path);
       const bbox = await getExtents(bus, dest, path);

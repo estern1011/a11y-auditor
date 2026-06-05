@@ -172,13 +172,17 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
       addIndicator(el, resolveAccessibleName(el), "role=progressbar");
     });
 
-    // The `*` walk is the most expensive scan in this function. Cap the
-    // total elements visited so a million-node DOM doesn't pin the page.
-    // (Note: we walk the FULL 50k regardless of whether loadingIndicators
-    // is full, so the totals counted above stay accurate.)
+    // Walk EVERY element looking for class-name matches. TreeWalker (not
+    // querySelectorAll("*"), which materializes a NodeList for the whole DOM
+    // up front and defeats the visit cap on a million-node page) lets us
+    // stop incrementally at the budget.
     const MAX_VISITED = 50_000;
+    const walker = document.createTreeWalker(
+      document.body || document.documentElement,
+      NodeFilter.SHOW_ELEMENT,
+    );
     let visited = 0;
-    for (const el of document.querySelectorAll("*")) {
+    for (let el = walker.nextNode() as Element | null; el; el = walker.nextNode() as Element | null) {
       if (++visited > MAX_VISITED) break;
       const cls = el.className && typeof el.className === "string" ? el.className : "";
       if (loadingPatterns.test(cls)) {
