@@ -124,7 +124,12 @@ const ORCA_CUSTOMIZATIONS = `
 import orca.speechdispatcherfactory as sdf
 import orca.speech as speech_mod
 
-_log_path = "${SPEECH_LOG}"
+# The log path is encoded via JSON.stringify on the Node side. A JSON string
+# literal is a valid Python string literal for our character set, so a path
+# whose components contain a quote or backslash (via $XDG_RUNTIME_DIR or an
+# exotic $HOME) can't break out of the literal and run arbitrary Python
+# inside Orca.
+_log_path = ${JSON.stringify(SPEECH_LOG)}
 _seen = set()  # deduplicate within same call
 
 def _log(text):

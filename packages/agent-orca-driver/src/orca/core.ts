@@ -20,17 +20,12 @@ import type { Page, Browser } from "playwright";
 import { translateError } from "../errors.js";
 import {
   type VoResponse,
-  type VoError,
   type VoResult,
   type TranscriptEntry,
-  isVoError,
   ORCA_COMMANDS,
 } from "../types.js";
 import * as speech from "./speech.js";
 import * as atspi from "./atspi.js";
-
-export type { VoResponse, VoError, VoResult, TranscriptEntry } from "../types.js";
-export { isVoError, ORCA_COMMANDS } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Config
