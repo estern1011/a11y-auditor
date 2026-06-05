@@ -13,7 +13,7 @@
  * All subcommands accept --json for agent-friendly structured output.
  */
 
-import { spawnSync } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { closeSync, existsSync, openSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { dirname, join, resolve } from "path";
@@ -253,13 +253,56 @@ function checkLibx264(): DoctorCheck {
   };
 }
 
-// Verify Chromium isn't just present but actually *launches*. An
-// existence-only check misses a binary that can't dynamically link (a
-// missing shared library only surfaces when `start` tries to launch it),
-// which is exactly the gap a fresh image hits when Playwright's OS-dep
-// install was incomplete. Launching headlessly here catches it at `doctor`
-// time. Honors PLAYWRIGHT_BROWSERS_PATH (so doctor and the daemon agree on
-// where the browser lives).
+// Start a throwaway Xvfb so doctor can validate the *headful* Chromium path
+// (what the daemon actually uses) when no display is present. Returns the
+// display + a cleanup fn, or null if Xvfb couldn't be brought up.
+function startTempXvfb(): { display: string; cleanup: () => void } | null {
+  if (spawnSync("which", ["Xvfb"], { encoding: "utf-8" }).status !== 0) return null;
+  const display = ":99";
+  try {
+    spawnSync("rm", ["-f", "/tmp/.X99-lock"], { stdio: "ignore" });
+  } catch {
+    /* ignore */
+  }
+  const proc = spawn("Xvfb", [display, "-screen", "0", "1280x1024x24", "-ac"], {
+    stdio: "ignore",
+  });
+  const start = Date.now();
+  while (Date.now() - start < 2500) {
+    const r = spawnSync("xdotool", ["getdisplaygeometry"], {
+      env: { ...process.env, DISPLAY: display },
+      stdio: "pipe",
+      timeout: 1000,
+    });
+    if (r.status === 0) {
+      return {
+        display,
+        cleanup: () => {
+          try {
+            proc.kill("SIGTERM");
+          } catch {
+            /* ignore */
+          }
+        },
+      };
+    }
+  }
+  try {
+    proc.kill("SIGKILL");
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+// Verify Chromium isn't just present but actually *launches* — and launches
+// the way the daemon does: HEADFUL (headless:false), which needs the X/GTK
+// runtime, a different (larger) shared-lib set than headless. An
+// existence-only or headless-only check would pass on a fresh image with
+// incomplete OS deps and let `start` be the first thing to fail. If no
+// display is available, doctor spins up a throwaway Xvfb so it can still
+// exercise the headful path. Honors PLAYWRIGHT_BROWSERS_PATH so doctor and
+// the daemon agree on where the browser lives.
 async function checkChromium(): Promise<DoctorCheck> {
   let chromium;
   try {
@@ -281,17 +324,28 @@ async function checkChromium(): Promise<DoctorCheck> {
     };
   }
 
+  // Prefer a real display; otherwise bring up a temporary Xvfb so the headful
+  // probe matches `start`. Only fall back to headless if neither is possible.
+  let tempXvfb: { display: string; cleanup: () => void } | null = null;
+  const hadDisplay = !!process.env.DISPLAY;
+  if (!hadDisplay) {
+    tempXvfb = startTempXvfb();
+    if (tempXvfb) process.env.DISPLAY = tempXvfb.display;
+  }
+  const headful = !!process.env.DISPLAY;
+
   let browser;
   try {
-    browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-gpu"] });
+    browser = await chromium.launch({ headless: !headful, args: ["--no-sandbox", "--disable-gpu"] });
     const version = browser.version();
-    return { name: "Playwright Chromium", ok: true, detail: `launches (v${version})` };
+    const mode = headful ? "headful" : "headless (no display available for headful probe)";
+    return { name: "Playwright Chromium", ok: true, detail: `launches ${mode} (v${version})` };
   } catch (e) {
     const msg = (e instanceof Error ? e.message : String(e)).split("\n")[0];
     return {
       name: "Playwright Chromium",
       ok: false,
-      detail: `binary present but failed to launch (missing OS deps?): ${msg}`,
+      detail: `binary present but failed to launch ${headful ? "headful" : "headless"} (missing OS deps?): ${msg}`,
     };
   } finally {
     if (browser) {
@@ -300,6 +354,10 @@ async function checkChromium(): Promise<DoctorCheck> {
       } catch {
         /* best-effort */
       }
+    }
+    if (tempXvfb) {
+      tempXvfb.cleanup();
+      if (!hadDisplay) delete process.env.DISPLAY;
     }
   }
 }
