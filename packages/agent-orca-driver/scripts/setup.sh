@@ -57,6 +57,12 @@ install_packages() {
 
   # orca/xvfb/xdotool/at-spi2/dbus/atk: the screen-reader + accessibility bus
   # espeak-ng/speech-dispatcher/pulseaudio: speech backend Orca speaks through
+  # speech-dispatcher-espeak-ng: the Speech Dispatcher output module Orca
+  #   actually drives. With --no-install-recommends it is NOT pulled in as a
+  #   recommend of speech-dispatcher, and espeak-ng alone doesn't provide the
+  #   SD plugin — so name it explicitly. (Transcript capture itself hooks
+  #   Orca's _speak pre-synth, but a real synth keeps Orca's own code paths
+  #   happy and avoids SD init errors on minimal images.)
   # openbox: window manager so xdotool window-focus works
   # ffmpeg: encodes the Xvfb framebuffer for the /live stream (Day 3)
   # libnss3/libnspr4: Chromium runtime deps
@@ -69,6 +75,7 @@ install_packages() {
     libatk-adaptor \
     espeak-ng \
     speech-dispatcher \
+    speech-dispatcher-espeak-ng \
     pulseaudio \
     openbox \
     ffmpeg \
