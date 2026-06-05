@@ -127,7 +127,10 @@ export const ORCA_COMMANDS: Record<string, OrcaCommandEntry> = {
   GO_TO_BEGINNING: { key: "Home", modifiers: ["control"] },
   GO_TO_END: { key: "End", modifiers: ["control"] },
   READ_CURRENT_LINE: { key: "8", modifiers: ["super"], settle: 600 },
-  SAY_ALL: { key: "semicolon", modifiers: ["super"], settle: 1000 },
+  // Single-char ";" (keysym 0x3b via charCodeAt) — the AT-SPI key injector
+  // only accepts KEYSYM_MAP entries or single characters, so the literal
+  // "semicolon" string would throw "Unknown key".
+  SAY_ALL: { key: ";", modifiers: ["super"], settle: 1000 },
   TOGGLE_BROWSE_MODE: { key: "a", modifiers: ["super"] },
   ESCAPE: { key: "Escape" },
 };
