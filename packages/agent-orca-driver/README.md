@@ -57,6 +57,9 @@ All commands accept `--json` for agent-friendly structured output.
 - [`AGENTS.md`](./AGENTS.md) — canonical agent-facing API reference (route
   table, three canonical loops, anti-instructions). `agent-orca-driver skills
   get core` prints this verbatim from the installed package.
+- [`SECURITY.md`](./SECURITY.md) — network surface, allow-list rules, and
+  the analysis of why `npm audit`'s `dbus-native` advisories don't apply in
+  this package's usage.
 
 ## Live view
 
