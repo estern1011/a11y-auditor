@@ -44,6 +44,13 @@ export interface LoadingStateResult {
     accessibleName: string;
     detectedBy: string;
   }[];
+  /**
+   * True total count of indicators found on the page — unbounded by the per-
+   * array cap on `loadingIndicators`. When `loadingIndicators.length === 200`
+   * (the cap) and this is larger, the detail array is a sample; `summary`
+   * still reflects the true labeled/unlabeled split.
+   */
+  loadingIndicatorsTotal: number;
   summary: string;
 }
 
@@ -127,19 +134,31 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
     const loadingIndicators: LoadingStateResult["loadingIndicators"] = [];
     const seenElements = new Set<Element>();
     const loadingPatterns = /loading|spinner|skeleton|progress|fetching|waiting/i;
+    // Counters are TOTALS — incremented every time we see a new indicator,
+    // regardless of whether it lands in the detail array. The summary at the
+    // end of this function reads from these counters, NOT from
+    // loadingIndicators.length, so a page with 1000 indicators (where the
+    // first 200 happen to be labeled) still reports the trailing 800
+    // unlabeled in the summary. Only the per-element details get clipped.
+    let totalIndicators = 0;
+    let totalLabeled = 0;
+    let totalUnlabeled = 0;
 
-    function addIndicator(el: Element, name: string, detectedBy: string): boolean {
-      if (seenElements.has(el)) return false;
+    function addIndicator(el: Element, name: string, detectedBy: string): void {
+      if (seenElements.has(el)) return;
       seenElements.add(el);
-      if (loadingIndicators.length >= MAX_PER_ARRAY) return true; // stop scanning
+      const hasName = name.length > 0;
+      totalIndicators++;
+      if (hasName) totalLabeled++;
+      else totalUnlabeled++;
+      if (loadingIndicators.length >= MAX_PER_ARRAY) return; // counted, but don't store detail
       loadingIndicators.push({
         selector: selectorFor(el),
         tagName: el.tagName.toLowerCase(),
-        hasAccessibleName: name.length > 0,
+        hasAccessibleName: hasName,
         accessibleName: name,
         detectedBy,
       });
-      return false;
     }
 
     document.querySelectorAll("[aria-label]").forEach((el) => {
@@ -155,13 +174,15 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
 
     // The `*` walk is the most expensive scan in this function. Cap the
     // total elements visited so a million-node DOM doesn't pin the page.
+    // (Note: we walk the FULL 50k regardless of whether loadingIndicators
+    // is full, so the totals counted above stay accurate.)
     const MAX_VISITED = 50_000;
     let visited = 0;
     for (const el of document.querySelectorAll("*")) {
       if (++visited > MAX_VISITED) break;
       const cls = el.className && typeof el.className === "string" ? el.className : "";
       if (loadingPatterns.test(cls)) {
-        const stop = addIndicator(
+        addIndicator(
           el,
           resolveAccessibleName(el),
           `class="${
@@ -171,7 +192,6 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
               .find((c) => loadingPatterns.test(c)) || ""
           }"`,
         );
-        if (stop) break; // indicator cap hit — no point walking further
       }
     }
 
@@ -179,19 +199,17 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
     if (busyEls.length > 0) {
       issues.push(`${busyEls.length} element(s) with aria-busy="true"`);
     }
-    if (loadingIndicators.length > 0) {
-      const unlabeled = loadingIndicators.filter((li) => !li.hasAccessibleName);
-      if (unlabeled.length > 0) {
-        issues.push(`${unlabeled.length} loading indicator(s) WITHOUT accessible names`);
+    if (totalIndicators > 0) {
+      if (totalUnlabeled > 0) {
+        issues.push(`${totalUnlabeled} loading indicator(s) WITHOUT accessible names`);
       }
-      const labeled = loadingIndicators.filter((li) => li.hasAccessibleName);
-      if (labeled.length > 0) {
-        issues.push(`${labeled.length} loading indicator(s) with accessible names`);
+      if (totalLabeled > 0) {
+        issues.push(`${totalLabeled} loading indicator(s) with accessible names`);
       }
     }
     if (liveEls.length > 0) {
       issues.push(`${liveEls.length} live region(s) found`);
-    } else if (busyEls.length > 0 || loadingIndicators.length > 0) {
+    } else if (busyEls.length > 0 || totalIndicators > 0) {
       issues.push("No aria-live regions to announce loading state to screen readers");
     }
 
@@ -207,6 +225,7 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
       liveRegions,
       statusRoles,
       loadingIndicators,
+      loadingIndicatorsTotal: totalIndicators,
       summary,
     } satisfies LoadingStateResult;
   });
