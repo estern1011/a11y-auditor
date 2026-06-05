@@ -362,6 +362,75 @@ async function checkChromium(): Promise<DoctorCheck> {
   }
 }
 
+// Verify Speech Dispatcher's espeak-ng output module is actually installed.
+// setup.sh names `speech-dispatcher-espeak-ng` explicitly because
+// `--no-install-recommends` skips the recommend chain that would otherwise
+// pull it in. That's a comment in setup.sh today — this probe enforces it,
+// so a hand-rolled provisioner that forgets the package fails preflight
+// instead of silently breaking Orca's voice. `spd-say -O` lists the
+// configured output modules; we just want `espeak-ng` (or `espeak`) to
+// appear in that list.
+function checkSpeechDispatcher(): DoctorCheck {
+  const r = spawnSync("spd-say", ["-O"], { encoding: "utf-8", timeout: 5_000 });
+  if (r.status !== 0 && !r.stdout) {
+    return {
+      name: "speech-dispatcher modules",
+      ok: false,
+      detail: "spd-say not runnable — install speech-dispatcher",
+    };
+  }
+  const modules = (r.stdout || "").toLowerCase();
+  const hasEspeak = /espeak(-ng)?/.test(modules);
+  return {
+    name: "speech-dispatcher modules",
+    ok: hasEspeak,
+    detail: hasEspeak
+      ? "espeak-ng output module present"
+      : "no espeak module — install speech-dispatcher-espeak-ng",
+  };
+}
+
+// Probe that xdotool can answer `getdisplaygeometry` against the active
+// DISPLAY. The live-view stream uses this exact query to size the ffmpeg
+// capture; failures here mean /live will silently fall back to the
+// 1280x1024 default and the focus overlay will misalign if the real
+// display is a different size.
+function checkDisplayGeometry(): DoctorCheck {
+  const display = process.env.DISPLAY;
+  if (!display) {
+    return {
+      name: "xdotool getdisplaygeometry",
+      ok: true,
+      detail: "skipped (no DISPLAY yet)",
+    };
+  }
+  const r = spawnSync("xdotool", ["getdisplaygeometry"], {
+    env: { ...process.env, DISPLAY: display },
+    encoding: "utf-8",
+    timeout: 3_000,
+  });
+  if (r.status !== 0) {
+    return {
+      name: "xdotool getdisplaygeometry",
+      ok: false,
+      detail: `failed against ${display}: ${(r.stderr || "").trim().split("\n")[0] || "unknown"}`,
+    };
+  }
+  const [w, h] = (r.stdout || "").trim().split(/\s+/).map(Number);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+    return {
+      name: "xdotool getdisplaygeometry",
+      ok: false,
+      detail: `unparseable output on ${display}: ${(r.stdout || "").trim()}`,
+    };
+  }
+  return {
+    name: "xdotool getdisplaygeometry",
+    ok: true,
+    detail: `${display} → ${w}x${h}`,
+  };
+}
+
 // Soft check: if a display is available, confirm ffmpeg can grab one frame
 // off it via x11grab. Skipped (and treated as non-fatal) when DISPLAY is
 // unset — doctor runs after `setup`, before any daemon has started Xvfb.
@@ -394,6 +463,7 @@ async function cmdDoctor(args: ParsedArgs): Promise<number> {
     checkExe("ffmpeg"),
     checkExe("pulseaudio"),
     checkLibx264(),
+    checkSpeechDispatcher(),
     await checkChromium(),
   ];
   const soft: DoctorCheck[] = [
@@ -407,6 +477,7 @@ async function cmdDoctor(args: ParsedArgs): Promise<number> {
       ok: !!process.env.DBUS_SESSION_BUS_ADDRESS,
       detail: process.env.DBUS_SESSION_BUS_ADDRESS || "unset (the daemon launches dbus)",
     },
+    checkDisplayGeometry(),
     checkX11grab(),
   ];
 

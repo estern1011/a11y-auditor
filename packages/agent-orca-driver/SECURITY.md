@@ -6,9 +6,10 @@ package's usage.
 
 ## Network surface
 
-The HTTP daemon binds to `127.0.0.1:<port>` by default (port 8001). Any
-non-loopback bind must pass `--port 0.0.0.0:<port>` explicitly. Inbound
-requests are gated by:
+The HTTP daemon binds to `127.0.0.1:<port>` (port 8001 by default). There
+is no opt-in for binding non-loopback today — if you need remote access,
+use Codespaces port-forwarding (gated by GitHub auth) or your own
+reverse proxy. Inbound requests are gated by:
 
 - **Host allow-list** — `127.0.0.1:<port>`, `localhost:<port>`, and the
   three Codespaces forwarded-URL patterns
@@ -26,6 +27,54 @@ Outbound traffic the driver itself originates: Chromium's network requests
 (driven by `/navigate`), Playwright's CDP channel (loopback only), the
 AT-SPI2 D-Bus socket (loopback Unix socket), and the live-view ffmpeg
 encoder (reads from the local X display).
+
+## Trust boundary: the page being audited
+
+The daemon assumes the page it's pointed at is one **you** chose. axe-core
+runs scripts inside that page during `/audit`, MutationObserver runs there
+during `/observe`, AT-SPI2 walks the accessibility tree it exposes, and the
+transcript records everything Orca speaks back. Hostile pages can't escape
+those into the daemon process, but they CAN try to wedge it via volume —
+huge DOMs, runaway mutation churn, multi-megabyte aria-labels, etc.
+
+The daemon defends against the obvious volume cases with hard caps:
+
+- Inbound request bodies are capped at `MAX_REQUEST_BODY` (1 MiB).
+- Transcript entries are truncated per-field and the buffer is capped at
+  `MAX_TRANSCRIPT_ENTRIES` (10 000); older entries fall off.
+- `/audit` truncates each axe `node.html` and the optional aria-snapshot
+  tree before serialization, so a single audit response stays bounded.
+- `/loading-state` caps each per-element-detail array (`liveRegions`,
+  `statusRoles`, `ariaBusyElements`, `loadingIndicators`) at 200 entries
+  and stops walking the `*` selector after 50 000 elements visited; the
+  reported COUNTS in `summary` still reflect the true totals.
+- The AT-SPI2 tree walk in `/item-text` is bounded to 5 000 D-Bus
+  round-trips per call on top of the existing per-recursion depth caps,
+  so a wide-and-shallow accessibility tree can't pin the daemon.
+
+These caps are belt-and-braces, not a sandbox. **Do not point `/navigate`
+at attacker-controlled URLs you wouldn't trust the rest of your toolchain
+(browser, axe-core, Playwright) to render.** The HTTP surface is the
+trust boundary; the page is not.
+
+### When you need a real sandbox
+
+The caps above assume an honest page that's merely buggy or large. If
+your threat model has pages that are *actively hostile* — auditing
+arbitrary URLs at scale, running as a hosted service for third parties,
+compliance regimes that require per-audit isolation — the right next
+step is to run the daemon inside its own container or microVM:
+
+- A throwaway Docker container per audit, with `--network=audit-net`
+  restricting egress to the URL being audited; nothing else mounted.
+- A Firecracker microVM for stronger boundaries (Chromium 0-day
+  exfiltration goes to a fresh VM with no persistent state).
+
+That adds ~10 s of startup per audit and some setup.sh complexity around
+running the live-view stack (ffmpeg + X11 + AT-SPI2 + DBus) inside the
+inner container, but it lets you trust pages you don't control. The
+single-container model that ships today is the right default; the
+inner-sandbox upgrade is the right shape for that next step.
 
 ## `npm audit` advisories
 
@@ -61,10 +110,9 @@ the install simple, document why the warnings don't apply in this usage.
 ### When to revisit
 
 The threat-model analysis above relies on the network surface staying
-loopback-only (or, in non-loopback mode, gated by `--auth-token` — Day-3
-work). If a future change exposes the daemon process to untrusted callers
-in a way that lets them feed data into the AT-SPI2 channel, or if the
-allow-list is widened beyond Codespaces forwarded URLs, this analysis
+loopback-only. If a future change exposes the daemon process to untrusted
+callers in a way that lets them feed data into the AT-SPI2 channel, or if
+the allow-list is widened beyond Codespaces forwarded URLs, this analysis
 must be redone. The swap to `dbus-next` becomes worthwhile if either:
 
 1. The audit warnings start blocking a downstream consumer's CI gate.

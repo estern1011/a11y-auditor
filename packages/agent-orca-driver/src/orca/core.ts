@@ -46,6 +46,11 @@ export const ORCA_STATE_FILE = runtimePath("driver-state.json");
 export const CLI_TIMEOUT_MS = 30_000;
 export const MAX_TRANSCRIPT_ENTRIES = 10_000;
 export const MAX_REQUEST_BODY = 1_000_000;
+// Per-field char cap on each transcript entry. A hostile page can put a
+// megabyte-long aria-label on a focusable element; Orca will read it, and
+// AT-SPI2 will hand it back as `name`. Truncate so a single entry can't
+// dominate the response or the in-memory buffer.
+const MAX_TRANSCRIPT_FIELD_CHARS = 4_000;
 
 const ORCA_SETTLE_MS = 1000;
 const ORCA_QUICK_SETTLE_MS = 400;
@@ -161,11 +166,23 @@ export function log(msg: string, err = false) {
   } catch {}
 }
 
+function capField(value: string): string {
+  return value.length > MAX_TRANSCRIPT_FIELD_CHARS
+    ? value.slice(0, MAX_TRANSCRIPT_FIELD_CHARS) + "…"
+    : value;
+}
+
 function recordTranscript(entry: VoResponse): TranscriptEntry {
   // Pre-increment: first entry's index is 1, not 0. Lets callers use
   // `since=0` as a natural "give me everything" sentinel without losing the
   // first announcement (entries are returned where `index > since`).
-  const indexed: TranscriptEntry = { ...entry, index: ++state.transcriptIndex };
+  const indexed: TranscriptEntry = {
+    spoken: capField(entry.spoken),
+    name: capField(entry.name),
+    role: capField(entry.role),
+    state: entry.state,
+    index: ++state.transcriptIndex,
+  };
   state.transcript.push(indexed);
   if (state.transcript.length > MAX_TRANSCRIPT_ENTRIES) {
     state.transcript = state.transcript.slice(-MAX_TRANSCRIPT_ENTRIES);

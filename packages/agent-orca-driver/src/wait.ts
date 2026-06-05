@@ -49,6 +49,15 @@ export interface LoadingStateResult {
 
 export async function checkLoadingState(page: Page): Promise<LoadingStateResult> {
   return page.evaluate(() => {
+    // Per-array caps so a page with thousands of status/loading elements can't
+    // balloon the JSON response. The COUNTS we report (busyEls.length etc.)
+    // still reflect the true total — only the per-element detail arrays are
+    // capped. SECURITY.md "Trust boundary" calls this out.
+    const MAX_PER_ARRAY = 200;
+    function clip<T>(arr: T[]): T[] {
+      return arr.length > MAX_PER_ARRAY ? arr.slice(0, MAX_PER_ARRAY) : arr;
+    }
+
     function selectorFor(el: Element): string {
       if (el.id) return `#${el.id}`;
       const tag = el.tagName.toLowerCase();
@@ -80,7 +89,7 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
     }
 
     const busyEls = Array.from(document.querySelectorAll('[aria-busy="true"]'));
-    const ariaBusyElements = busyEls.map((el) => ({
+    const ariaBusyElements = clip(busyEls).map((el) => ({
       selector: selectorFor(el),
       tagName: el.tagName.toLowerCase(),
       role: el.getAttribute("role"),
@@ -89,7 +98,7 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
     const liveEls = Array.from(
       document.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"]'),
     ).filter((el) => el.getAttribute("aria-live") !== "off");
-    const liveRegions = liveEls.map((el) => ({
+    const liveRegions = clip(liveEls).map((el) => ({
       selector: selectorFor(el),
       tagName: el.tagName.toLowerCase(),
       ariaLive:
@@ -104,7 +113,7 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
         '[role="status"], [role="alert"], [role="progressbar"], [role="log"]',
       ),
     );
-    const statusRoles = statusEls.map((el) => {
+    const statusRoles = clip(statusEls).map((el) => {
       const name = resolveAccessibleName(el);
       return {
         selector: selectorFor(el),
@@ -119,9 +128,10 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
     const seenElements = new Set<Element>();
     const loadingPatterns = /loading|spinner|skeleton|progress|fetching|waiting/i;
 
-    function addIndicator(el: Element, name: string, detectedBy: string) {
-      if (seenElements.has(el)) return;
+    function addIndicator(el: Element, name: string, detectedBy: string): boolean {
+      if (seenElements.has(el)) return false;
       seenElements.add(el);
+      if (loadingIndicators.length >= MAX_PER_ARRAY) return true; // stop scanning
       loadingIndicators.push({
         selector: selectorFor(el),
         tagName: el.tagName.toLowerCase(),
@@ -129,6 +139,7 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
         accessibleName: name,
         detectedBy,
       });
+      return false;
     }
 
     document.querySelectorAll("[aria-label]").forEach((el) => {
@@ -142,10 +153,15 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
       addIndicator(el, resolveAccessibleName(el), "role=progressbar");
     });
 
-    document.querySelectorAll("*").forEach((el) => {
+    // The `*` walk is the most expensive scan in this function. Cap the
+    // total elements visited so a million-node DOM doesn't pin the page.
+    const MAX_VISITED = 50_000;
+    let visited = 0;
+    for (const el of document.querySelectorAll("*")) {
+      if (++visited > MAX_VISITED) break;
       const cls = el.className && typeof el.className === "string" ? el.className : "";
       if (loadingPatterns.test(cls)) {
-        addIndicator(
+        const stop = addIndicator(
           el,
           resolveAccessibleName(el),
           `class="${
@@ -155,8 +171,9 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
               .find((c) => loadingPatterns.test(c)) || ""
           }"`,
         );
+        if (stop) break; // indicator cap hit — no point walking further
       }
-    });
+    }
 
     const issues: string[] = [];
     if (busyEls.length > 0) {

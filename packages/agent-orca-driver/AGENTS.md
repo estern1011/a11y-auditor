@@ -284,6 +284,18 @@ the transcript/focus stream without the HTML viewer.
   plain `GET` returns 404 with `{"error":"Unknown route: GET /stream"}` —
   that's expected; it's not a missing endpoint.
 
+## Trust boundary
+
+The HTTP surface is the trust boundary. The **page** being audited is not —
+axe runs scripts inside it, AT-SPI2 walks its tree, and the transcript
+records whatever Orca speaks for it. Hostile pages can't escape into the
+daemon process, but they can try to wedge it via volume (huge DOMs, mega-
+byte aria-labels, runaway mutations). The daemon caps response sizes
+defensively (per-field transcript caps, axe `node.html` and aria-snapshot
+truncation, 1 MiB request bodies), but it is **not** a sandbox. Don't
+point `/navigate` at a URL you wouldn't trust your browser to render. See
+`SECURITY.md` for the full threat model.
+
 ## What agent-orca-driver is NOT
 
 - Not a WCAG knowledge base. Doesn't ship `criteria.json`, `categories.json`,
