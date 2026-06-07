@@ -17,15 +17,21 @@ import {
   watchFile,
   unwatchFile,
   statSync,
-  existsSync,
-  renameSync,
 } from "fs";
-import { execSync } from "child_process";
-import { homedir } from "os";
 import { join } from "path";
-import { runtimePath, safeWriteSync } from "../lib/runtime-paths.js";
+import { runtimePath, getRuntimeDir, safeWriteSync } from "../lib/runtime-paths.js";
 
 export const SPEECH_LOG = runtimePath("orca-speech.log");
+
+// Isolated XDG_DATA_HOME for our Orca process. Orca resolves
+// `$XDG_DATA_HOME/orca/orca-customizations.py`, so pointing it at a
+// runtime-local directory keeps our capture hook out of the user's
+// `~/.local/share/orca/` entirely — no backup-restore dance, no risk of
+// leaving a stale monkey-patch behind that the user's later desktop Orca
+// session would load. core.ts spawns Orca with this in env.
+export function getOrcaXdgDataHome(): string {
+  return join(getRuntimeDir(), "orca-data");
+}
 
 export interface SpeechEntry {
   text: string;
@@ -179,35 +185,18 @@ def _hook_srv(self, text, acss=None, **kw):
 sdf.SpeechServer._speak = _hook_srv
 `;
 
-// A pre-existing orca-customizations.py belongs to the user — keybinding
-// rebinds, alternative speech config, third-party scripts. Silently
-// overwriting it would lose data and the cleanup path can't restore from
-// memory either. Move the original to `.bak-<timestamp>` and log the path
-// so the user can find + restore (or merge) after they're done with us.
-function backupExistingCustomizations(customPath: string, log: (msg: string, err?: boolean) => void): void {
-  if (!existsSync(customPath)) return;
-  let existing: string;
-  try { existing = readFileSync(customPath, "utf-8"); } catch { return; }
-  if (existing === ORCA_CUSTOMIZATIONS) return; // already ours — idempotent
-  // Don't churn backups on every daemon restart if the user-content hasn't
-  // changed since the first backup. Only back up the FIRST time we see a
-  // non-empty, non-ours file.
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = `${customPath}.bak-${stamp}`;
-  try {
-    renameSync(customPath, backupPath);
-    log(`existing orca-customizations.py backed up to ${backupPath} — restore manually after the daemon exits`, true);
-  } catch (e) {
-    log(`failed to back up existing orca-customizations.py: ${e instanceof Error ? e.message : String(e)}`, true);
-  }
-}
-
 export function ensureSpeechCapture(log: (msg: string, err?: boolean) => void): void {
-  const orcaDir = join(homedir(), ".local", "share", "orca");
-  mkdirSync(orcaDir, { recursive: true });
+  // Write into an ISOLATED XDG_DATA_HOME under our runtime dir rather than
+  // the user's `~/.local/share/orca/`. core.ts must spawn Orca with this
+  // path as XDG_DATA_HOME so Orca loads our customizations from here.
+  // Earlier versions wrote directly to the user's home and tried to
+  // back-up-and-restore, but cleanup couldn't be relied on (hard crash,
+  // SIGKILL, container exit), so the monkey-patch leaked into the user's
+  // later desktop Orca session. Isolation removes the problem entirely.
+  const orcaDir = join(getOrcaXdgDataHome(), "orca");
+  mkdirSync(orcaDir, { recursive: true, mode: 0o700 });
 
   const customPath = join(orcaDir, "orca-customizations.py");
-  backupExistingCustomizations(customPath, log);
   writeFileSync(customPath, ORCA_CUSTOMIZATIONS);
 
   // NOTE: this function used to `pkill -x orca` here unconditionally so
@@ -222,5 +211,5 @@ export function ensureSpeechCapture(log: (msg: string, err?: boolean) => void): 
   clear();
   startWatching();
 
-  log("Speech capture configured (Orca customizations → " + SPEECH_LOG + ")");
+  log(`Speech capture configured (customizations → ${customPath}, log → ${SPEECH_LOG})`);
 }

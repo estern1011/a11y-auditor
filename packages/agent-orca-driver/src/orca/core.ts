@@ -596,10 +596,20 @@ function startOrca(): boolean {
     log("Orca already running");
     return false;
   }
-  const proc = spawn("orca", [], { detached: true, stdio: "ignore", env: { ...process.env } });
+  // XDG_DATA_HOME isolates this Orca's data directory from the user's
+  // `~/.local/share/orca/`. Orca resolves
+  // `$XDG_DATA_HOME/orca/orca-customizations.py` for its hook file —
+  // speech.ts writes ours into the isolated location. Without this env
+  // override, our monkey-patch would land in the user's home dir and
+  // could leak into their later desktop screen-reader session.
+  const proc = spawn("orca", [], {
+    detached: true,
+    stdio: "ignore",
+    env: { ...process.env, XDG_DATA_HOME: speech.getOrcaXdgDataHome() },
+  });
   proc.unref();
   orcaPid = proc.pid ?? null;
-  log(`Started Orca (PID: ${orcaPid})`);
+  log(`Started Orca (PID: ${orcaPid}, XDG_DATA_HOME: ${speech.getOrcaXdgDataHome()})`);
   return true;
 }
 
