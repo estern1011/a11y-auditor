@@ -130,6 +130,7 @@ const ORCA_PRESS_SETTLE_MS = 1000;
 const ORCA_INIT_SETTLE_MS = 5000;
 
 let xvfbProc: ReturnType<typeof spawn> | null = null;
+let openboxProc: ReturnType<typeof spawn> | null = null;
 let atSpiProc: ReturnType<typeof spawn> | null = null;
 let atSpiRegistryProc: ReturnType<typeof spawn> | null = null;
 
@@ -472,9 +473,15 @@ function ensureWindowManager(): void {
     return;
   }
 
-  spawn("openbox", [], { stdio: "ignore", detached: true, env: process.env }).unref();
+  // Track the handle so cleanup() can SIGTERM it. When DISPLAY points at a
+  // pre-existing Xvfb we don't own (CI reusing :99 across runs), killing
+  // Xvfb on shutdown wouldn't take this openbox down with it; without a
+  // tracked handle the WM lingers on the display for every subsequent
+  // session.
+  openboxProc = spawn("openbox", [], { stdio: "ignore", detached: true, env: process.env });
+  openboxProc.unref();
   spawnSync("sleep", ["0.5"]);
-  log(`Started openbox window manager on ${display || "default display"}`);
+  log(`Started openbox window manager on ${display || "default display"} (PID: ${openboxProc.pid})`);
 }
 
 function ensureDbus(): void {
@@ -824,7 +831,7 @@ export async function cleanup() {
   state.orcaActive = false;
   state.page = null;
   state.currentUrl = null;
-  for (const proc of [atSpiRegistryProc, atSpiProc, xvfbProc]) {
+  for (const proc of [atSpiRegistryProc, atSpiProc, openboxProc, xvfbProc]) {
     if (proc?.pid) {
       try {
         process.kill(proc.pid);
@@ -833,6 +840,7 @@ export async function cleanup() {
   }
   atSpiRegistryProc = null;
   atSpiProc = null;
+  openboxProc = null;
   xvfbProc = null;
 }
 
