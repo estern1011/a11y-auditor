@@ -163,10 +163,14 @@ export function ensureSpeechCapture(log: (msg: string) => void): void {
   const customPath = join(orcaDir, "orca-customizations.py");
   writeFileSync(customPath, ORCA_CUSTOMIZATIONS);
 
-  // Kill any existing Orca so it restarts with our customizations
-  try {
-    execSync("pkill -x orca", { stdio: "pipe" });
-  } catch {}
+  // NOTE: this function used to `pkill -x orca` here unconditionally so
+  // an already-running Orca would pick up the customizations on restart.
+  // That silently destroyed the user's existing accessibility session on
+  // a real Linux desktop AND defeated the weStartedOrca cleanup guard
+  // in core.ts (by the time startOrca() checked isOrcaRunning(), the kill
+  // had already happened — daemon then thought it had a clean-start
+  // ownership and shut Orca down on exit). The Orca lifecycle is now
+  // the caller's responsibility (see core.ts initialize).
 
   clear();
   startWatching();

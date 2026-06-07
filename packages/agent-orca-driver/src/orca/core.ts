@@ -658,6 +658,32 @@ async function focusBrowser() {
 export async function initialize(url: string | null, cdpPort: number) {
   state.cdpPort = cdpPort;
   ensureDesktopEnv();
+
+  // Detect pre-existing Orca BEFORE we install customizations and (maybe)
+  // restart. On a Xvfb / Codespace environment there's no pre-existing Orca
+  // and this is a no-op. On a real desktop where the user has Orca as their
+  // screen reader, this is THEIR session; refuse by default and require an
+  // explicit opt-in so we don't silently destroy their accessibility setup.
+  // (Earlier versions auto-killed via speech.ts; that defeated the
+  // weStartedOrca cleanup guard AND broke the user's session in one go.)
+  const preExistingOrca = isOrcaRunning();
+  if (preExistingOrca) {
+    if (process.env.AGENT_ORCA_DRIVER_TAKEOVER !== "1") {
+      throw new Error(
+        "Orca is already running. The daemon needs to own its Orca process.\n" +
+          "Either stop your Orca session first (e.g. `pkill -x orca`) and re-run,\n" +
+          "or set AGENT_ORCA_DRIVER_TAKEOVER=1 to let the daemon kill+restart it\n" +
+          "(your session will not be restored on daemon shutdown).",
+      );
+    }
+    log("AGENT_ORCA_DRIVER_TAKEOVER=1 — killing pre-existing Orca session", true);
+    try {
+      execSync("pkill -x orca", { stdio: "pipe" });
+    } catch {}
+    // Give Orca a beat to actually exit before we proceed.
+    await sleep(500);
+  }
+
   speech.ensureSpeechCapture(log);
   await sleep(1000);
 
