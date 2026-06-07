@@ -19,7 +19,7 @@ import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
 import { createOrcaDriver } from "../src/orca/driver.js";
-import { startServer } from "../src/server.js";
+import { startServer, isAllowedNavigationUrl } from "../src/server.js";
 import { readPidFile } from "../src/lib/runtime-paths.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -145,6 +145,19 @@ function printAgentsDoc(json: boolean): number {
 
 async function cmdStart(args: ParsedArgs): Promise<number> {
   const url = args.positionals[0] || null;
+  // Same allow-list the /navigate HTTP route applies. Without this check the
+  // initial page.goto() in initialize() would happily accept file:// or
+  // chrome:// URLs, turning the CLI into a local-file / browser-internal
+  // read primitive — exactly what the /navigate guard exists to prevent.
+  if (url !== null && !isAllowedNavigationUrl(url)) {
+    const msg = "URL scheme not allowed (http/https/data only)";
+    if (args.json) {
+      process.stdout.write(JSON.stringify({ ok: false, error: msg }) + "\n");
+    } else {
+      process.stderr.write(`error: ${msg}\n`);
+    }
+    return 2;
+  }
   const driver = createOrcaDriver();
   await startServer(driver, args.port, args.cdpPort, url);
   // startServer installs SIGINT/SIGTERM handlers and keeps the process alive
