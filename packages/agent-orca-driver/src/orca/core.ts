@@ -423,12 +423,29 @@ function ensureDisplay(): void {
 }
 
 function ensureWindowManager(): void {
-  try {
-    if (spawnSync("pgrep", ["-x", "openbox"], { stdio: "pipe" }).status === 0) {
-      log("Window manager (openbox) already running");
-      return;
+  // Check for a WM on OUR display, not globally. A previous version used
+  // `pgrep -x openbox`, which returned success when ANY openbox was running
+  // (typically the user's openbox on :0 / their real session). We'd skip
+  // spawning one for :99 and Chromium ended up unmanaged — xdotool
+  // windowfocus and the focus-into-web-area click both got flaky.
+  // _NET_SUPPORTING_WM_CHECK is the EWMH property a conformant WM sets on
+  // the root window when it claims a display; absence means no WM here.
+  const display = process.env.DISPLAY;
+  if (display) {
+    try {
+      const r = spawnSync("xprop", ["-root", "_NET_SUPPORTING_WM_CHECK"], {
+        env: { ...process.env, DISPLAY: display },
+        encoding: "utf-8",
+        timeout: 2_000,
+      });
+      if (r.status === 0 && /window id/i.test(r.stdout || "")) {
+        log(`Window manager already running on ${display}`);
+        return;
+      }
+    } catch {
+      // xprop may not be installed; fall through and just try to start one
     }
-  } catch {}
+  }
 
   try {
     execSync("which openbox", { stdio: "pipe" });
@@ -439,7 +456,7 @@ function ensureWindowManager(): void {
 
   spawn("openbox", [], { stdio: "ignore", detached: true, env: process.env }).unref();
   spawnSync("sleep", ["0.5"]);
-  log("Started openbox window manager");
+  log(`Started openbox window manager on ${display || "default display"}`);
 }
 
 function ensureDbus(): void {

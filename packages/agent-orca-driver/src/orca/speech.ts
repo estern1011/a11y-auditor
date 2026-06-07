@@ -17,6 +17,8 @@ import {
   watchFile,
   unwatchFile,
   statSync,
+  existsSync,
+  renameSync,
 } from "fs";
 import { execSync } from "child_process";
 import { homedir } from "os";
@@ -177,11 +179,35 @@ def _hook_srv(self, text, acss=None, **kw):
 sdf.SpeechServer._speak = _hook_srv
 `;
 
-export function ensureSpeechCapture(log: (msg: string) => void): void {
+// A pre-existing orca-customizations.py belongs to the user — keybinding
+// rebinds, alternative speech config, third-party scripts. Silently
+// overwriting it would lose data and the cleanup path can't restore from
+// memory either. Move the original to `.bak-<timestamp>` and log the path
+// so the user can find + restore (or merge) after they're done with us.
+function backupExistingCustomizations(customPath: string, log: (msg: string, err?: boolean) => void): void {
+  if (!existsSync(customPath)) return;
+  let existing: string;
+  try { existing = readFileSync(customPath, "utf-8"); } catch { return; }
+  if (existing === ORCA_CUSTOMIZATIONS) return; // already ours — idempotent
+  // Don't churn backups on every daemon restart if the user-content hasn't
+  // changed since the first backup. Only back up the FIRST time we see a
+  // non-empty, non-ours file.
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = `${customPath}.bak-${stamp}`;
+  try {
+    renameSync(customPath, backupPath);
+    log(`existing orca-customizations.py backed up to ${backupPath} — restore manually after the daemon exits`, true);
+  } catch (e) {
+    log(`failed to back up existing orca-customizations.py: ${e instanceof Error ? e.message : String(e)}`, true);
+  }
+}
+
+export function ensureSpeechCapture(log: (msg: string, err?: boolean) => void): void {
   const orcaDir = join(homedir(), ".local", "share", "orca");
   mkdirSync(orcaDir, { recursive: true });
 
   const customPath = join(orcaDir, "orca-customizations.py");
+  backupExistingCustomizations(customPath, log);
   writeFileSync(customPath, ORCA_CUSTOMIZATIONS);
 
   // NOTE: this function used to `pkill -x orca` here unconditionally so
