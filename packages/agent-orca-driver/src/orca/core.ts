@@ -133,6 +133,8 @@ let xvfbProc: ReturnType<typeof spawn> | null = null;
 let openboxProc: ReturnType<typeof spawn> | null = null;
 let atSpiProc: ReturnType<typeof spawn> | null = null;
 let atSpiRegistryProc: ReturnType<typeof spawn> | null = null;
+let orcaPid: number | null = null;
+let dbusPid: number | null = null;
 
 // ---------------------------------------------------------------------------
 // Operation lock — serializes all Orca operations
@@ -494,7 +496,16 @@ function ensureDbus(): void {
   const match = /DBUS_SESSION_BUS_ADDRESS='([^']+)'/.exec(result);
   if (!match) throw new Error("dbus-launch output not parseable");
   process.env.DBUS_SESSION_BUS_ADDRESS = match[1];
-  log(`D-Bus started: ${match[1]}`);
+  // dbus-launch also emits `DBUS_SESSION_BUS_PID=<pid>;` — capture it so
+  // cleanup() can stop the daemon we spawned. Without this the private
+  // dbus-daemon outlives the driver on every shutdown / initialize failure.
+  const pidMatch = /DBUS_SESSION_BUS_PID=(\d+)/.exec(result);
+  if (pidMatch) {
+    dbusPid = parseInt(pidMatch[1], 10);
+    log(`D-Bus started: ${match[1]} (PID: ${dbusPid})`);
+  } else {
+    log(`D-Bus started: ${match[1]} (no PID in output — won't be cleaned up)`, true);
+  }
 }
 
 function ensureAtSpi2(): void {
@@ -585,18 +596,31 @@ function startOrca(): boolean {
     log("Orca already running");
     return false;
   }
-  spawn("orca", [], { detached: true, stdio: "ignore", env: { ...process.env } }).unref();
-  log("Started Orca");
+  const proc = spawn("orca", [], { detached: true, stdio: "ignore", env: { ...process.env } });
+  proc.unref();
+  orcaPid = proc.pid ?? null;
+  log(`Started Orca (PID: ${orcaPid})`);
   return true;
 }
 
 function stopOrca() {
-  try {
-    spawnSync("pkill", ["-x", "orca"]);
-    log("Stopped Orca");
-  } catch (e) {
-    log(`Failed to stop Orca: ${errorMsg(e)}`, true);
+  // SIGTERM the PID we spawned rather than `pkill -x orca`. If the user
+  // started a second Orca during the daemon's lifetime (e.g. they turned on
+  // their desktop accessibility tools mid-session), a global pkill would
+  // take that one out too — even though weStartedOrca is supposed to scope
+  // cleanup to the process we own.
+  if (orcaPid == null) {
+    log("stopOrca: no tracked Orca PID, skipping");
+    return;
   }
+  try {
+    process.kill(orcaPid);
+    log(`Stopped Orca (PID: ${orcaPid})`);
+  } catch (e) {
+    // ESRCH (already exited) is fine; anything else is worth logging.
+    log(`Failed to stop Orca (PID: ${orcaPid}): ${errorMsg(e)}`, true);
+  }
+  orcaPid = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -837,6 +861,12 @@ export async function cleanup() {
         process.kill(proc.pid);
       } catch {}
     }
+  }
+  if (dbusPid != null) {
+    try {
+      process.kill(dbusPid);
+    } catch {}
+    dbusPid = null;
   }
   atSpiRegistryProc = null;
   atSpiProc = null;
