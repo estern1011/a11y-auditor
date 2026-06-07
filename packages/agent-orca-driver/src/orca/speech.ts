@@ -130,21 +130,42 @@ import orca.speech as speech_mod
 # exotic $HOME) can't break out of the literal and run arbitrary Python
 # inside Orca.
 _log_path = ${JSON.stringify(SPEECH_LOG)}
-_seen = set()  # deduplicate within same call
+# Dedup window. The SAME utterance flows through BOTH _hook_mod and
+# _hook_srv (the module-level _speak typically calls into SpeechServer),
+# so we'd log every string twice without this. _seen suppresses the
+# duplicate within one utterance.
+#
+# The window resets if more than DEDUP_WINDOW_MS milliseconds have
+# passed since the last log call — this matters for utterances that
+# bypass _hook_mod and go straight through _hook_srv (focus changes,
+# Tab cycles). Without the time-based reset, a label like "Submit" or
+# a role like "button" said once via SpeechServer would be suppressed
+# for the rest of the session, which silently corrupted transcripts on
+# any page with repeated labels.
+import time
+_seen = set()
+_last_log_ms = 0
+DEDUP_WINDOW_MS = 250  # generous: one utterance fits comfortably in this
 
 def _log(text):
-    if text and isinstance(text, str) and text.strip():
-        t = text.strip()
-        if t not in _seen:
-            _seen.add(t)
-            with open(_log_path, "a") as f:
-                f.write(t + "\\n")
+    global _last_log_ms
+    if not (text and isinstance(text, str) and text.strip()):
+        return
+    now_ms = time.monotonic() * 1000.0
+    if now_ms - _last_log_ms > DEDUP_WINDOW_MS:
+        _seen.clear()
+    _last_log_ms = now_ms
+    t = text.strip()
+    if t not in _seen:
+        _seen.add(t)
+        with open(_log_path, "a") as f:
+            f.write(t + "\\n")
 
 _orig_mod = speech_mod._speak
 def _hook_mod(text, acss=None, interrupt=True):
+    if interrupt: _seen.clear()
     try: _log(text)
     except: pass
-    if interrupt: _seen.clear()
     return _orig_mod(text, acss, interrupt)
 speech_mod._speak = _hook_mod
 

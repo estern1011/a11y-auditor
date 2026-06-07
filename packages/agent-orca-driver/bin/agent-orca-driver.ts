@@ -152,7 +152,7 @@ async function cmdStart(args: ParsedArgs): Promise<number> {
   return 0;
 }
 
-function cmdStop(args: ParsedArgs): number {
+async function cmdStop(args: ParsedArgs): Promise<number> {
   const driver = createOrcaDriver();
   const pid = readPidFile(driver.pidFile);
   if (!pid) {
@@ -163,12 +163,58 @@ function cmdStop(args: ParsedArgs): number {
     }
     return 1;
   }
+
+  // Prefer the HTTP /stop endpoint: only the actual daemon answers there,
+  // so this avoids the "stale pidfile + PID reuse → SIGTERM hits an unrelated
+  // process" foot-gun that a bare `process.kill(pid)` falls into. If the HTTP
+  // path works, the daemon's own SIGINT/SIGTERM handler runs cleanup() and
+  // removes the pidfile, so a stale file from this run won't leak.
+  try {
+    const res = await fetch(`http://127.0.0.1:${args.port}/stop`, {
+      method: "POST",
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (res.ok) {
+      if (args.json) {
+        process.stdout.write(JSON.stringify({ ok: true, pid, method: "http" }) + "\n");
+      } else {
+        process.stdout.write(`daemon stopped via HTTP /stop (pid ${pid})\n`);
+      }
+      return 0;
+    }
+  } catch {
+    /* fall through to the verified-SIGTERM path */
+  }
+
+  // HTTP didn't work — daemon is probably wedged. Verify the PID belongs to a
+  // process whose cmdline mentions `agent-orca-driver` BEFORE signalling, so
+  // a stale pidfile pointing at someone else's PID after reuse won't take
+  // out an unrelated process.
+  let isOurs = false;
+  try {
+    const cmdline = readFileSync(`/proc/${pid}/cmdline`, "utf-8").replace(/\0/g, " ");
+    isOurs = cmdline.includes("agent-orca-driver");
+  } catch { /* /proc not available or process gone */ }
+
+  if (!isOurs) {
+    const reason = "pidfile is stale (process is not agent-orca-driver); refusing to signal";
+    if (args.json) {
+      process.stdout.write(JSON.stringify({ ok: false, pid, error: reason }) + "\n");
+    } else {
+      process.stderr.write(`${reason} (pid ${pid})\n`);
+    }
+    // Best-effort: remove the stale pidfile so future status/stop calls don't
+    // keep re-attempting against the wrong PID.
+    try { driver.removePidFile(); } catch { /* ignore */ }
+    return 1;
+  }
+
   try {
     process.kill(pid, "SIGTERM");
     if (args.json) {
-      process.stdout.write(JSON.stringify({ ok: true, pid }) + "\n");
+      process.stdout.write(JSON.stringify({ ok: true, pid, method: "sigterm" }) + "\n");
     } else {
-      process.stdout.write(`sent SIGTERM to pid ${pid}\n`);
+      process.stdout.write(`sent SIGTERM to verified daemon (pid ${pid})\n`);
     }
     return 0;
   } catch (e) {
