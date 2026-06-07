@@ -695,81 +695,95 @@ async function focusBrowser() {
 
 export async function initialize(url: string | null, cdpPort: number) {
   state.cdpPort = cdpPort;
-  ensureDesktopEnv();
 
-  // Detect pre-existing Orca BEFORE we install customizations and (maybe)
-  // restart. On a Xvfb / Codespace environment there's no pre-existing Orca
-  // and this is a no-op. On a real desktop where the user has Orca as their
-  // screen reader, this is THEIR session; refuse by default and require an
-  // explicit opt-in so we don't silently destroy their accessibility setup.
-  // (Earlier versions auto-killed via speech.ts; that defeated the
-  // weStartedOrca cleanup guard AND broke the user's session in one go.)
+  // Detect pre-existing Orca BEFORE bootstrapping the desktop env. `pgrep -x
+  // orca` doesn't need a display, and bailing here avoids leaving Xvfb /
+  // openbox / dbus / at-spi2 / pulse running on an SSH/headless session when
+  // the guard below throws. On a real desktop where the user has Orca as
+  // their screen reader, this is THEIR session; refuse by default and
+  // require an explicit opt-in so we don't silently destroy their
+  // accessibility setup. (Earlier versions auto-killed via speech.ts; that
+  // defeated the weStartedOrca cleanup guard AND broke the user's session
+  // in one go.)
   const preExistingOrca = isOrcaRunning();
-  if (preExistingOrca) {
-    if (process.env.AGENT_ORCA_DRIVER_TAKEOVER !== "1") {
-      throw new Error(
-        "Orca is already running. The daemon needs to own its Orca process.\n" +
-          "Either stop your Orca session first (e.g. `pkill -x orca`) and re-run,\n" +
-          "or set AGENT_ORCA_DRIVER_TAKEOVER=1 to let the daemon kill+restart it\n" +
-          "(your session will not be restored on daemon shutdown).",
-      );
+  if (preExistingOrca && process.env.AGENT_ORCA_DRIVER_TAKEOVER !== "1") {
+    throw new Error(
+      "Orca is already running. The daemon needs to own its Orca process.\n" +
+        "Either stop your Orca session first (e.g. `pkill -x orca`) and re-run,\n" +
+        "or set AGENT_ORCA_DRIVER_TAKEOVER=1 to let the daemon kill+restart it\n" +
+        "(your session will not be restored on daemon shutdown).",
+    );
+  }
+
+  // From here on, any failure must clean up the helpers we just spawned —
+  // Xvfb/openbox/dbus/at-spi2/pulse from ensureDesktopEnv, plus Chromium and
+  // Orca if those got partway. startServer doesn't wrap initialize() in
+  // cleanup(), so a Chromium-launch or Orca-start failure would otherwise
+  // leak a full desktop stack on every retry.
+  try {
+    ensureDesktopEnv();
+
+    if (preExistingOrca) {
+      log("AGENT_ORCA_DRIVER_TAKEOVER=1 — killing pre-existing Orca session", true);
+      try {
+        execSync("pkill -x orca", { stdio: "pipe" });
+      } catch {}
+      // Give Orca a beat to actually exit before we proceed.
+      await sleep(500);
     }
-    log("AGENT_ORCA_DRIVER_TAKEOVER=1 — killing pre-existing Orca session", true);
-    try {
-      execSync("pkill -x orca", { stdio: "pipe" });
-    } catch {}
-    // Give Orca a beat to actually exit before we proceed.
-    await sleep(500);
-  }
 
-  speech.ensureSpeechCapture(log);
-  await sleep(1000);
-
-  state.browser = await chromium.launch({
-    headless: false,
-    args: [
-      `--remote-debugging-port=${cdpPort}`,
-      "--remote-debugging-address=127.0.0.1",
-      "--force-renderer-accessibility",
-      "--start-maximized",
-    ],
-  });
-  const ctx = await state.browser.newContext({ viewport: { width: 1280, height: 1024 } });
-  state.page = await ctx.newPage();
-
-  try {
-    const proc = (state.browser as any)?.process?.();
-    if (proc?.pid) state.browserPid = proc.pid;
-  } catch {}
-
-  if (url) {
-    await state.page.goto(url, { waitUntil: "load" });
-    state.currentUrl = url;
-  }
-
-  state.weStartedOrca = startOrca();
-  state.orcaActive = isOrcaRunning();
-  if (!state.orcaActive) {
+    speech.ensureSpeechCapture(log);
     await sleep(1000);
-    state.orcaActive = isOrcaRunning();
-  }
-  if (!state.orcaActive) {
+
+    state.browser = await chromium.launch({
+      headless: false,
+      args: [
+        `--remote-debugging-port=${cdpPort}`,
+        "--remote-debugging-address=127.0.0.1",
+        "--force-renderer-accessibility",
+        "--start-maximized",
+      ],
+    });
+    const ctx = await state.browser.newContext({ viewport: { width: 1280, height: 1024 } });
+    state.page = await ctx.newPage();
+
     try {
-      await state.browser.close();
+      const proc = (state.browser as any)?.process?.();
+      if (proc?.pid) state.browserPid = proc.pid;
     } catch {}
-    state.browser = null;
-    state.page = null;
-    throw new Error("Orca failed to start. Install: sudo apt install orca");
+
+    if (url) {
+      await state.page.goto(url, { waitUntil: "load" });
+      state.currentUrl = url;
+    }
+
+    state.weStartedOrca = startOrca();
+    state.orcaActive = isOrcaRunning();
+    if (!state.orcaActive) {
+      await sleep(1000);
+      state.orcaActive = isOrcaRunning();
+    }
+    if (!state.orcaActive) {
+      throw new Error("Orca failed to start. Install: sudo apt install orca");
+    }
+    log("Orca active");
+
+    try {
+      safeWriteSync(ORCA_STATE_FILE, JSON.stringify({ weStartedOrca: state.weStartedOrca }));
+    } catch {}
+
+    await sleep(ORCA_INIT_SETTLE_MS);
+    await focusBrowser();
+    log("Browser focused, browse mode active");
+  } catch (e) {
+    log(`initialize failed, cleaning up: ${errorMsg(e)}`, true);
+    try {
+      await cleanup();
+    } catch (cleanupErr) {
+      log(`cleanup during failed init: ${errorMsg(cleanupErr)}`, true);
+    }
+    throw e;
   }
-  log("Orca active");
-
-  try {
-    safeWriteSync(ORCA_STATE_FILE, JSON.stringify({ weStartedOrca: state.weStartedOrca }));
-  } catch {}
-
-  await sleep(ORCA_INIT_SETTLE_MS);
-  await focusBrowser();
-  log("Browser focused, browse mode active");
 }
 
 export async function navigate(url: string): Promise<VoResult> {
