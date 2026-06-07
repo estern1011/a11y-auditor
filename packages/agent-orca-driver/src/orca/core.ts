@@ -10,6 +10,89 @@
  * - Playwright for Chromium lifecycle
  *
  * Other modules (server, CLI) import from here — never from AT-SPI2 directly.
+ *
+ * ===========================================================================
+ * DAEMON STATE MACHINE
+ * ===========================================================================
+ *
+ * The module is a singleton state machine with four lifecycle states. Every
+ * exported function checks or transitions a substate; the operation lock
+ * ensures only one transition runs at a time.
+ *
+ *      uninitialized                 ← module load. No Xvfb, no Orca, no page.
+ *           │
+ *           │  initialize(url, cdpPort)
+ *           │  • ensureDesktopEnv (Xvfb, openbox, dbus, at-spi2, pulse)
+ *           │  • chromium.launch  (headless: false)
+ *           │  • startOrca / isOrcaRunning (own vs. inherit)
+ *           │  • ORCA_STATE_FILE persists weStartedOrca for cleanup
+ *           ▼
+ *        running                     ← every /next /press /perform path
+ *           │
+ *           │  cleanup() [SIGINT/SIGTERM/explicit]
+ *           │  • drains the operation lock first  (await operationLock)
+ *           │  • disconnects atspi D-Bus
+ *           │  • closes the Playwright browser
+ *           │  • stops Orca ONLY if weStartedOrca (don't kill user's running session)
+ *           │  • SIGTERMs Xvfb/at-spi2 children if we started them
+ *           ▼
+ *      shuttingDown                  ← lock flag, no new ops accepted
+ *           │
+ *           ▼
+ *        exited                      ← runtime/PID files removed
+ *
+ * ===========================================================================
+ * INVARIANTS
+ * ===========================================================================
+ *
+ * I1. ONE operation in flight at a time.
+ *     `operationLock` serializes everything that touches Orca or AT-SPI2.
+ *     Without this, two parallel /next calls would race on the speech log
+ *     marker AND on Orca's own keyboard-input queue. The lock is a chain of
+ *     promises — each new op waits on the previous, attaches itself, then
+ *     releases.
+ *
+ * I2. SHUTTING DOWN is one-way.
+ *     Once `shuttingDown = true`, withLock() rejects new ops with "Driver
+ *     is shutting down." The cleanup() function awaits the existing lock
+ *     before tearing down, so the LAST in-flight op finishes; no new op
+ *     can sneak in to mutate state behind cleanup().
+ *
+ * I3. weStartedOrca decides cleanup scope.
+ *     If Orca was already running when initialize() ran (someone else owns
+ *     it — e.g. the user's normal desktop session), we don't kill it on
+ *     shutdown. The persisted ORCA_STATE_FILE survives daemon crashes so
+ *     a future `agent-orca-driver stop` can know whether to stop Orca.
+ *
+ * I4. Transcript is append-only-with-rolling-cap.
+ *     recordTranscript() pushes; the buffer is sliced to the last
+ *     MAX_TRANSCRIPT_ENTRIES on overflow. transcriptIndex is a global
+ *     monotonic counter, NOT array length — survives buffer rolls AND
+ *     DELETE /transcript (callers paginate by highest-index-seen, not by
+ *     position).
+ *
+ * I5. The Xvfb display state IS shared global state.
+ *     Module-level `xvfbProc`/`atSpiProc`/`atSpiRegistryProc` hold PIDs of
+ *     child processes WE spawned. cleanup() walks the list and signals
+ *     them; if we didn't spawn one (inherited DISPLAY/DBUS), the slot
+ *     stays null and the corresponding process is left alone.
+ *
+ * ===========================================================================
+ * WHAT'S NOT COVERED HERE
+ * ===========================================================================
+ *
+ * • The HTTP API surface lives in src/server.ts, which translates routes
+ *   to driver method calls on this module via the ScreenReaderDriver
+ *   interface (src/interface.ts). Nothing in this file knows about HTTP.
+ *
+ * • The fMP4 stream pipeline (src/live/stream.ts) reads the X framebuffer
+ *   that THIS module spawned but otherwise runs independently. Its own
+ *   state machine is documented in that file's header.
+ *
+ * • The speech-capture hook (src/orca/speech.ts) writes a customizations
+ *   .py file that Orca loads on startup; this module's startOrca() expects
+ *   ensureSpeechCapture() to have run BEFORE Orca is spawned, otherwise
+ *   the customizations don't take effect until the next Orca restart.
  */
 
 import { spawn, spawnSync, execSync } from "child_process";
