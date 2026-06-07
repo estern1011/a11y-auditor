@@ -427,10 +427,23 @@ function attachLiveView(server: Server, port: number, driver: ScreenReaderDriver
   const streamWss = new WebSocketServer({ noServer: true });
   const eventsWss = new WebSocketServer({ noServer: true });
 
+  // Backpressure caps. A slow/stalled WS would otherwise grow the daemon's
+  // own send queue without bound — ffmpeg keeps producing ~MB/s of video and
+  // events keep firing. When a client falls this far behind, close them; the
+  // viewer's auto-reconnect will pick back up if/when the bottleneck clears.
+  const STREAM_MAX_BUFFERED = 5_000_000; // ~5 MB ≈ a few seconds of video
+  const EVENTS_MAX_BUFFERED = 1_000_000; // ~1 MB ≈ thousands of pending events
+
   streamWss.on("connection", (ws: WebSocket) => {
     const display = process.env.DISPLAY || ":99";
     const send = (chunk: Buffer) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
+      if (ws.readyState !== WebSocket.OPEN) return;
+      if (ws.bufferedAmount > STREAM_MAX_BUFFERED) {
+        driver.log(`/stream viewer too slow (bufferedAmount=${ws.bufferedAmount}) — closing`, true);
+        try { ws.close(); } catch { /* already torn down */ }
+        return;
+      }
+      ws.send(chunk);
     };
     // If ffmpeg dies mid-session, the encoder uses this to boot the WS so the
     // viewer's client-side auto-reconnect kicks in against a fresh encoder.
@@ -444,7 +457,13 @@ function attachLiveView(server: Server, port: number, driver: ScreenReaderDriver
 
   eventsWss.on("connection", (ws: WebSocket) => {
     const unsubscribe = liveEvents.subscribe((e: LiveEvent) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(e));
+      if (ws.readyState !== WebSocket.OPEN) return;
+      if (ws.bufferedAmount > EVENTS_MAX_BUFFERED) {
+        driver.log(`/events viewer too slow (bufferedAmount=${ws.bufferedAmount}) — closing`, true);
+        try { ws.close(); } catch { /* already torn down */ }
+        return;
+      }
+      ws.send(JSON.stringify(e));
     });
     ws.on("close", unsubscribe);
     ws.on("error", unsubscribe);
