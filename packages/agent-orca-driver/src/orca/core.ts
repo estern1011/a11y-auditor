@@ -755,10 +755,16 @@ export async function navigate(url: string): Promise<VoResult> {
   return withLock(async () => {
     try {
       if (!state.page) return translateError("No page");
-      const marker = speech.mark();
       await state.page.goto(url, { waitUntil: "load" });
       state.currentUrl = url;
       await focusBrowser();
+      // focusBrowser ends with speech.clear() — which also resets nextIndex
+      // to 0. Take the marker AFTER the clear so post-click Orca speech has
+      // indices >= marker. Pre-clear marker capture would put the marker
+      // ahead of every subsequent entry and readCurrentElement would see an
+      // empty speech buffer for the navigated page, silently falling back
+      // to AT-SPI name/role only.
+      const marker = speech.mark();
       await sleep(ORCA_SETTLE_MS);
       return recordTranscript(await readCurrentElement(marker));
     } catch (e) {
@@ -809,8 +815,11 @@ export async function getItemText(): Promise<VoResult> {
 export async function orcaEnter(): Promise<VoResult> {
   return withLock(async () => {
     try {
-      const marker = speech.mark();
       await focusBrowser();
+      // See the note on /navigate: focusBrowser resets the speech buffer's
+      // nextIndex to 0 via speech.clear(), so the marker MUST be taken
+      // after focusBrowser returns or readCurrentElement will see no speech.
+      const marker = speech.mark();
       await sleep(ORCA_SETTLE_MS);
       return recordTranscript(await readCurrentElement(marker));
     } catch (e) {
