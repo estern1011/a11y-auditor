@@ -678,13 +678,16 @@ async function focusBrowser() {
     }
     // Click the center of the screen to focus web content (Chrome is maximized).
     // This real X11 click triggers an AT-SPI2 focus event on the web document,
-    // which causes Orca to enter browse mode.
+    // which causes Orca to enter browse mode AND announce the page/element it
+    // landed on. The CALLER is responsible for the speech buffer (clear +
+    // mark before calling, read after the sleep below) — focusBrowser used
+    // to clear() at the end, which discarded the very announcement we want
+    // to capture for /navigate and /enter.
     spawnSync("xdotool", ["mousemove", "640", "600", "click", "1"], {
       timeout: 5000,
       env: process.env,
     });
     await sleep(ORCA_SETTLE_MS);
-    speech.clear();
   } catch (e) {
     log(`focus warning: ${errorMsg(e)}`);
   }
@@ -775,15 +778,14 @@ export async function navigate(url: string): Promise<VoResult> {
       if (!state.page) return translateError("No page");
       await state.page.goto(url, { waitUntil: "load" });
       state.currentUrl = url;
-      await focusBrowser();
-      // focusBrowser ends with speech.clear() — which also resets nextIndex
-      // to 0. Take the marker AFTER the clear so post-click Orca speech has
-      // indices >= marker. Pre-clear marker capture would put the marker
-      // ahead of every subsequent entry and readCurrentElement would see an
-      // empty speech buffer for the navigated page, silently falling back
-      // to AT-SPI name/role only.
+      // Clear pre-existing speech (from any previous interaction) and take
+      // the marker BEFORE focusBrowser — the click inside focusBrowser is
+      // what triggers Orca's page/focus announcement, and we want to capture
+      // it. marker = 0 (post-clear), the click's speech gets indices >= 0,
+      // and readCurrentElement(marker) reads them all.
+      speech.clear();
       const marker = speech.mark();
-      await sleep(ORCA_SETTLE_MS);
+      await focusBrowser();
       return recordTranscript(await readCurrentElement(marker));
     } catch (e) {
       return translateError(e, { url });
@@ -833,12 +835,11 @@ export async function getItemText(): Promise<VoResult> {
 export async function orcaEnter(): Promise<VoResult> {
   return withLock(async () => {
     try {
-      await focusBrowser();
-      // See the note on /navigate: focusBrowser resets the speech buffer's
-      // nextIndex to 0 via speech.clear(), so the marker MUST be taken
-      // after focusBrowser returns or readCurrentElement will see no speech.
+      // Same shape as /navigate: clear + mark BEFORE focusBrowser so the
+      // click's Orca announcement is captured with indices >= marker.
+      speech.clear();
       const marker = speech.mark();
-      await sleep(ORCA_SETTLE_MS);
+      await focusBrowser();
       return recordTranscript(await readCurrentElement(marker));
     } catch (e) {
       return translateError(e);
