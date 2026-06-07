@@ -61,6 +61,10 @@ the request `Host` header must read as `127.0.0.1:<port>` or
 | POST/GET/DELETE | `/observe` | Start/poll/stop a DOM mutation observer |
 | POST | `/wait-for-selector` | `{selector, state?, timeout?}` |
 | GET | `/commands?filter=` | Catalog of `/perform` command names |
+| GET | `/live` | Live-view HTML page (video + focus rect + transcript) |
+| GET | `/live-status` | JSON: is the video encoder running, how many viewers |
+| WS | `/stream` | Binary h264/fMP4 chunks of the Xvfb framebuffer (for MSE) |
+| WS | `/events` | JSON live events: `transcript`, `focus` (with AT-SPI bbox), `phase` |
 | POST | `/stop` | Graceful shutdown |
 
 ### Example: walking a single tab stop
@@ -108,6 +112,17 @@ DELETE /transcript      # zero the buffer
 POST /enter             # rebase Orca's focus
 loop POST /next + GET /transcript
 ```
+
+## Live view
+
+Open `http://localhost:8001/live` in a browser to watch Chromium + Orca in
+real time: a video of the X framebuffer (h264/fMP4 over the `/stream`
+WebSocket, played via Media Source Extensions), a focus rectangle that tracks
+the screen-reader caret (AT-SPI bounding box), and a live transcript panel.
+The video encoder (ffmpeg) only runs while at least one viewer is connected.
+In Codespaces the port is auto-forwarded — open the forwarded URL. The same
+`/events` WebSocket can be consumed directly (JSON) if an orchestrator wants
+the transcript/focus stream without the HTML viewer.
 
 ## What agent-orca-driver is NOT
 

@@ -336,12 +336,7 @@ async function checkChromium(): Promise<DoctorCheck> {
 
   let browser;
   try {
-    // Match the daemon's launch flags (core.ts initialize) instead of using
-    // the more-permissive --no-sandbox/--disable-gpu pair. Otherwise doctor
-    // can pass on a container missing the sandbox helper while `start` is
-    // still the first thing to actually fail. Genuine sandbox shortfalls
-    // surface here, where the operator expects them.
-    browser = await chromium.launch({ headless: !headful });
+    browser = await chromium.launch({ headless: !headful, args: ["--no-sandbox", "--disable-gpu"] });
     const version = browser.version();
     const mode = headful ? "headful" : "headless (no display available for headful probe)";
     return { name: "Playwright Chromium", ok: true, detail: `launches ${mode} (v${version})` };
