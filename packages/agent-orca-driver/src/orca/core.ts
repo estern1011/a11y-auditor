@@ -227,6 +227,24 @@ export function getTranscriptLength(): number {
   return state.transcript.length;
 }
 
+/**
+ * Cursor for incremental polling: pass this back as `?since=<cursor>` and
+ * get only entries with higher indexes. Equals the highest assigned entry
+ * index, which equals `transcriptIndex - 1` since recordTranscript uses
+ * post-increment. Returns -1 if nothing has been recorded yet, so a fresh
+ * caller can use `since=-1` to receive the entire buffer including the
+ * very first entry (index 0).
+ *
+ * Crucially this is NOT `state.transcript.length`. After DELETE /transcript
+ * the buffer is empty but transcriptIndex keeps growing, and after the
+ * buffer rolls past MAX_TRANSCRIPT_ENTRIES the length is the cap while
+ * indexes keep advancing — using length as the cursor would skip entries
+ * in both cases.
+ */
+export function getTranscriptCursor(): number {
+  return state.transcriptIndex - 1;
+}
+
 // ---------------------------------------------------------------------------
 // Logging & transcript
 // ---------------------------------------------------------------------------

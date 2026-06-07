@@ -194,7 +194,15 @@ export function createHandler(driver: ScreenReaderDriver, port: number) {
         const since = url.searchParams.get("since");
         const entries =
           since !== null ? driver.getTranscript(parseInt(since, 10)) : driver.getTranscript();
-        json(res, 200, { entries, length: driver.getTranscriptLength() });
+        // `cursor` is what the client should pass as `since=` next time —
+        // NOT `length`. They differ after DELETE /transcript or after the
+        // buffer rolls past MAX_TRANSCRIPT_ENTRIES, and clients that used
+        // `since=length` (or `since=length+1`) silently skipped entries.
+        json(res, 200, {
+          entries,
+          length: driver.getTranscriptLength(),
+          cursor: driver.getTranscriptCursor(),
+        });
         return;
       }
 
