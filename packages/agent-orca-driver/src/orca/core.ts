@@ -71,11 +71,17 @@
  *     DELETE /transcript (callers paginate by highest-index-seen, not by
  *     position).
  *
- * I5. The Xvfb display state IS shared global state.
- *     Module-level `xvfbProc`/`atSpiProc`/`atSpiRegistryProc` hold PIDs of
- *     child processes WE spawned. cleanup() walks the list and signals
- *     them; if we didn't spawn one (inherited DISPLAY/DBUS), the slot
- *     stays null and the corresponding process is left alone.
+ * I5. Every spawned helper is owned and reaped — via ONE registry.
+ *     `ownedHelpers` records {name, pid} for each desktop helper WE
+ *     spawned (Xvfb, openbox, dbus-daemon, at-spi2); cleanup() kills
+ *     them in reverse spawn order. Inherited infrastructure (existing
+ *     DISPLAY / DBUS_SESSION_BUS_ADDRESS / running WM) is never
+ *     registered, so it's never touched. Two helpers need bespoke
+ *     ownership: Orca (orcaPid + weStartedOrca, killed via stopOrca)
+ *     and PulseAudio (self-daemonizing, so `weStartedPulse` +
+ *     `pulseaudio --kill`). If you add a spawn site, call trackHelper()
+ *     or give it an explicit ownership story — untracked spawns leak
+ *     across daemon restarts.
  *
  * ===========================================================================
  * WHAT'S NOT COVERED HERE
@@ -129,12 +135,25 @@ const ORCA_QUICK_SETTLE_MS = 400;
 const ORCA_PRESS_SETTLE_MS = 1000;
 const ORCA_INIT_SETTLE_MS = 5000;
 
-let xvfbProc: ReturnType<typeof spawn> | null = null;
-let openboxProc: ReturnType<typeof spawn> | null = null;
-let atSpiProc: ReturnType<typeof spawn> | null = null;
-let atSpiRegistryProc: ReturnType<typeof spawn> | null = null;
+// Desktop helpers WE spawned, in spawn order. cleanup() kills them in
+// reverse order (registry daemons before the X server they talk to).
+// Every spawn-a-helper path MUST register here — this registry replaced
+// per-helper module variables (xvfbProc, openboxProc, dbusPid, ...) after
+// three separate review rounds each found one more spawned-but-untracked
+// helper. One list, one kill loop: a new helper can't forget cleanup
+// without also being visibly absent from its trackHelper() call.
+interface OwnedHelper {
+  name: string;
+  pid: number;
+}
+let ownedHelpers: OwnedHelper[] = [];
+
+function trackHelper(name: string, pid: number | null | undefined): void {
+  if (pid) ownedHelpers.push({ name, pid });
+}
+
 let orcaPid: number | null = null;
-let dbusPid: number | null = null;
+let weStartedPulse = false;
 
 // ---------------------------------------------------------------------------
 // Operation lock — serializes all Orca operations
@@ -419,11 +438,12 @@ function ensureDisplay(): void {
   } catch {}
 
   log("Starting Xvfb on :99...");
-  xvfbProc = spawn("Xvfb", [":99", "-screen", "0", "1280x1024x24", "-ac"], {
+  const xvfbProc = spawn("Xvfb", [":99", "-screen", "0", "1280x1024x24", "-ac"], {
     stdio: "pipe",
     detached: true,
   });
   xvfbProc.unref();
+  trackHelper("Xvfb", xvfbProc.pid);
 
   const start = Date.now();
   while (Date.now() - start < 3000) {
@@ -475,13 +495,13 @@ function ensureWindowManager(): void {
     return;
   }
 
-  // Track the handle so cleanup() can SIGTERM it. When DISPLAY points at a
-  // pre-existing Xvfb we don't own (CI reusing :99 across runs), killing
-  // Xvfb on shutdown wouldn't take this openbox down with it; without a
-  // tracked handle the WM lingers on the display for every subsequent
-  // session.
-  openboxProc = spawn("openbox", [], { stdio: "ignore", detached: true, env: process.env });
+  // Track for cleanup. When DISPLAY points at a pre-existing Xvfb we don't
+  // own (CI reusing :99 across runs), killing Xvfb on shutdown wouldn't
+  // take this openbox down with it; untracked, the WM lingers on the
+  // display for every subsequent session.
+  const openboxProc = spawn("openbox", [], { stdio: "ignore", detached: true, env: process.env });
   openboxProc.unref();
+  trackHelper("openbox", openboxProc.pid);
   spawnSync("sleep", ["0.5"]);
   log(`Started openbox window manager on ${display || "default display"} (PID: ${openboxProc.pid})`);
 }
@@ -501,7 +521,8 @@ function ensureDbus(): void {
   // dbus-daemon outlives the driver on every shutdown / initialize failure.
   const pidMatch = /DBUS_SESSION_BUS_PID=(\d+)/.exec(result);
   if (pidMatch) {
-    dbusPid = parseInt(pidMatch[1], 10);
+    const dbusPid = parseInt(pidMatch[1], 10);
+    trackHelper("dbus-daemon", dbusPid);
     log(`D-Bus started: ${match[1]} (PID: ${dbusPid})`);
   } else {
     log(`D-Bus started: ${match[1]} (no PID in output — won't be cleaned up)`, true);
@@ -531,8 +552,7 @@ function ensureAtSpi2(): void {
         }) || bins[0];
       const proc = spawn(bin, [], { stdio: "ignore", detached: true, env: process.env });
       proc.unref();
-      if (name === "at-spi-bus-launcher") atSpiProc = proc;
-      else atSpiRegistryProc = proc;
+      trackHelper(name, proc.pid);
       log(`${name} started`);
     } catch (e) {
       log(`${name}: ${errorMsg(e)} (may already be running)`);
@@ -550,13 +570,30 @@ function ensureAudioSink(): void {
   }
 
   try {
-    execSync("pulseaudio --check 2>/dev/null || pulseaudio --start --exit-idle-time=-1", {
-      stdio: "pipe",
-    });
+    // Run --check and --start as SEPARATE commands (not `--check || --start`)
+    // so we know which branch happened. pulseaudio --start self-daemonizes,
+    // so there's no child PID to track — `weStartedPulse` + `pulseaudio
+    // --kill` in cleanup() is the ownership mechanism. With
+    // --exit-idle-time=-1 the daemon never exits on its own, so an
+    // untracked start leaked it permanently.
+    let pulseRunning = true;
+    try {
+      execSync("pulseaudio --check", { stdio: "pipe" });
+    } catch {
+      pulseRunning = false;
+    }
+    if (!pulseRunning) {
+      execSync("pulseaudio --start --exit-idle-time=-1", { stdio: "pipe" });
+      weStartedPulse = true;
+    }
     execSync("pactl load-module module-null-sink sink_name=dummy 2>/dev/null || true", {
       stdio: "pipe",
     });
-    log("PulseAudio started with null sink");
+    log(
+      pulseRunning
+        ? "PulseAudio already running, ensured null sink"
+        : "PulseAudio started with null sink",
+    );
   } catch (e) {
     process.env.PULSE_SERVER = "none";
     log(`PulseAudio failed (${errorMsg(e)}), set PULSE_SERVER=none`);
@@ -848,7 +885,18 @@ export async function navigate(url: string): Promise<VoResult> {
   });
 }
 
-export async function cleanup() {
+// Memoized: cleanup can be reached concurrently — the SIGINT/SIGTERM
+// handler in startServer registers BEFORE initialize(), so a signal during
+// bootstrap runs cleanup() while initialize()'s own catch path is about to
+// call it too. Both callers await the same single teardown.
+let cleanupPromise: Promise<void> | null = null;
+
+export function cleanup(): Promise<void> {
+  if (!cleanupPromise) cleanupPromise = doCleanup();
+  return cleanupPromise;
+}
+
+async function doCleanup(): Promise<void> {
   shuttingDown = true;
   await operationLock;
   speech.stopWatching();
@@ -865,23 +913,24 @@ export async function cleanup() {
   state.orcaActive = false;
   state.page = null;
   state.currentUrl = null;
-  for (const proc of [atSpiRegistryProc, atSpiProc, openboxProc, xvfbProc]) {
-    if (proc?.pid) {
-      try {
-        process.kill(proc.pid);
-      } catch {}
-    }
-  }
-  if (dbusPid != null) {
+  // Reverse spawn order: registry daemons go down before the bus/display
+  // they're attached to.
+  for (const helper of [...ownedHelpers].reverse()) {
     try {
-      process.kill(dbusPid);
+      process.kill(helper.pid);
+      log(`Stopped ${helper.name} (PID: ${helper.pid})`);
     } catch {}
-    dbusPid = null;
   }
-  atSpiRegistryProc = null;
-  atSpiProc = null;
-  openboxProc = null;
-  xvfbProc = null;
+  ownedHelpers = [];
+  if (weStartedPulse) {
+    try {
+      execSync("pulseaudio --kill", { stdio: "pipe" });
+      log("Stopped PulseAudio");
+    } catch (e) {
+      log(`pulseaudio --kill: ${errorMsg(e)}`, true);
+    }
+    weStartedPulse = false;
+  }
 }
 
 export async function getItemText(): Promise<VoResult> {
