@@ -73,6 +73,18 @@ Once the daemon is running, open `http://localhost:8001/live` in a browser
 
 The video encoder (ffmpeg) runs only while a viewer is connected.
 
+## Live view
+
+Once the daemon is running, open `http://localhost:8001/live` in a browser
+(in Codespaces, the forwarded URL) to watch Chromium + Orca in real time:
+
+- a video of the X framebuffer (h264/fMP4 over the `/stream` WebSocket,
+  played via Media Source Extensions),
+- a focus rectangle tracking the screen-reader caret (AT-SPI bounding box),
+- a live, auto-scrolling transcript panel (`/events` WebSocket).
+
+The video encoder (ffmpeg) runs only while a viewer is connected.
+
 ## Status
 
 `0.1.0-dev` — Days 1–3 of the [agent-orca-driver

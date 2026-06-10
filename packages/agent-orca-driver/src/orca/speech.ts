@@ -18,13 +18,21 @@ import {
   unwatchFile,
   statSync,
 } from "fs";
-import { execSync } from "child_process";
-import { homedir } from "os";
 import { join } from "path";
-import { runtimePath, safeWriteSync } from "../lib/runtime-paths.js";
+import { runtimePath, getRuntimeDir, safeWriteSync } from "../lib/runtime-paths.js";
 import { liveEvents } from "../live/events.js";
 
 export const SPEECH_LOG = runtimePath("orca-speech.log");
+
+// Isolated XDG_DATA_HOME for our Orca process. Orca resolves
+// `$XDG_DATA_HOME/orca/orca-customizations.py`, so pointing it at a
+// runtime-local directory keeps our capture hook out of the user's
+// `~/.local/share/orca/` entirely — no backup-restore dance, no risk of
+// leaving a stale monkey-patch behind that the user's later desktop Orca
+// session would load. core.ts spawns Orca with this in env.
+export function getOrcaXdgDataHome(): string {
+  return join(getRuntimeDir(), "orca-data");
+}
 
 export interface SpeechEntry {
   text: string;
@@ -132,24 +140,42 @@ const ORCA_CUSTOMIZATIONS = `
 import orca.speechdispatcherfactory as sdf
 import orca.speech as speech_mod
 
-_log_path = "${SPEECH_LOG}"
-# Dedup window for a single utterance. We hook BOTH speech_mod._speak and
-# SpeechServer._speak; the former typically calls into the latter, so the
-# same string flows through both hooks. _seen lets the second hook skip
-# the duplicate. interrupt=True (the default) signals a fresh utterance,
-# at which point we reset the window so the same text in a NEW utterance
-# is logged again -- but the reset has to happen BEFORE this hook's _log
-# call (not after), otherwise it clears the entry we just added and the
-# SpeechServer hook re-logs the same line.
+# The log path is encoded via JSON.stringify on the Node side. A JSON string
+# literal is a valid Python string literal for our character set, so a path
+# whose components contain a quote or backslash (via $XDG_RUNTIME_DIR or an
+# exotic $HOME) can't break out of the literal and run arbitrary Python
+# inside Orca.
+_log_path = ${JSON.stringify(SPEECH_LOG)}
+# Dedup window. The SAME utterance flows through BOTH _hook_mod and
+# _hook_srv (the module-level _speak typically calls into SpeechServer),
+# so we'd log every string twice without this. _seen suppresses the
+# duplicate within one utterance.
+#
+# The window resets if more than DEDUP_WINDOW_MS milliseconds have
+# passed since the last log call — this matters for utterances that
+# bypass _hook_mod and go straight through _hook_srv (focus changes,
+# Tab cycles). Without the time-based reset, a label like "Submit" or
+# a role like "button" said once via SpeechServer would be suppressed
+# for the rest of the session, which silently corrupted transcripts on
+# any page with repeated labels.
+import time
 _seen = set()
+_last_log_ms = 0
+DEDUP_WINDOW_MS = 250  # generous: one utterance fits comfortably in this
 
 def _log(text):
-    if text and isinstance(text, str) and text.strip():
-        t = text.strip()
-        if t not in _seen:
-            _seen.add(t)
-            with open(_log_path, "a") as f:
-                f.write(t + "\\n")
+    global _last_log_ms
+    if not (text and isinstance(text, str) and text.strip()):
+        return
+    now_ms = time.monotonic() * 1000.0
+    if now_ms - _last_log_ms > DEDUP_WINDOW_MS:
+        _seen.clear()
+    _last_log_ms = now_ms
+    t = text.strip()
+    if t not in _seen:
+        _seen.add(t)
+        with open(_log_path, "a") as f:
+            f.write(t + "\\n")
 
 _orig_mod = speech_mod._speak
 def _hook_mod(text, acss=None, interrupt=True):
@@ -167,20 +193,31 @@ def _hook_srv(self, text, acss=None, **kw):
 sdf.SpeechServer._speak = _hook_srv
 `;
 
-export function ensureSpeechCapture(log: (msg: string) => void): void {
-  const orcaDir = join(homedir(), ".local", "share", "orca");
-  mkdirSync(orcaDir, { recursive: true });
+export function ensureSpeechCapture(log: (msg: string, err?: boolean) => void): void {
+  // Write into an ISOLATED XDG_DATA_HOME under our runtime dir rather than
+  // the user's `~/.local/share/orca/`. core.ts must spawn Orca with this
+  // path as XDG_DATA_HOME so Orca loads our customizations from here.
+  // Earlier versions wrote directly to the user's home and tried to
+  // back-up-and-restore, but cleanup couldn't be relied on (hard crash,
+  // SIGKILL, container exit), so the monkey-patch leaked into the user's
+  // later desktop Orca session. Isolation removes the problem entirely.
+  const orcaDir = join(getOrcaXdgDataHome(), "orca");
+  mkdirSync(orcaDir, { recursive: true, mode: 0o700 });
 
   const customPath = join(orcaDir, "orca-customizations.py");
   writeFileSync(customPath, ORCA_CUSTOMIZATIONS);
 
-  // Kill any existing Orca so it restarts with our customizations
-  try {
-    execSync("pkill -x orca", { stdio: "pipe" });
-  } catch {}
+  // NOTE: this function used to `pkill -x orca` here unconditionally so
+  // an already-running Orca would pick up the customizations on restart.
+  // That silently destroyed the user's existing accessibility session on
+  // a real Linux desktop AND defeated the weStartedOrca cleanup guard
+  // in core.ts (by the time startOrca() checked isOrcaRunning(), the kill
+  // had already happened — daemon then thought it had a clean-start
+  // ownership and shut Orca down on exit). The Orca lifecycle is now
+  // the caller's responsibility (see core.ts initialize).
 
   clear();
   startWatching();
 
-  log("Speech capture configured (Orca customizations → " + SPEECH_LOG + ")");
+  log(`Speech capture configured (customizations → ${customPath}, log → ${SPEECH_LOG})`);
 }

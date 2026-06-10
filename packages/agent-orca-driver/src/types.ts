@@ -45,7 +45,16 @@ export interface TranscriptEntry extends VoResponse {
 
 export interface TranscriptResponse {
   entries: TranscriptEntry[];
+  /** Current buffer SIZE — NOT a usable continuation value. See `cursor`. */
   length: number;
+  /**
+   * Pass this back as `?since=<cursor>` to receive only entries with higher
+   * indexes. Equals the highest assigned transcript index (monotonic), NOT
+   * the buffer length — those diverge after `DELETE /transcript` or after
+   * the buffer rolls past `MAX_TRANSCRIPT_ENTRIES`. `-1` when no entries
+   * have been recorded yet (so `since=-1` returns everything).
+   */
+  cursor: number;
 }
 
 export interface ClearTranscriptResponse {

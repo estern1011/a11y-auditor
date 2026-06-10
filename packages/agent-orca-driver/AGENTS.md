@@ -63,7 +63,7 @@ is single-session and serializes all screen-reader operations.
 | POST   | `/perform`         | `{ command: string }` (see `GET /commands`) | `VoResponse` |
 | POST   | `/press`           | `{ key: string, modifiers?: string \| string[] }` | `VoResponse` |
 | GET    | `/item-text`       | — | `VoResponse` |
-| GET    | `/transcript?since=N` | — | `{ entries: TranscriptEntry[], length: number }` |
+| GET    | `/transcript?since=N` | — | `{ entries: TranscriptEntry[], length: number, cursor: number }` |
 | DELETE | `/transcript`      | — | `{ cleared: number }` |
 | POST   | `/audit`           | `AxeAuditOptions` (see below; all fields optional) | `AxeAuditResult` |
 | GET    | `/loading-state`   | — | `LoadingState` |
@@ -273,9 +273,10 @@ the transcript/focus stream without the HTML viewer.
 - `/audit`'s response counts `passes` and `inapplicable` (not the full node
   lists, to keep payloads tractable); `violations` and `incomplete` carry
   full axe records.
-- `since`-paging the transcript: store the **highest `index` you've seen**
-  and pass it as `since=`. Don't use the array length — `index` is a global
-  counter that survives `DELETE /transcript`.
+- `since`-paging the transcript: pass the response's **`cursor`** back as
+  `since=` on the next poll. Don't use `length` — cursor is the highest
+  assigned `index` (a global counter that survives `DELETE /transcript`
+  and buffer rollover), while `length` is just the current buffer size.
 - `SAY_ALL` (and most `/perform` commands) returns *immediately* with the
   current AT-SPI focus state — it dispatches the Orca command, it doesn't
   block until Orca finishes speaking. Poll `/transcript` to follow what

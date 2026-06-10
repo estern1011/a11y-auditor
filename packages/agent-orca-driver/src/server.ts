@@ -22,6 +22,7 @@ import { viewerHtml } from "./live/viewer.js";
 import {
   addStreamClient,
   configureStreamLogger,
+  getCaptureSize,
   streamStatus,
   stopStream,
 } from "./live/stream.js";
@@ -107,48 +108,63 @@ function isCodespacesForwardedHost(host: string): boolean {
   return CODESPACES_HOST_RE.test(host) || CODESPACES_PREVIEW_RE.test(host);
 }
 
-// Origin must be CORRELATED with Host. A naive "Codespaces Origins are
-// always OK" check is exploitable: an attacker-controlled page in an
-// unrelated Codespace (Origin: https://attacker.app.github.dev) could
-// `fetch("http://127.0.0.1:<port>/transcript")`, the browser sends
-// `Host: 127.0.0.1:<port>` (passes localhost) and the attacker-controlled
-// Codespaces Origin would pass an independent allow-list — exposing the
-// local control API + transcript + framebuffer.
+// One policy, one decision. Earlier rounds split this into `isHostAllowed` +
+// `isOriginAllowed` and AND-ed them at every call site, which is what let a
+// cross-Codespace WS hijack through (the two checks were correct in isolation
+// but admitted attacker pairs together). Routing everything through one
+// function — and returning a tagged reason instead of a bare boolean — keeps
+// the policy expressible in one place and makes the per-case behavior
+// testable from a single table.
 //
-// Rule:
-//   - Host is localhost  →  Origin must be localhost (or absent).
-//   - Host is Codespaces →  Origin's host must EQUAL that exact Host (or absent).
-//   - Anything else → rejected. (Host already enforces the allow-set.)
-function isOriginAllowed(origin: string | undefined, host: string | undefined, port: number): boolean {
-  if (origin === undefined) return true; // non-browser caller (curl, agent CLI)
-  const lower = origin.toLowerCase();
-  const hostLower = (host || "").toLowerCase();
+// Rule (Host drives, Origin must match):
+//   - Host is 127.0.0.1:<port> or localhost:<port>
+//        Origin must be the same loopback URL (or absent — non-browser caller).
+//   - Host is a Codespaces forwarded URL (`<name>.app.github.dev`, etc.)
+//        Origin's host must EQUAL that same forwarded URL (or be absent).
+//   - Anything else → reject.
+export type RequestDecision =
+  | { ok: true }
+  | { ok: false; status: 403; reason: "bad host" | "bad origin" };
 
-  if (hostLower === `127.0.0.1:${port}` || hostLower === `localhost:${port}`) {
-    return lower === `http://127.0.0.1:${port}` || lower === `http://localhost:${port}`;
-  }
+export function decideRequest(
+  host: string | undefined,
+  origin: string | undefined,
+  port: number,
+): RequestDecision {
+  if (!host) return { ok: false, status: 403, reason: "bad host" };
+  const hostLower = host.toLowerCase();
 
-  if (isCodespacesForwardedHost(hostLower)) {
-    try {
-      const u = new URL(lower);
-      return (
-        (u.protocol === "https:" || u.protocol === "http:") &&
-        u.host === hostLower
-      );
-    } catch {
-      return false;
+  const isLoopback =
+    hostLower === `127.0.0.1:${port}` || hostLower === `localhost:${port}`;
+  const isCodespaces = isCodespacesForwardedHost(hostLower);
+  if (!isLoopback && !isCodespaces) return { ok: false, status: 403, reason: "bad host" };
+
+  if (origin === undefined) return { ok: true }; // non-browser caller (curl, agent CLI)
+  const originLower = origin.toLowerCase();
+
+  if (isLoopback) {
+    if (
+      originLower === `http://127.0.0.1:${port}` ||
+      originLower === `http://localhost:${port}`
+    ) {
+      return { ok: true };
     }
+    return { ok: false, status: 403, reason: "bad origin" };
   }
 
-  return false;
-}
-
-function isHostAllowed(host: string | undefined, port: number): boolean {
-  if (!host) return false;
-  const lower = host.toLowerCase();
-  if (lower === `127.0.0.1:${port}` || lower === `localhost:${port}`) return true;
-  // Codespaces forwarded URL — Host header reflects the public hostname.
-  return isCodespacesForwardedHost(lower);
+  // isCodespaces — origin must point at the SAME forwarded host.
+  try {
+    const u = new URL(originLower);
+    if (
+      (u.protocol === "https:" || u.protocol === "http:") &&
+      u.host === hostLower
+    ) {
+      return { ok: true };
+    }
+  } catch {
+    /* fall through to reject */
+  }
+  return { ok: false, status: 403, reason: "bad origin" };
 }
 
 // ---------------------------------------------------------------------------
@@ -163,14 +179,10 @@ export function createHandler(driver: ScreenReaderDriver, port: number) {
     const url = new URL(req.url || "/", "http://localhost");
     const path = url.pathname;
 
-    // Reject DNS-rebinding and cross-origin browser callers before any
-    // route runs.
-    if (!isHostAllowed(req.headers.host, port)) {
-      json(res, 403, { error: "bad host" });
-      return;
-    }
-    if (!isOriginAllowed(req.headers.origin, req.headers.host, port)) {
-      json(res, 403, { error: "bad origin" });
+    // DNS-rebinding + cross-origin gate, applied before any route runs.
+    const decision = decideRequest(req.headers.host, req.headers.origin, port);
+    if (!decision.ok) {
+      json(res, decision.status, { error: decision.reason });
       return;
     }
 
@@ -179,7 +191,7 @@ export function createHandler(driver: ScreenReaderDriver, port: number) {
         const s = driver.getStatus();
         json(res, 200, {
           status: "running",
-          screenReaderActive: s.screenReaderActive,
+          voiceoverActive: s.screenReaderActive, // keep field name for API compat
           currentUrl: s.currentUrl,
           cdpPort: s.cdpPort,
         });
@@ -254,7 +266,15 @@ export function createHandler(driver: ScreenReaderDriver, port: number) {
         const since = url.searchParams.get("since");
         const entries =
           since !== null ? driver.getTranscript(parseInt(since, 10)) : driver.getTranscript();
-        json(res, 200, { entries, length: driver.getTranscriptLength() });
+        // `cursor` is what the client should pass as `since=` next time —
+        // NOT `length`. They differ after DELETE /transcript or after the
+        // buffer rolls past MAX_TRANSCRIPT_ENTRIES, and clients that used
+        // `since=length` (or `since=length+1`) silently skipped entries.
+        json(res, 200, {
+          entries,
+          length: driver.getTranscriptLength(),
+          cursor: driver.getTranscriptCursor(),
+        });
         return;
       }
 
@@ -345,10 +365,22 @@ export function createHandler(driver: ScreenReaderDriver, port: number) {
       }
 
       if (path === "/live" && method === "GET") {
-        const html = viewerHtml();
+        // Query the active display's geometry so the viewer's focus-overlay
+        // scaling matches whatever size ffmpeg is actually capturing.
+        const display = process.env.DISPLAY || ":99";
+        const { width, height } = getCaptureSize(display);
+        const html = viewerHtml(width, height);
         res.writeHead(200, {
           "Content-Type": "text/html; charset=utf-8",
           "Cache-Control": "no-store",
+          // Anti-framing: a hostile page that iframes /live runs JS at the
+          // daemon origin and could open /stream + /events from inside the
+          // frame, then clickjack the user into forwarding keystrokes to
+          // /press. The navigation request for an iframe load often has no
+          // Origin header so the request gate alone won't stop it; the
+          // browser-enforced framing headers do.
+          "X-Frame-Options": "DENY",
+          "Content-Security-Policy": "frame-ancestors 'none'",
         });
         res.end(html);
         return;
@@ -403,34 +435,55 @@ function attachLiveView(server: Server, port: number, driver: ScreenReaderDriver
   const streamWss = new WebSocketServer({ noServer: true });
   const eventsWss = new WebSocketServer({ noServer: true });
 
+  // Backpressure caps. A slow/stalled WS would otherwise grow the daemon's
+  // own send queue without bound — ffmpeg keeps producing ~MB/s of video and
+  // events keep firing. When a client falls this far behind, close them; the
+  // viewer's auto-reconnect will pick back up if/when the bottleneck clears.
+  const STREAM_MAX_BUFFERED = 5_000_000; // ~5 MB ≈ a few seconds of video
+  const EVENTS_MAX_BUFFERED = 1_000_000; // ~1 MB ≈ thousands of pending events
+
   streamWss.on("connection", (ws: WebSocket) => {
     const display = process.env.DISPLAY || ":99";
     const send = (chunk: Buffer) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(chunk);
+      if (ws.readyState !== WebSocket.OPEN) return;
+      if (ws.bufferedAmount > STREAM_MAX_BUFFERED) {
+        driver.log(`/stream viewer too slow (bufferedAmount=${ws.bufferedAmount}) — closing`, true);
+        try { ws.close(); } catch { /* already torn down */ }
+        return;
+      }
+      ws.send(chunk);
     };
-    const dispose = addStreamClient(send, display);
+    // If ffmpeg dies mid-session, the encoder uses this to boot the WS so the
+    // viewer's client-side auto-reconnect kicks in against a fresh encoder.
+    const forceClose = () => {
+      try { ws.close(); } catch { /* already closed */ }
+    };
+    const dispose = addStreamClient(send, display, forceClose);
     ws.on("close", dispose);
     ws.on("error", dispose);
   });
 
   eventsWss.on("connection", (ws: WebSocket) => {
     const unsubscribe = liveEvents.subscribe((e: LiveEvent) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(e));
+      if (ws.readyState !== WebSocket.OPEN) return;
+      if (ws.bufferedAmount > EVENTS_MAX_BUFFERED) {
+        driver.log(`/events viewer too slow (bufferedAmount=${ws.bufferedAmount}) — closing`, true);
+        try { ws.close(); } catch { /* already torn down */ }
+        return;
+      }
+      ws.send(JSON.stringify(e));
     });
     ws.on("close", unsubscribe);
     ws.on("error", unsubscribe);
   });
 
   server.on("upgrade", (req: IncomingMessage, socket: Socket, head: Buffer) => {
-    // Apply the SAME host + origin allow-list the HTTP routes use. Without the
-    // origin check, any web page the user visits could open ws://127.0.0.1:
-    // <port>/events or /stream and read the live transcript + framebuffer
-    // (the Host header is satisfiable cross-origin; Origin is what gives the
-    // attacker away).
-    if (
-      !isHostAllowed(req.headers.host, port) ||
-      !isOriginAllowed(req.headers.origin, req.headers.host, port)
-    ) {
+    // SAME policy the HTTP routes use — one decision for the whole request.
+    // Without the Origin half, any page the user visits could open
+    // ws://127.0.0.1:<port>/events or /stream and read the live transcript
+    // + framebuffer (the Host header is satisfiable cross-origin; Origin
+    // is what gives the attacker away).
+    if (!decideRequest(req.headers.host, req.headers.origin, port).ok) {
       socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
       socket.destroy();
       return;
@@ -461,10 +514,34 @@ export async function startServer(
     safeWriteSync(driver.logFile, "");
   } catch {}
 
-  await driver.initialize(url, cdpPort);
-
+  // Server is created here but not yet listening — that happens after
+  // initialize() succeeds. We install the SIGINT/SIGTERM handler BEFORE
+  // initialize() so a Ctrl-C or process-manager timeout during the
+  // multi-second bootstrap (Xvfb, openbox, dbus, at-spi2, Chromium, Orca)
+  // still runs cleanup() instead of taking Node's default signal exit and
+  // leaving the helper processes behind.
   const server = createServer(createHandler(driver, port));
   attachLiveView(server, port, driver);
+  let listening = false;
+
+  const shutdown = async () => {
+    if (listening) server.close();
+    stopStream();
+    const timer = setTimeout(() => process.exit(1), 5000);
+    try {
+      await driver.cleanup();
+    } catch (e) {
+      driver.log(`shutdown cleanup: ${e instanceof Error ? e.message : e}`, true);
+    }
+    clearTimeout(timer);
+    driver.removePidFile();
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
+  await driver.initialize(url, cdpPort);
+
   await new Promise<void>((resolve, reject) => {
     server.on("error", async (e) => {
       driver.log(`Server listen failed: ${e.message}`, true);
@@ -473,6 +550,7 @@ export async function startServer(
       reject(e);
     });
     server.listen(port, "127.0.0.1", () => {
+      listening = true;
       driver.log(`Server on http://127.0.0.1:${port}, CDP on port ${cdpPort}`);
       console.log(`Server ready on http://127.0.0.1:${port}`);
       console.log(`CDP available on ws://127.0.0.1:${cdpPort}`);
@@ -483,21 +561,9 @@ export async function startServer(
     });
   });
 
-  // No auto-enter here. The caller is responsible for POST /enter (matches
-  // the documented Loop 1 in AGENTS.md). A silent auto-enter would mean a
-  // consumer following the canonical loop literally produces a duplicate
-  // transcript entry on the first read — first entry from auto-enter,
-  // second from their explicit /enter call.
-
-  const shutdown = async () => {
-    server.close();
-    stopStream();
-    const timer = setTimeout(() => process.exit(1), 5000);
-    await driver.cleanup();
-    clearTimeout(timer);
-    driver.removePidFile();
-    process.exit(0);
-  };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  // NOTE: no auto-enter here. startServer used to call driver.enter() when
+  // start got a URL, but the canonical loop documented in AGENTS.md has the
+  // caller POST /enter explicitly — the silent extra enter re-clicked the
+  // browser and produced a duplicate "document web" transcript entry on
+  // every fresh start (user-verified on sprite).
 }
