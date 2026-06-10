@@ -413,7 +413,8 @@ async function checkChromium(): Promise<DoctorCheck> {
     // the more-permissive --no-sandbox/--disable-gpu pair. Otherwise doctor
     // can pass on a container missing the sandbox helper while `start` is
     // still the first thing to actually fail. Genuine sandbox shortfalls
-    // surface here, where the operator expects them.
+    // surface here, where the operator expects them. Headless:false
+    // unconditionally — the no-DISPLAY case already returned above.
     browser = await chromium.launch({ headless: false });
     const version = browser.version();
     return { name: "Playwright Chromium", ok: true, detail: `launches headful (v${version})` };

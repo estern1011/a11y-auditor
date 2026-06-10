@@ -20,6 +20,7 @@ import {
 } from "fs";
 import { join } from "path";
 import { runtimePath, getRuntimeDir, safeWriteSync } from "../lib/runtime-paths.js";
+import { liveEvents } from "../live/events.js";
 
 export const SPEECH_LOG = runtimePath("orca-speech.log");
 
@@ -93,11 +94,18 @@ function readNew(): void {
     const lines = newContent.split("\n").filter((l) => l.trim());
     const now = Date.now();
     for (const line of lines) {
+      const text = line.trim();
       entries.push({
-        text: line.trim(),
+        text,
         timestamp: now,
         index: nextIndex++,
       });
+      // Live-view transcript panel (no-op when no viewer is connected).
+      try {
+        liveEvents.emitTranscript({ source: "orca", text, t: now });
+      } catch {
+        /* never let the live view break speech capture */
+      }
     }
   } catch {
     // File may not exist yet
