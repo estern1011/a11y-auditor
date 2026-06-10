@@ -155,6 +155,13 @@ function trackHelper(name: string, pid: number | null | undefined): void {
 
 let orcaPid: number | null = null;
 let weStartedPulse = false;
+// Module id returned by `pactl load-module` when we INHERITED the user's
+// PulseAudio server and loaded a null sink into it. Tracked so cleanup can
+// `pactl unload-module` and not leave a `dummy` sink lying around in their
+// session on every start/stop cycle. Null when we own the server (the
+// `pulseaudio --kill` in cleanup handles the whole thing) or when loading
+// failed.
+let inheritedPulseSinkModuleId: number | null = null;
 
 // ---------------------------------------------------------------------------
 // Operation lock — serializes all Orca operations
@@ -614,12 +621,32 @@ function ensureAudioSink(): void {
       execSync("pulseaudio --start --exit-idle-time=-1", { stdio: "pipe" });
       weStartedPulse = true;
     }
-    execSync("pactl load-module module-null-sink sink_name=dummy 2>/dev/null || true", {
-      stdio: "pipe",
-    });
+    // `pactl load-module` prints the integer module id of the loaded module on
+    // stdout. Capture it only when we INHERITED the user's PulseAudio (when
+    // !weStartedPulse) — without an id we can't unload-module on cleanup,
+    // and each start/stop would leave another `dummy` null sink stacked in
+    // their session. When we own pulse, `pulseaudio --kill` in cleanup
+    // takes the module down with the server, so no per-module tracking.
+    let loadOutput = "";
+    try {
+      loadOutput = execSync("pactl load-module module-null-sink sink_name=dummy", {
+        stdio: ["pipe", "pipe", "pipe"],
+        encoding: "utf-8",
+      });
+    } catch (e) {
+      // `dummy` may already exist if a previous run died before cleanup —
+      // pactl returns non-zero in that case. Not fatal; null sink is a
+      // best-effort comfort feature so a future Orca speech-synth call
+      // doesn't ENODEV when no audio hardware is present.
+      log(`pactl load-module dummy sink: ${errorMsg(e)} (already loaded?)`);
+    }
+    const moduleId = parseInt(loadOutput.trim(), 10);
+    if (!weStartedPulse && Number.isFinite(moduleId) && moduleId > 0) {
+      inheritedPulseSinkModuleId = moduleId;
+    }
     log(
       pulseRunning
-        ? "PulseAudio already running, ensured null sink"
+        ? `PulseAudio already running, ensured null sink (module ${moduleId || "n/a"})`
         : "PulseAudio started with null sink",
     );
   } catch (e) {
@@ -958,6 +985,19 @@ async function doCleanup(): Promise<void> {
       log(`pulseaudio --kill: ${errorMsg(e)}`, true);
     }
     weStartedPulse = false;
+    // The null sink we loaded dies with the server; no separate unload.
+    inheritedPulseSinkModuleId = null;
+  } else if (inheritedPulseSinkModuleId !== null) {
+    // We loaded a null sink into the USER's running PulseAudio. Unload it
+    // so we don't stack another `dummy` sink in their session on every
+    // start/stop cycle.
+    try {
+      execSync(`pactl unload-module ${inheritedPulseSinkModuleId}`, { stdio: "pipe" });
+      log(`Unloaded null sink (module ${inheritedPulseSinkModuleId})`);
+    } catch (e) {
+      log(`pactl unload-module ${inheritedPulseSinkModuleId}: ${errorMsg(e)}`, true);
+    }
+    inheritedPulseSinkModuleId = null;
   }
 }
 
