@@ -203,4 +203,42 @@ test("POST /press {key:'h'} performs heading nav and records a new entry", async
   );
 });
 
+test("POST /perform SAY_ALL actually invokes Orca (Super modifier override fires)", async () => {
+  // This test is the contract for the modifier override in speech.ts.
+  // SAY_ALL is keyed as Super+;  but Orca's default orcaModifierKeys is
+  // ["Insert", "KP_Insert"] — without our pre-seeded user-settings.conf
+  // forcing Super_L/Super_R, the keypress would bypass Orca entirely and
+  // be received by the BROWSER (silent no-op for SAY_ALL specifically;
+  // an "h" character for the heading nav etc.).
+  //
+  // Detection: SAY_ALL re-announces the document content from the current
+  // position. A successful invocation produces transcript entries with
+  // SOMETHING in them after the call; a missed modifier leaves the
+  // transcript flat. We assert ≥1 new entry within a generous window.
+  const before = await getJson(daemon.base + "/transcript");
+  const beforeLen = before.body.entries.length;
+
+  const r = await getJson(daemon.base + "/perform", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ command: "SAY_ALL" }),
+  });
+  assert.equal(r.status, 200, `SAY_ALL should return 200, got ${r.status}: ${JSON.stringify(r.body)}`);
+  assert.ok(!("error" in r.body), `SAY_ALL should not error: ${JSON.stringify(r.body)}`);
+
+  // SAY_ALL streams over time; the synchronous response captures only the
+  // current focus. Poll transcript for the actual announcements.
+  let after;
+  const deadline = Date.now() + 4_000;
+  while (Date.now() < deadline) {
+    after = await getJson(daemon.base + "/transcript");
+    if (after.body.entries.length > beforeLen) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  assert.ok(
+    after.body.entries.length > beforeLen,
+    `SAY_ALL should produce new transcript entries within 4 s — the modifier override either isn't being read or Orca didn't bind Super+; to say-all (before=${beforeLen}, after=${after.body.entries.length})`,
+  );
+});
+
 }

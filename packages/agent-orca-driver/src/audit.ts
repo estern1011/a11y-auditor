@@ -13,6 +13,18 @@ import type { Page } from "playwright";
 import type { Result } from "axe-core";
 import { AxeBuilder } from "@axe-core/playwright";
 
+// Volume caps. axe doesn't bound the size of node.html on its own — for a
+// page that puts megabytes of inline SVG, a single violating node can balloon
+// the response. Same for the aria-snapshot tree on a large SPA. Truncating
+// here keeps any one /audit response bounded so a hostile/runaway page can't
+// wedge an orchestrator that streams JSON into a fixed buffer.
+const MAX_NODE_HTML = 2_000;     // chars per axe node.html
+const MAX_TREE_CHARS = 200_000;  // chars for the aria-snapshot tree
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? value.slice(0, max) + `… [truncated, ${value.length - max} chars elided]` : value;
+}
+
 export interface AuditOptions {
   selector?: string;
   tags?: string[];
@@ -57,11 +69,10 @@ export async function runAxeAudit(page: Page, options: AuditOptions = {}): Promi
   };
 
   if (includeTree) {
-    if (selector) {
-      output.tree = await page.locator(selector).ariaSnapshot({ mode: "ai" });
-    } else {
-      output.tree = await page.ariaSnapshot({ mode: "ai" });
-    }
+    const tree = selector
+      ? await page.locator(selector).ariaSnapshot({ mode: "ai" })
+      : await page.ariaSnapshot({ mode: "ai" });
+    output.tree = truncate(tree, MAX_TREE_CHARS);
   }
 
   return output;
@@ -76,7 +87,7 @@ function formatResult(r: Result) {
     helpUrl: r.helpUrl,
     wcag: r.tags.filter((t) => t.startsWith("wcag") || t.startsWith("best-practice")),
     nodes: r.nodes.map((n) => ({
-      html: n.html,
+      html: truncate(n.html, MAX_NODE_HTML),
       target: n.target,
       failureSummary: n.failureSummary,
     })),

@@ -44,11 +44,27 @@ export interface LoadingStateResult {
     accessibleName: string;
     detectedBy: string;
   }[];
+  /**
+   * True total count of indicators found on the page — unbounded by the per-
+   * array cap on `loadingIndicators`. When `loadingIndicators.length === 200`
+   * (the cap) and this is larger, the detail array is a sample; `summary`
+   * still reflects the true labeled/unlabeled split.
+   */
+  loadingIndicatorsTotal: number;
   summary: string;
 }
 
 export async function checkLoadingState(page: Page): Promise<LoadingStateResult> {
   return page.evaluate(() => {
+    // Per-array caps so a page with thousands of status/loading elements can't
+    // balloon the JSON response. The COUNTS we report (busyEls.length etc.)
+    // still reflect the true total — only the per-element detail arrays are
+    // capped. SECURITY.md "Trust boundary" calls this out.
+    const MAX_PER_ARRAY = 200;
+    function clip<T>(arr: T[]): T[] {
+      return arr.length > MAX_PER_ARRAY ? arr.slice(0, MAX_PER_ARRAY) : arr;
+    }
+
     function selectorFor(el: Element): string {
       if (el.id) return `#${el.id}`;
       const tag = el.tagName.toLowerCase();
@@ -80,7 +96,7 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
     }
 
     const busyEls = Array.from(document.querySelectorAll('[aria-busy="true"]'));
-    const ariaBusyElements = busyEls.map((el) => ({
+    const ariaBusyElements = clip(busyEls).map((el) => ({
       selector: selectorFor(el),
       tagName: el.tagName.toLowerCase(),
       role: el.getAttribute("role"),
@@ -89,7 +105,7 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
     const liveEls = Array.from(
       document.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"]'),
     ).filter((el) => el.getAttribute("aria-live") !== "off");
-    const liveRegions = liveEls.map((el) => ({
+    const liveRegions = clip(liveEls).map((el) => ({
       selector: selectorFor(el),
       tagName: el.tagName.toLowerCase(),
       ariaLive:
@@ -104,7 +120,7 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
         '[role="status"], [role="alert"], [role="progressbar"], [role="log"]',
       ),
     );
-    const statusRoles = statusEls.map((el) => {
+    const statusRoles = clip(statusEls).map((el) => {
       const name = resolveAccessibleName(el);
       return {
         selector: selectorFor(el),
@@ -118,14 +134,28 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
     const loadingIndicators: LoadingStateResult["loadingIndicators"] = [];
     const seenElements = new Set<Element>();
     const loadingPatterns = /loading|spinner|skeleton|progress|fetching|waiting/i;
+    // Counters are TOTALS — incremented every time we see a new indicator,
+    // regardless of whether it lands in the detail array. The summary at the
+    // end of this function reads from these counters, NOT from
+    // loadingIndicators.length, so a page with 1000 indicators (where the
+    // first 200 happen to be labeled) still reports the trailing 800
+    // unlabeled in the summary. Only the per-element details get clipped.
+    let totalIndicators = 0;
+    let totalLabeled = 0;
+    let totalUnlabeled = 0;
 
-    function addIndicator(el: Element, name: string, detectedBy: string) {
+    function addIndicator(el: Element, name: string, detectedBy: string): void {
       if (seenElements.has(el)) return;
       seenElements.add(el);
+      const hasName = name.length > 0;
+      totalIndicators++;
+      if (hasName) totalLabeled++;
+      else totalUnlabeled++;
+      if (loadingIndicators.length >= MAX_PER_ARRAY) return; // counted, but don't store detail
       loadingIndicators.push({
         selector: selectorFor(el),
         tagName: el.tagName.toLowerCase(),
-        hasAccessibleName: name.length > 0,
+        hasAccessibleName: hasName,
         accessibleName: name,
         detectedBy,
       });
@@ -142,7 +172,15 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
       addIndicator(el, resolveAccessibleName(el), "role=progressbar");
     });
 
-    document.querySelectorAll("*").forEach((el) => {
+    // Walk EVERY element looking for class-name matches. TreeWalker (not
+    // querySelectorAll("*"), which materializes a NodeList for the whole DOM
+    // up front and defeats the visit cap on a million-node page) lets us
+    // stop incrementally at the budget. nextNode() starts AFTER the root,
+    // so process the root explicitly first — `<body class="loading">` is a
+    // common SPA pattern that the previous querySelectorAll-based walk
+    // included.
+    const MAX_VISITED = 50_000;
+    function inspect(el: Element): void {
       const cls = el.className && typeof el.className === "string" ? el.className : "";
       if (loadingPatterns.test(cls)) {
         addIndicator(
@@ -156,25 +194,38 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
           }"`,
         );
       }
-    });
+    }
+    // Walk from documentElement (the <html> node) so BOTH `<html class="…">`
+    // and `<body class="…">` get scanned — both are common SPA loading-state
+    // patterns that the previous querySelectorAll("*") covered. Inspect the
+    // root explicitly because TreeWalker.nextNode() starts after it.
+    const root = document.documentElement;
+    let visited = 0;
+    if (root) {
+      inspect(root);
+      visited++;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+      for (let el = walker.nextNode() as Element | null; el; el = walker.nextNode() as Element | null) {
+        if (++visited > MAX_VISITED) break;
+        inspect(el);
+      }
+    }
 
     const issues: string[] = [];
     if (busyEls.length > 0) {
       issues.push(`${busyEls.length} element(s) with aria-busy="true"`);
     }
-    if (loadingIndicators.length > 0) {
-      const unlabeled = loadingIndicators.filter((li) => !li.hasAccessibleName);
-      if (unlabeled.length > 0) {
-        issues.push(`${unlabeled.length} loading indicator(s) WITHOUT accessible names`);
+    if (totalIndicators > 0) {
+      if (totalUnlabeled > 0) {
+        issues.push(`${totalUnlabeled} loading indicator(s) WITHOUT accessible names`);
       }
-      const labeled = loadingIndicators.filter((li) => li.hasAccessibleName);
-      if (labeled.length > 0) {
-        issues.push(`${labeled.length} loading indicator(s) with accessible names`);
+      if (totalLabeled > 0) {
+        issues.push(`${totalLabeled} loading indicator(s) with accessible names`);
       }
     }
     if (liveEls.length > 0) {
       issues.push(`${liveEls.length} live region(s) found`);
-    } else if (busyEls.length > 0 || loadingIndicators.length > 0) {
+    } else if (busyEls.length > 0 || totalIndicators > 0) {
       issues.push("No aria-live regions to announce loading state to screen readers");
     }
 
@@ -190,6 +241,7 @@ export async function checkLoadingState(page: Page): Promise<LoadingStateResult>
       liveRegions,
       statusRoles,
       loadingIndicators,
+      loadingIndicatorsTotal: totalIndicators,
       summary,
     } satisfies LoadingStateResult;
   });

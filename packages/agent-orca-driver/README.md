@@ -57,6 +57,21 @@ All commands accept `--json` for agent-friendly structured output.
 - [`AGENTS.md`](./AGENTS.md) — canonical agent-facing API reference (route
   table, three canonical loops, anti-instructions). `agent-orca-driver skills
   get core` prints this verbatim from the installed package.
+- [`SECURITY.md`](./SECURITY.md) — network surface, allow-list rules, and
+  the analysis of why `npm audit`'s `dbus-native` advisories don't apply in
+  this package's usage.
+
+## Live view
+
+Once the daemon is running, open `http://localhost:8001/live` in a browser
+(in Codespaces, the forwarded URL) to watch Chromium + Orca in real time:
+
+- a video of the X framebuffer (h264/fMP4 over the `/stream` WebSocket,
+  played via Media Source Extensions),
+- a focus rectangle tracking the screen-reader caret (AT-SPI bounding box),
+- a live, auto-scrolling transcript panel (`/events` WebSocket).
+
+The video encoder (ffmpeg) runs only while a viewer is connected.
 
 ## Live view
 

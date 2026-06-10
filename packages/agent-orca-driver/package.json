@@ -11,7 +11,8 @@
     "scripts/",
     "SKILL.md",
     "AGENTS.md",
-    "README.md"
+    "README.md",
+    "SECURITY.md"
   ],
   "scripts": {
     "build": "tsc",

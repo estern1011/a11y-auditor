@@ -286,8 +286,25 @@ export function log(msg: string, err = false) {
   } catch {}
 }
 
+// Per-field char cap on each transcript entry. A hostile page can put a
+// megabyte-long aria-label on a focusable element; Orca will read it, and
+// AT-SPI2 will hand it back as `name`. Truncate so a single entry can't
+// dominate the response or the in-memory buffer.
+const MAX_TRANSCRIPT_FIELD_CHARS = 4_000;
+function capField(value: string): string {
+  return value.length > MAX_TRANSCRIPT_FIELD_CHARS
+    ? value.slice(0, MAX_TRANSCRIPT_FIELD_CHARS) + "\u2026"
+    : value;
+}
+
 function recordTranscript(entry: VoResponse): TranscriptEntry {
-  const indexed: TranscriptEntry = { ...entry, index: state.transcriptIndex++ };
+  const indexed: TranscriptEntry = {
+    spoken: capField(entry.spoken),
+    name: capField(entry.name),
+    role: capField(entry.role),
+    state: entry.state,
+    index: state.transcriptIndex++,
+  };
   state.transcript.push(indexed);
   if (state.transcript.length > MAX_TRANSCRIPT_ENTRIES) {
     state.transcript = state.transcript.slice(-MAX_TRANSCRIPT_ENTRIES);

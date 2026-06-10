@@ -535,14 +535,23 @@ async function getChildAtIndex(
 // Public API
 // ---------------------------------------------------------------------------
 
+// Total D-Bus round-trips one tree walk may make. Depth is also capped (per
+// recursive function) but a wide-and-shallow tree could still trigger
+// thousands of round-trips at ~1ms each. Bounding the total visited keeps
+// `/item-text` latency predictable on a pathological page.
+const MAX_TREE_VISITS = 5_000;
+type Budget = { visited: number };
+
 export async function getFocusedElement(): Promise<AccessibleElement | null> {
   const bus = await getConnection();
   const REGISTRY = "org.a11y.atspi.Registry";
   const ROOT = "/org/a11y/atspi/accessible/root";
 
   const appCount = await getChildCount(bus, REGISTRY, ROOT);
+  const budget: Budget = { visited: 0 };
 
   for (let i = 0; i < appCount; i++) {
+    if (budget.visited > MAX_TREE_VISITS) break;
     const app = await getChildAtIndex(bus, REGISTRY, ROOT, i);
     if (!app) continue;
     const [appDest, appPath] = app;
@@ -550,7 +559,7 @@ export async function getFocusedElement(): Promise<AccessibleElement | null> {
 
     if (!appName.includes("Chrome") && !appName.includes("Chromium")) continue;
 
-    const focused = await findFocused(bus, appDest, appPath, 0);
+    const focused = await findFocused(bus, appDest, appPath, 0, budget);
     if (focused) {
       focused.app = appName;
       return focused;
@@ -565,20 +574,32 @@ async function findFocused(
   dest: string,
   path: string,
   depth: number,
+  budget: Budget,
 ): Promise<AccessibleElement | null> {
   if (depth > 30) return null;
+  if (++budget.visited > MAX_TREE_VISITS) return null;
 
   try {
+    // Check THIS node's state BEFORE descending. Otherwise a focused high-
+    // level node with a huge subtree (e.g. `document web` after entering a
+    // large SPA) burns the whole budget on descendants and we return null
+    // even though the focused element was sitting at the current path the
+    // whole time. We still recurse afterwards — if a descendant is ALSO
+    // focused, we prefer the leafmost (which is what AT-SPI's focus
+    // semantics actually want).
+    const states = await getAccessibleState(bus, dest, path);
+    const selfFocused = states.includes("focused");
+
     const count = await getChildCount(bus, dest, path);
     for (let i = 0; i < Math.min(count, 50); i++) {
+      if (budget.visited > MAX_TREE_VISITS) break;
       const child = await getChildAtIndex(bus, dest, path, i);
       if (!child) continue;
-      const result = await findFocused(bus, child[0], child[1], depth + 1);
+      const result = await findFocused(bus, child[0], child[1], depth + 1, budget);
       if (result) return result;
     }
 
-    const states = await getAccessibleState(bus, dest, path);
-    if (states.includes("focused")) {
+    if (selfFocused) {
       const name = await getAccessibleName(bus, dest, path);
       const role = await getAccessibleRole(bus, dest, path);
       const bbox = await getExtents(bus, dest, path);
@@ -598,14 +619,17 @@ export async function getItemInfo(): Promise<AccessibleElement | null> {
   const ROOT = "/org/a11y/atspi/accessible/root";
 
   const appCount = await getChildCount(bus, REGISTRY, ROOT);
+  const budget: Budget = { visited: 0 };
+
   for (let i = 0; i < appCount; i++) {
+    if (budget.visited > MAX_TREE_VISITS) break;
     const app = await getChildAtIndex(bus, REGISTRY, ROOT, i);
     if (!app) continue;
     const [appDest, appPath] = app;
     const appName = await getAccessibleName(bus, appDest, appPath);
     if (!appName.includes("Chrome") && !appName.includes("Chromium")) continue;
 
-    const frame = await findActiveFrame(bus, appDest, appPath, 0);
+    const frame = await findActiveFrame(bus, appDest, appPath, 0, budget);
     if (frame) {
       frame.app = appName;
       return frame;
@@ -620,8 +644,10 @@ async function findActiveFrame(
   dest: string,
   path: string,
   depth: number,
+  budget: Budget,
 ): Promise<AccessibleElement | null> {
   if (depth > 15) return null;
+  if (++budget.visited > MAX_TREE_VISITS) return null;
 
   try {
     const role = await getAccessibleRole(bus, dest, path);
@@ -638,9 +664,10 @@ async function findActiveFrame(
 
     const count = await getChildCount(bus, dest, path);
     for (let i = 0; i < Math.min(count, 30); i++) {
+      if (budget.visited > MAX_TREE_VISITS) return null;
       const child = await getChildAtIndex(bus, dest, path, i);
       if (!child) continue;
-      const result = await findActiveFrame(bus, child[0], child[1], depth + 1);
+      const result = await findActiveFrame(bus, child[0], child[1], depth + 1, budget);
       if (result) return result;
     }
   } catch {}

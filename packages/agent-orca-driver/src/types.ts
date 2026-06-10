@@ -34,9 +34,14 @@ export function isVoError(r: VoResult): r is VoError {
 
 export interface StatusResponse {
   status: string;
-  // Kept as `voiceoverActive` for HTTP API backward compatibility with v1
-  // consumers. New consumers should rely on `screenReaderActive` if/when
-  // we add it; for now, this is the stable field name.
+  /** Canonical field. Use this; `voiceoverActive` is a v1 wire-compat alias. */
+  screenReaderActive: boolean;
+  /**
+   * v1 wire-compat alias of `screenReaderActive`. The daemon emits both for
+   * one release so existing pollers keep working; drop after consumers
+   * migrate.
+   * @deprecated Read `screenReaderActive`.
+   */
   voiceoverActive: boolean;
   currentUrl: string | null;
   cdpPort: number;
