@@ -3,7 +3,7 @@
  * agent-orca-driver CLI.
  *
  * Subcommands:
- *   setup           Provision apt packages + Xvfb + AT-SPI2 + ffmpeg + Chromium
+ *   setup           Run scripts/setup.sh: apt packages + ffmpeg + Playwright Chromium
  *   start <url>     Spawn Chromium + Orca + daemon
  *   stop            Tear down the running daemon
  *   status          Print daemon status (URL loaded, ports)
@@ -13,8 +13,9 @@
  * All subcommands accept --json for agent-friendly structured output.
  */
 
-import { spawnSync } from "child_process";
-import { readFileSync } from "fs";
+import { spawn, spawnSync } from "child_process";
+import { closeSync, existsSync, openSync, readFileSync, rmSync } from "fs";
+import { tmpdir } from "os";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -293,51 +294,258 @@ function checkExe(name: string): DoctorCheck {
   };
 }
 
-function cmdDoctor(args: ParsedArgs): number {
-  // Day-1 doctor: a thin preflight. Day-2 expands this to verify Xvfb is
-  // running, ffmpeg supports libx264, Playwright Chromium is provisioned, etc.
-  const checks: DoctorCheck[] = [
+// Verify the ffmpeg build advertises the libx264 encoder — the /live stream
+// (Day 3) encodes the Xvfb framebuffer as h264.
+function checkLibx264(): DoctorCheck {
+  const r = spawnSync("ffmpeg", ["-hide_banner", "-encoders"], {
+    encoding: "utf-8",
+    timeout: 10_000,
+  });
+  if (r.status !== 0) {
+    return { name: "ffmpeg libx264", ok: false, detail: "ffmpeg not runnable" };
+  }
+  const ok = (r.stdout || "").includes("libx264");
+  return {
+    name: "ffmpeg libx264",
+    ok,
+    detail: ok ? "h264 encoder available" : "libx264 encoder NOT in this ffmpeg build",
+  };
+}
+
+// Start a throwaway Xvfb so doctor can validate the *headful* Chromium path
+// (what the daemon actually uses) when no display is present. Returns the
+// display + a cleanup fn, or null if Xvfb couldn't be brought up.
+function startTempXvfb(): { display: string; cleanup: () => void } | null {
+  if (spawnSync("which", ["Xvfb"], { encoding: "utf-8" }).status !== 0) return null;
+  const display = ":99";
+  try {
+    spawnSync("rm", ["-f", "/tmp/.X99-lock"], { stdio: "ignore" });
+  } catch {
+    /* ignore */
+  }
+  const proc = spawn("Xvfb", [display, "-screen", "0", "1280x1024x24", "-ac"], {
+    stdio: "ignore",
+  });
+  const start = Date.now();
+  while (Date.now() - start < 2500) {
+    const r = spawnSync("xdotool", ["getdisplaygeometry"], {
+      env: { ...process.env, DISPLAY: display },
+      stdio: "pipe",
+      timeout: 1000,
+    });
+    if (r.status === 0) {
+      return {
+        display,
+        cleanup: () => {
+          try {
+            proc.kill("SIGTERM");
+          } catch {
+            /* ignore */
+          }
+        },
+      };
+    }
+  }
+  try {
+    proc.kill("SIGKILL");
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+// Verify Chromium isn't just present but actually *launches* — and launches
+// the way the daemon does: HEADFUL (headless:false), which needs the X/GTK
+// runtime, a different (larger) shared-lib set than headless. An
+// existence-only or headless-only check would pass on a fresh image with
+// incomplete OS deps and let `start` be the first thing to fail. If no
+// display is available, doctor spins up a throwaway Xvfb so it can still
+// exercise the headful path. Honors PLAYWRIGHT_BROWSERS_PATH so doctor and
+// the daemon agree on where the browser lives.
+async function checkChromium(): Promise<DoctorCheck> {
+  let chromium;
+  try {
+    ({ chromium } = await import("playwright"));
+  } catch (e) {
+    return {
+      name: "Playwright Chromium",
+      ok: false,
+      detail: `playwright not importable: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+
+  const exe = chromium.executablePath();
+  if (!exe || !existsSync(exe)) {
+    return {
+      name: "Playwright Chromium",
+      ok: false,
+      detail: `browser binary missing (${exe || "no path"}) — run: agent-orca-driver setup`,
+    };
+  }
+
+  // The daemon ALWAYS launches headful (core.ts:initialize calls chromium
+  // .launch with headless:false). If doctor can't reproduce that headful
+  // path it must FAIL, not silently fall back to headless and exit 0 —
+  // an operator gets a green doctor result followed immediately by a
+  // failed `start`, with no signal beforehand. The two real reasons the
+  // headful path fails are (a) no DISPLAY AND we can't bring up an Xvfb
+  // (Xvfb missing, :99 occupied, container with no /tmp/.X11-unix), and
+  // (b) Chromium launches headless fine but trips on missing X/GTK
+  // libs when it actually tries headful. Both should surface here.
+  let tempXvfb: { display: string; cleanup: () => void } | null = null;
+  const hadDisplay = !!process.env.DISPLAY;
+  if (!hadDisplay) {
+    tempXvfb = startTempXvfb();
+    if (tempXvfb) process.env.DISPLAY = tempXvfb.display;
+  }
+  if (!process.env.DISPLAY) {
+    return {
+      name: "Playwright Chromium",
+      ok: false,
+      detail:
+        "no DISPLAY and could not start a temporary Xvfb — `start` will fail the same way. Install Xvfb (`agent-orca-driver setup`), free :99, or run inside a session that already has a display.",
+    };
+  }
+
+  let browser;
+  try {
+    // Match the daemon's launch flags (core.ts initialize) instead of using
+    // the more-permissive --no-sandbox/--disable-gpu pair. Otherwise doctor
+    // can pass on a container missing the sandbox helper while `start` is
+    // still the first thing to actually fail. Genuine sandbox shortfalls
+    // surface here, where the operator expects them.
+    browser = await chromium.launch({ headless: false });
+    const version = browser.version();
+    return { name: "Playwright Chromium", ok: true, detail: `launches headful (v${version})` };
+  } catch (e) {
+    const msg = (e instanceof Error ? e.message : String(e)).split("\n")[0];
+    return {
+      name: "Playwright Chromium",
+      ok: false,
+      detail: `binary present but failed to launch headful (missing OS deps?): ${msg}`,
+    };
+  } finally {
+    if (browser) {
+      try {
+        await browser.close();
+      } catch {
+        /* best-effort */
+      }
+    }
+    if (tempXvfb) {
+      tempXvfb.cleanup();
+      if (!hadDisplay) delete process.env.DISPLAY;
+    }
+  }
+}
+
+// Soft check: if a display is available, confirm ffmpeg can grab one frame
+// off it via x11grab. Skipped (and treated as non-fatal) when DISPLAY is
+// unset — doctor runs after `setup`, before any daemon has started Xvfb.
+function checkX11grab(): DoctorCheck {
+  const display = process.env.DISPLAY;
+  if (!display) {
+    return { name: "ffmpeg x11grab", ok: true, detail: "skipped (no DISPLAY yet)" };
+  }
+  const r = spawnSync(
+    "ffmpeg",
+    ["-hide_banner", "-loglevel", "error", "-f", "x11grab", "-i", display, "-frames:v", "1", "-f", "null", "-"],
+    { encoding: "utf-8", timeout: 15_000 },
+  );
+  const ok = r.status === 0;
+  return {
+    name: "ffmpeg x11grab",
+    ok,
+    detail: ok ? `captured a frame from ${display}` : `failed against ${display}: ${(r.stderr || "").trim().split("\n")[0] || "unknown"}`,
+  };
+}
+
+async function cmdDoctor(args: ParsedArgs): Promise<number> {
+  // Hard checks gate the exit code; soft checks are informational so that
+  // `doctor` exits 0 right after `setup` (before any display/daemon exists).
+  const hard: DoctorCheck[] = [
     checkExe("Xvfb"),
     checkExe("xdotool"),
     checkExe("dbus-launch"),
     checkExe("orca"),
     checkExe("ffmpeg"),
+    checkExe("pulseaudio"),
+    checkLibx264(),
+    await checkChromium(),
+  ];
+  const soft: DoctorCheck[] = [
     {
       name: "DISPLAY",
       ok: !!process.env.DISPLAY,
-      detail: process.env.DISPLAY || "unset",
+      detail: process.env.DISPLAY || "unset (the daemon starts Xvfb on :99)",
     },
     {
       name: "DBUS_SESSION_BUS_ADDRESS",
       ok: !!process.env.DBUS_SESSION_BUS_ADDRESS,
-      detail: process.env.DBUS_SESSION_BUS_ADDRESS || "unset",
+      detail: process.env.DBUS_SESSION_BUS_ADDRESS || "unset (the daemon launches dbus)",
     },
+    checkX11grab(),
   ];
 
-  const allOk = checks.every((c) => c.ok);
+  const allOk = hard.every((c) => c.ok);
   if (args.json) {
-    process.stdout.write(JSON.stringify({ ok: allOk, checks }) + "\n");
+    process.stdout.write(JSON.stringify({ ok: allOk, hard, soft }) + "\n");
   } else {
-    for (const c of checks) {
+    process.stdout.write("required:\n");
+    for (const c of hard) {
       process.stdout.write(`  [${c.ok ? "OK" : "MISSING"}] ${c.name}: ${c.detail}\n`);
     }
-    process.stdout.write(allOk ? "\nall checks passed\n" : "\nsome checks failed — run: agent-orca-driver setup\n");
+    process.stdout.write("informational:\n");
+    for (const c of soft) {
+      process.stdout.write(`  [${c.ok ? "OK" : "info"}] ${c.name}: ${c.detail}\n`);
+    }
+    process.stdout.write(
+      allOk ? "\nall required checks passed\n" : "\nsome required checks failed — run: agent-orca-driver setup\n",
+    );
   }
   return allOk ? 0 : 1;
 }
 
 function cmdSetup(args: ParsedArgs): number {
-  // Day-1 stub. The full setup.sh provisioner (apt + ffmpeg + Playwright
-  // Chromium + helper scripts) lands in the next slice — see
-  // docs/agent-orca-driver-plan.md §11 day 2.
-  const msg =
-    "setup is not yet implemented in this slice — run drivers/orca/setup.sh from the parent repo, or wait for the Day-2 slice that ships scripts/setup.sh.";
-  if (args.json) {
-    process.stdout.write(JSON.stringify({ ok: false, error: msg }) + "\n");
-  } else {
-    process.stderr.write(msg + "\n");
+  const script = join(PACKAGE_ROOT, "scripts", "setup.sh");
+  if (!existsSync(script)) {
+    const msg = `setup.sh not found at ${script}`;
+    if (args.json) process.stdout.write(JSON.stringify({ ok: false, error: msg }) + "\n");
+    else process.stderr.write(msg + "\n");
+    return 1;
   }
-  return 2;
+
+  if (args.json) {
+    // apt + Playwright produce far more than spawnSync's default ~1 MiB
+    // maxBuffer, which would ENOBUFS-kill the child. Stream combined output
+    // to a temp file (no buffer limit), then read it back for the JSON blob.
+    const logPath = join(tmpdir(), `agent-orca-driver-setup-${process.pid}-${Date.now()}.log`);
+    const fd = openSync(logPath, "w");
+    let r;
+    try {
+      r = spawnSync("bash", [script], { stdio: ["ignore", fd, fd] });
+    } finally {
+      closeSync(fd);
+    }
+    let output = "";
+    try {
+      output = readFileSync(logPath, "utf-8");
+    } catch {
+      /* best-effort */
+    }
+    try {
+      rmSync(logPath, { force: true });
+    } catch {
+      /* best-effort */
+    }
+    const ok = r.status === 0;
+    process.stdout.write(JSON.stringify({ ok, code: r.status, output }) + "\n");
+    return ok ? 0 : (r.status ?? 1);
+  }
+
+  // Human mode: stream the provisioner's output live.
+  const r = spawnSync("bash", [script], { stdio: "inherit" });
+  return r.status ?? 1;
 }
 
 async function main(): Promise<number> {
@@ -364,7 +572,7 @@ async function main(): Promise<number> {
     case "status":
       return cmdStatus(args);
     case "doctor":
-      return cmdDoctor(args);
+      return await cmdDoctor(args);
     case "skills": {
       const sub = args.positionals[0];
       const target = args.positionals[1];

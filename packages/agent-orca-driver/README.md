@@ -60,17 +60,21 @@ All commands accept `--json` for agent-friendly structured output.
 
 ## Status
 
-`0.1.0-dev` — Day-1 slice of the [agent-orca-driver
+`0.1.0-dev` — Days 1–2 of the [agent-orca-driver
 plan](https://github.com/estern1011/a11y-auditor/pull/24). What's wired up:
 
 - Node port of the v1 (`estern1011/a11y-auditor`) HTTP daemon, Orca core,
   AT-SPI2 client, Chromium lifecycle, and axe-core injection
-- CLI: `start`, `stop`, `status`, `doctor` (preflight), `skills get core`
+- CLI: `setup`, `start`, `stop`, `status`, `doctor`, `skills get core`
+- `scripts/setup.sh` — one-command provisioner (apt packages + ffmpeg +
+  Playwright Chromium; apt via sudo, browser binary into the user's cache)
+- `doctor` — verifies the required binaries, that ffmpeg advertises libx264,
+  and that the Playwright Chromium binary is on disk; informational checks
+  for DISPLAY / D-Bus / x11grab
 - `SKILL.md` + `AGENTS.md` + `README.md`
 
-What's coming in the next slice (Day 2):
-- `scripts/setup.sh` provisioner (apt + ffmpeg + Playwright Chromium) and a
-  fuller `doctor` that verifies Xvfb is running, ffmpeg supports libx264,
-  the Playwright Chromium binary is installed, etc.
+What's coming in the next slice (Day 3):
+- `/live` viewer (h264-in-fMP4 over WebSocket via MSE) with a focus
+  rectangle and live transcript panel, served on the same HTTP port
 
 License: MIT.
