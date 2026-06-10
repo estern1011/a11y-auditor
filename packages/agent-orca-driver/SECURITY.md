@@ -46,8 +46,15 @@ The daemon defends against the obvious volume cases with hard caps:
   tree before serialization, so a single audit response stays bounded.
 - `/loading-state` caps each per-element-detail array (`liveRegions`,
   `statusRoles`, `ariaBusyElements`, `loadingIndicators`) at 200 entries
-  and stops walking the `*` selector after 50 000 elements visited; the
-  reported COUNTS in `summary` still reflect the true totals.
+  and stops walking the `*` selector after 50 000 elements visited. The
+  reported COUNTS in `summary` are the true totals for elements that
+  were scanned — they are NOT necessarily the page totals on a DOM
+  larger than the 50 000 element budget, because indicators living past
+  the cap are never inspected. Treat `loadingIndicatorsTotal === 0` on
+  a known-huge page as "no indicator found in the first 50 000
+  elements" rather than "no indicator anywhere"; uncapped selector
+  queries (`[aria-busy="true"]`, `[role="status"]`, etc.) inside the
+  same response remain page-wide.
 - The AT-SPI2 tree walk in `/item-text` is bounded to 5 000 D-Bus
   round-trips per call on top of the existing per-recursion depth caps,
   so a wide-and-shallow accessibility tree can't pin the daemon.
