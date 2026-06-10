@@ -28,6 +28,14 @@ export interface ScreenReaderDriver {
   getPage(): Page | null;
   getStatus(): { screenReaderActive: boolean; currentUrl: string | null; cdpPort: number };
   getTranscriptLength(): number;
+  /**
+   * Return the value a polling client should pass as `since=` next time to
+   * receive only NEW entries. Equals the highest assigned transcript index,
+   * NOT the buffer length — those differ after DELETE /transcript or after
+   * the buffer rolls past MAX_TRANSCRIPT_ENTRIES. Returns -1 if no entries
+   * have ever been recorded (so `since=-1` returns everything).
+   */
+  getTranscriptCursor(): number;
 
   // Navigation
   next(): Promise<VoResult>;

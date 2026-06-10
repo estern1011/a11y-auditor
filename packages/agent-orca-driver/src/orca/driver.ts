@@ -31,6 +31,7 @@ export function createOrcaDriver(): ScreenReaderDriver {
       return { screenReaderActive: s.orcaActive, currentUrl: s.currentUrl, cdpPort: s.cdpPort };
     },
     getTranscriptLength: () => core.getTranscriptLength(),
+    getTranscriptCursor: () => core.getTranscriptCursor(),
 
     next: () => core.orcaNext(),
     previous: () => core.orcaPrevious(),

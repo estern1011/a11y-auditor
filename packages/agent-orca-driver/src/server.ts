@@ -194,7 +194,15 @@ export function createHandler(driver: ScreenReaderDriver, port: number) {
         const since = url.searchParams.get("since");
         const entries =
           since !== null ? driver.getTranscript(parseInt(since, 10)) : driver.getTranscript();
-        json(res, 200, { entries, length: driver.getTranscriptLength() });
+        // `cursor` is what the client should pass as `since=` next time —
+        // NOT `length`. They differ after DELETE /transcript or after the
+        // buffer rolls past MAX_TRANSCRIPT_ENTRIES, and clients that used
+        // `since=length` (or `since=length+1`) silently skipped entries.
+        json(res, 200, {
+          entries,
+          length: driver.getTranscriptLength(),
+          cursor: driver.getTranscriptCursor(),
+        });
         return;
       }
 
@@ -328,9 +336,32 @@ export async function startServer(
     safeWriteSync(driver.logFile, "");
   } catch {}
 
+  // Server is created here but not yet listening — that happens after
+  // initialize() succeeds. We install the SIGINT/SIGTERM handler BEFORE
+  // initialize() so a Ctrl-C or process-manager timeout during the
+  // multi-second bootstrap (Xvfb, openbox, dbus, at-spi2, Chromium, Orca)
+  // still runs cleanup() instead of taking Node's default signal exit and
+  // leaving the helper processes behind.
+  const server = createServer(createHandler(driver, port));
+  let listening = false;
+
+  const shutdown = async () => {
+    if (listening) server.close();
+    const timer = setTimeout(() => process.exit(1), 5000);
+    try {
+      await driver.cleanup();
+    } catch (e) {
+      driver.log(`shutdown cleanup: ${e instanceof Error ? e.message : e}`, true);
+    }
+    clearTimeout(timer);
+    driver.removePidFile();
+    process.exit(0);
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
   await driver.initialize(url, cdpPort);
 
-  const server = createServer(createHandler(driver, port));
   await new Promise<void>((resolve, reject) => {
     server.on("error", async (e) => {
       driver.log(`Server listen failed: ${e.message}`, true);
@@ -339,6 +370,7 @@ export async function startServer(
       reject(e);
     });
     server.listen(port, "127.0.0.1", () => {
+      listening = true;
       driver.log(`Server on http://127.0.0.1:${port}, CDP on port ${cdpPort}`);
       console.log(`Server ready on http://127.0.0.1:${port}`);
       console.log(`CDP available on ws://127.0.0.1:${cdpPort}`);
@@ -356,15 +388,4 @@ export async function startServer(
       driver.log(`auto-enter: ${e instanceof Error ? e.message : e}`, true);
     }
   }
-
-  const shutdown = async () => {
-    server.close();
-    const timer = setTimeout(() => process.exit(1), 5000);
-    await driver.cleanup();
-    clearTimeout(timer);
-    driver.removePidFile();
-    process.exit(0);
-  };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
 }
