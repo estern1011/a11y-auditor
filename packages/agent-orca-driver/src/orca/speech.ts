@@ -207,6 +207,30 @@ export function ensureSpeechCapture(log: (msg: string, err?: boolean) => void): 
   const customPath = join(orcaDir, "orca-customizations.py");
   writeFileSync(customPath, ORCA_CUSTOMIZATIONS);
 
+  // Pre-seed Orca's user-settings.conf so the modifier matches our command
+  // catalog. Orca's defaults pin `orcaModifierKeys` to ["Insert", "KP_Insert"]
+  // on desktop layouts and ["CapsLock"] on laptop — neither of which match
+  // the `super` modifier ORCA_COMMANDS uses for SAY_ALL / READ_CURRENT_LINE
+  // / TOGGLE_BROWSE_MODE. Without this override, `/perform SAY_ALL` sends
+  // Super+; into a browser that has no idea what to do with it, and the
+  // operator sees a silent no-op.
+  //
+  // Why Super_L/Super_R and not Insert in the catalog: Super is reliably
+  // injectable via AT-SPI generateKeyboardEvent and doesn't clash with
+  // text-input semantics (Insert toggles overwrite mode in editable
+  // fields, which would silently break combo nav inside form controls).
+  //
+  // Orca reads $XDG_DATA_HOME/orca/user-settings.conf at startup and
+  // merges it with defaults; we only need to override the modifier. On
+  // shutdown Orca rewrites the file with the full populated schema —
+  // that's fine since this function rewrites on every daemon start, so
+  // our override is restored before Orca next reads it.
+  const settingsPath = join(orcaDir, "user-settings.conf");
+  writeFileSync(
+    settingsPath,
+    JSON.stringify({ general: { orcaModifierKeys: ["Super_L", "Super_R"] } }, null, 2),
+  );
+
   // NOTE: this function used to `pkill -x orca` here unconditionally so
   // an already-running Orca would pick up the customizations on restart.
   // That silently destroyed the user's existing accessibility session on
@@ -219,5 +243,7 @@ export function ensureSpeechCapture(log: (msg: string, err?: boolean) => void): 
   clear();
   startWatching();
 
-  log(`Speech capture configured (customizations → ${customPath}, log → ${SPEECH_LOG})`);
+  log(
+    `Speech capture configured (customizations → ${customPath}, settings → ${settingsPath}, log → ${SPEECH_LOG})`,
+  );
 }
