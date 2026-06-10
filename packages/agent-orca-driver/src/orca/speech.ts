@@ -45,6 +45,14 @@ let filePos = 0;
 let watching = false;
 
 export function mark(): number {
+  // Flush BEFORE reading nextIndex. The file watcher polls every 100 ms,
+  // so any line Orca wrote since the last poll is still on disk and not
+  // yet in `entries` — without this drain, the marker captures a value
+  // BEFORE the stale line, the next action's readCurrentElement() then
+  // flushes it and `spokenSince(marker)` attributes the previous
+  // announcement to this keystroke. Live-region updates and
+  // delayed-speech tails are the common triggers in practice.
+  readNew();
   return nextIndex;
 }
 
