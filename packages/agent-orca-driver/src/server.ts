@@ -189,9 +189,16 @@ export function createHandler(driver: ScreenReaderDriver, port: number) {
     try {
       if (path === "/" && method === "GET") {
         const s = driver.getStatus();
+        // Emit BOTH field names. `screenReaderActive` is the documented
+        // shape in types.ts + AGENTS.md (#29's rename); `voiceoverActive`
+        // is the v1 wire field — every existing consumer + the test harness
+        // accept either, but a fresh client reading our type/docs gets
+        // `undefined` if we only ship the old name. Keep both for one
+        // release, then drop `voiceoverActive` once consumers migrate.
         json(res, 200, {
           status: "running",
-          voiceoverActive: s.screenReaderActive, // keep field name for API compat
+          screenReaderActive: s.screenReaderActive,
+          voiceoverActive: s.screenReaderActive,
           currentUrl: s.currentUrl,
           cdpPort: s.cdpPort,
         });

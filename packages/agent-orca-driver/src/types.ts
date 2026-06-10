@@ -34,7 +34,15 @@ export function isVoError(r: VoResult): r is VoError {
 
 export interface StatusResponse {
   status: string;
+  /** Canonical field. Use this; `voiceoverActive` is a v1 wire-compat alias. */
   screenReaderActive: boolean;
+  /**
+   * v1 wire-compat alias of `screenReaderActive`. The daemon emits both for
+   * one release so existing pollers keep working; drop after consumers
+   * migrate.
+   * @deprecated Read `screenReaderActive`.
+   */
+  voiceoverActive: boolean;
   currentUrl: string | null;
   cdpPort: number;
 }
