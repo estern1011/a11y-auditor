@@ -383,15 +383,29 @@ async function checkChromium(): Promise<DoctorCheck> {
     };
   }
 
-  // Prefer a real display; otherwise bring up a temporary Xvfb so the headful
-  // probe matches `start`. Only fall back to headless if neither is possible.
+  // The daemon ALWAYS launches headful (core.ts:initialize calls chromium
+  // .launch with headless:false). If doctor can't reproduce that headful
+  // path it must FAIL, not silently fall back to headless and exit 0 —
+  // an operator gets a green doctor result followed immediately by a
+  // failed `start`, with no signal beforehand. The two real reasons the
+  // headful path fails are (a) no DISPLAY AND we can't bring up an Xvfb
+  // (Xvfb missing, :99 occupied, container with no /tmp/.X11-unix), and
+  // (b) Chromium launches headless fine but trips on missing X/GTK
+  // libs when it actually tries headful. Both should surface here.
   let tempXvfb: { display: string; cleanup: () => void } | null = null;
   const hadDisplay = !!process.env.DISPLAY;
   if (!hadDisplay) {
     tempXvfb = startTempXvfb();
     if (tempXvfb) process.env.DISPLAY = tempXvfb.display;
   }
-  const headful = !!process.env.DISPLAY;
+  if (!process.env.DISPLAY) {
+    return {
+      name: "Playwright Chromium",
+      ok: false,
+      detail:
+        "no DISPLAY and could not start a temporary Xvfb — `start` will fail the same way. Install Xvfb (`agent-orca-driver setup`), free :99, or run inside a session that already has a display.",
+    };
+  }
 
   let browser;
   try {
@@ -400,16 +414,15 @@ async function checkChromium(): Promise<DoctorCheck> {
     // can pass on a container missing the sandbox helper while `start` is
     // still the first thing to actually fail. Genuine sandbox shortfalls
     // surface here, where the operator expects them.
-    browser = await chromium.launch({ headless: !headful });
+    browser = await chromium.launch({ headless: false });
     const version = browser.version();
-    const mode = headful ? "headful" : "headless (no display available for headful probe)";
-    return { name: "Playwright Chromium", ok: true, detail: `launches ${mode} (v${version})` };
+    return { name: "Playwright Chromium", ok: true, detail: `launches headful (v${version})` };
   } catch (e) {
     const msg = (e instanceof Error ? e.message : String(e)).split("\n")[0];
     return {
       name: "Playwright Chromium",
       ok: false,
-      detail: `binary present but failed to launch ${headful ? "headful" : "headless"} (missing OS deps?): ${msg}`,
+      detail: `binary present but failed to launch headful (missing OS deps?): ${msg}`,
     };
   } finally {
     if (browser) {
