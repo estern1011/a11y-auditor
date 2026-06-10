@@ -77,6 +77,11 @@ export function createFakeDriver(opts = {}) {
       cdpPort: state.cdpPort,
     }),
     getTranscriptLength: () => state.transcript.length,
+    // Cursor contract (see interface.ts): the value a client passes back as
+    // `since=` to get only newer entries. This fake uses PRE-increment
+    // indexing (first entry = 1), so the highest assigned index IS
+    // nextIndex, and 0 when empty (since=0 → everything).
+    getTranscriptCursor: () => state.nextIndex,
 
     next: async () => record({
       spoken: "Main, navigation",

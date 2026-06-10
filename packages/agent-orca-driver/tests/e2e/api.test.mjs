@@ -154,12 +154,28 @@ test("GET /item-text returns a VoResponse", async () => {
 
 // --- /transcript -----------------------------------------------------------
 
-test("GET /transcript (no since) returns full buffer + length", async () => {
+test("GET /transcript (no since) returns full buffer + length + cursor", async () => {
   const { status, body } = await getJson(d.base + "/transcript");
   assert.equal(status, 200);
   assert.ok(Array.isArray(body.entries));
   assert.equal(typeof body.length, "number");
   assert.ok(body.entries.length > 0, "we POSTed several actions earlier");
+  // cursor is the resume token: highest assigned entry index. Clients pass
+  // it back as ?since= — it is NOT the buffer length (those diverge after
+  // DELETE /transcript or buffer rollover).
+  assert.equal(typeof body.cursor, "number");
+  assert.equal(body.cursor, body.entries[body.entries.length - 1].index);
+});
+
+test("cursor round-trip: since=<cursor> yields nothing until a new action", async () => {
+  const first = await getJson(d.base + "/transcript");
+  const empty = await getJson(d.base + `/transcript?since=${first.body.cursor}`);
+  assert.equal(empty.body.entries.length, 0, "cursor excludes everything already seen");
+
+  await fetch(d.base + "/next", { method: "POST" });
+  const fresh = await getJson(d.base + `/transcript?since=${first.body.cursor}`);
+  assert.equal(fresh.body.entries.length, 1, "exactly the one new entry");
+  assert.equal(fresh.body.cursor, fresh.body.entries[0].index, "cursor advanced to it");
 });
 
 test("GET /transcript?since=<highest> returns only entries with index > since", async () => {
